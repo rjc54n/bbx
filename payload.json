@@ -1,0 +1,374 @@
+[{
+  "query": {
+    "kind": "Document",
+    "definitions": [
+      {
+        "kind": "OperationDefinition",
+        "operation": "query",
+        "name": { "kind": "Name", "value": "inBondProductDetail" },
+        "variableDefinitions": [
+          {
+            "kind": "VariableDefinition",
+            "variable": { "kind": "Variable", "name": { "kind": "Name", "value": "filter" } },
+            "type": { "kind": "NamedType", "name": { "kind": "Name", "value": "ProductAttributeFilterInput" } },
+            "directives": []
+          },
+          {
+            "kind": "VariableDefinition",
+            "variable": { "kind": "Variable", "name": { "kind": "Name", "value": "buyingOption" } },
+            "type": { "kind": "NamedType", "name": { "kind": "Name", "value": "BuyingOptionEnum" } },
+            "defaultValue": { "kind": "EnumValue", "value": "IN_BOND" },
+            "directives": []
+          },
+          {
+            "kind": "VariableDefinition",
+            "variable": { "kind": "Variable", "name": { "kind": "Name", "value": "variantAttributeCodes" } },
+            "type": {
+              "kind": "ListType",
+              "type": { "kind": "NonNullType", "type": { "kind": "NamedType", "name": { "kind": "Name", "value": "String" } } }
+            },
+            "directives": []
+          }
+        ],
+        "directives": [],
+        "selectionSet": {
+          "kind": "SelectionSet",
+          "selections": [
+            {
+              "kind": "Field",
+              "name": { "kind": "Name", "value": "products" },
+              "arguments": [
+                { "kind": "Argument", "name": { "kind": "Name", "value": "filter" }, "value": { "kind": "Variable", "name": { "kind": "Name", "value": "filter" } } },
+                { "kind": "Argument", "name": { "kind": "Name", "value": "buying_option" }, "value": { "kind": "Variable", "name": { "kind": "Name", "value": "buyingOption" } } },
+                { "kind": "Argument", "name": { "kind": "Name", "value": "attribute_codes" }, "value": { "kind": "Variable", "name": { "kind": "Name", "value": "variantAttributeCodes" } } }
+              ],
+              "directives": [],
+              "selectionSet": {
+                "kind": "SelectionSet",
+                "selections": [
+                  {
+                    "kind": "Field",
+                    "name": { "kind": "Name", "value": "items" },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                      "kind": "SelectionSet",
+                      "selections": [
+                        { "kind": "Field", "name": { "kind": "Name", "value": "uid" }, "arguments": [], "directives": [] },
+                        { "kind": "Field", "name": { "kind": "Name", "value": "sku" }, "arguments": [], "directives": [] },
+                        { "kind": "Field", "name": { "kind": "Name", "value": "name" }, "arguments": [], "directives": [] },
+                        {
+                          "kind": "InlineFragment",
+                          "typeCondition": { "kind": "NamedType", "name": { "kind": "Name", "value": "ConfigurableProduct" } },
+                          "directives": [],
+                          "selectionSet": {
+                            "kind": "SelectionSet",
+                            "selections": [
+                              { "kind": "Field", "name": { "kind": "Name", "value": "is_more_variant_available" }, "arguments": [], "directives": [] },
+                              {
+                                "kind": "Field",
+                                "name": { "kind": "Name", "value": "variants" },
+                                "arguments": [],
+                                "directives": [],
+                                "selectionSet": {
+                                  "kind": "SelectionSet",
+                                  "selections": [
+                                    {
+                                      "kind": "Field",
+                                      "name": { "kind": "Name", "value": "attributes" },
+                                      "arguments": [],
+                                      "directives": [],
+                                      "selectionSet": {
+                                        "kind": "SelectionSet",
+                                        "selections": [
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "code" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "label" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "uid" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "value_index" }, "arguments": [], "directives": [] }
+                                        ]
+                                      }
+                                    },
+                                    {
+                                      "kind": "Field",
+                                      "name": { "kind": "Name", "value": "product" },
+                                      "arguments": [],
+                                      "directives": [],
+                                      "selectionSet": {
+                                        "kind": "SelectionSet",
+                                        "selections": [
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "__typename" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "uid" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "stock_status" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "name" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "sku" }, "arguments": [], "directives": [] },
+                                          { "kind": "Field", "name": { "kind": "Name", "value": "sell_by_case_only" }, "arguments": [], "directives": [] },
+                                          { "kind": "FragmentSpread", "name": { "kind": "Name", "value": "SimpleProductCustomPricesFields" }, "directives": [] },
+                                          { "kind": "FragmentSpread", "name": { "kind": "Name", "value": "SimpleProductStockDataFields" }, "directives": [] },
+                                          { "kind": "FragmentSpread", "name": { "kind": "Name", "value": "ProductInterfaceLabels" }, "directives": [] },
+                                          { "kind": "FragmentSpread", "name": { "kind": "Name", "value": "ProductInterfaceListingsFields" }, "directives": [] },
+                                          {
+                                            "kind": "Field",
+                                            "name": { "kind": "Name", "value": "attributes_value" },
+                                            "arguments": [
+                                              { "kind": "Argument", "name": { "kind": "Name", "value": "attribute_codes" }, "value": { "kind": "Variable", "name": { "kind": "Name", "value": "variantAttributeCodes" } } }
+                                            ],
+                                            "directives": [],
+                                            "selectionSet": {
+                                              "kind": "SelectionSet",
+                                              "selections": [
+                                                { "kind": "Field", "name": { "kind": "Name", "value": "label" }, "arguments": [], "directives": [] },
+                                                { "kind": "Field", "name": { "kind": "Name", "value": "value" }, "arguments": [], "directives": [] },
+                                                { "kind": "Field", "name": { "kind": "Name", "value": "code" }, "arguments": [], "directives": [] },
+                                                { "kind": "Field", "name": { "kind": "Name", "value": "option_code" }, "arguments": [], "directives": [] },
+                                                { "kind": "Field", "name": { "kind": "Name", "value": "position" }, "arguments": [], "directives": [] },
+                                                { "kind": "Field", "name": { "kind": "Name", "value": "attribute_uid" }, "arguments": [], "directives": [] },
+                                                { "kind": "Field", "name": { "kind": "Name", "value": "uid" }, "arguments": [], "directives": [] }
+                                              ]
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "InlineFragment",
+                          "typeCondition": { "kind": "NamedType", "name": { "kind": "Name", "value": "BundleProduct" } },
+                          "directives": [],
+                          "selectionSet": {
+                            "kind": "SelectionSet",
+                            "selections": [
+                              {
+                                "kind": "Field",
+                                "name": { "kind": "Name", "value": "price_range" },
+                                "arguments": [],
+                                "directives": [],
+                                "selectionSet": {
+                                  "kind": "SelectionSet",
+                                  "selections": [
+                                    { "kind": "FragmentSpread", "name": { "kind": "Name", "value": "PriceRangeFields" }, "directives": [] }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "FragmentDefinition",
+        "name": { "kind": "Name", "value": "ProductInterfaceLabels" },
+        "typeCondition": { "kind": "NamedType", "name": { "kind": "Name", "value": "ProductInterface" } },
+        "directives": [],
+        "selectionSet": {
+          "kind": "SelectionSet",
+          "selections": [
+            {
+              "kind": "Field",
+              "name": { "kind": "Name", "value": "product_labels" },
+              "arguments": [],
+              "directives": [],
+              "selectionSet": {
+                "kind": "SelectionSet",
+                "selections": [
+                  { "kind": "Field", "name": { "kind": "Name", "value": "code" }, "arguments": [], "directives": [] },
+                  { "kind": "Field", "name": { "kind": "Name", "value": "label" }, "arguments": [], "directives": [] },
+                  { "kind": "Field", "name": { "kind": "Name", "value": "sort_order" }, "arguments": [], "directives": [] }
+                ]
+              }
+            },
+            { "kind": "Field", "name": { "kind": "Name", "value": "labels" }, "arguments": [], "directives": [], "selectionSet": { "kind": "SelectionSet", "selections": [{ "kind": "Field", "name": { "kind": "Name", "value": "code" }, "arguments": [], "directives": [] }, { "kind": "Field", "name": { "kind": "Name", "value": "label" }, "arguments": [], "directives": [] }, { "kind": "Field", "name": { "kind": "Name", "value": "sort_order" }, "arguments": [], "directives": [] }] } }
+          ]
+        }
+      },
+      {
+        "kind": "FragmentDefinition",
+        "name": { "kind": "Name", "value": "SimpleProductStockDataFields" },
+        "typeCondition": { "kind": "NamedType", "name": { "kind": "Name", "value": "SimpleProduct" } },
+        "directives": [],
+        "selectionSet": {
+          "kind": "SelectionSet",
+          "selections": [
+            {
+              "kind": "Field",
+              "name": { "kind": "Name", "value": "stock_data" },
+              "arguments": [],
+              "directives": [],
+              "selectionSet": {
+                "kind": "SelectionSet",
+                "selections": [
+                  { "kind": "Field", "name": { "kind": "Name", "value": "case_qty" }, "arguments": [], "directives": [] },
+                  { "kind": "Field", "name": { "kind": "Name", "value": "qty" }, "arguments": [], "directives": [] }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "FragmentDefinition",
+        "name": { "kind": "Name", "value": "SimpleProductCustomPricesFields" },
+        "typeCondition": { "kind": "NamedType", "name": { "kind": "Name", "value": "SimpleProduct" } },
+        "directives": [],
+        "selectionSet": {
+          "kind": "SelectionSet",
+          "selections": [
+            {
+              "kind": "Field",
+              "name": { "kind": "Name", "value": "custom_prices" },
+              "arguments": [],
+              "directives": [],
+              "selectionSet": {
+                "kind": "SelectionSet",
+                "selections": [
+                  {
+                    "kind": "Field",
+                    "name": { "kind": "Name", "value": "price_value" },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                      "kind": "SelectionSet",
+                      "selections": [
+                        { "kind": "Field", "name": { "kind": "Name", "value": "amount" }, "arguments": [], "directives": [], "selectionSet": { "kind": "SelectionSet", "selections": [{ "kind": "Field", "name": { "kind": "Name", "value": "currency" }, "arguments": [], "directives": [] }, { "kind": "Field", "name": { "kind": "Name", "value": "value" }, "arguments": [], "directives": [] }] } }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "Field",
+                    "name": { "kind": "Name", "value": "price_per_case" },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                      "kind": "SelectionSet",
+                      "selections": [
+                        { "kind": "Field", "name": { "kind": "Name", "value": "amount" }, "arguments": [], "directives": [], "selectionSet": { "kind": "SelectionSet", "selections": [{ "kind": "Field", "name": { "kind": "Name", "value": "currency" }, "arguments": [], "directives": [] }, { "kind": "Field", "name": { "kind": "Name", "value": "value" }, "arguments": [], "directives": [] }] } }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "FragmentDefinition",
+        "name": { "kind": "Name", "value": "ProductInterfaceListingsFields" },
+        "typeCondition": { "kind": "NamedType", "name": { "kind": "Name", "value": "ProductInterface" } },
+        "directives": [],
+        "selectionSet": {
+          "kind": "SelectionSet",
+          "selections": [
+            { "kind": "Field", "name": { "kind": "Name", "value": "listing_type" }, "arguments": [], "directives": [] },
+            { "kind": "Field", "name": { "kind": "Name", "value": "item_name" }, "arguments": [], "directives": [] },
+            { "kind": "Field", "name": { "kind": "Name", "value": "listing_id" }, "arguments": [], "directives": [] },
+            { "kind": "Field", "name": { "kind": "Name", "value": "ext_listing_id" }, "arguments": [], "directives": [] }
+          ]
+        }
+      },
+      {
+        "kind": "FragmentDefinition",
+        "name": { "kind": "Name", "value": "PriceRangeFields" },
+        "typeCondition": { "kind": "NamedType", "name": { "kind": "Name", "value": "PriceRange" } },
+        "directives": [],
+        "selectionSet": {
+          "kind": "SelectionSet",
+          "selections": [
+            {
+              "kind": "Field",
+              "name": { "kind": "Name", "value": "maximum_price" },
+              "arguments": [],
+              "directives": [],
+              "selectionSet": {
+                "kind": "SelectionSet",
+                "selections": [
+                  {
+                    "kind": "Field",
+                    "name": { "kind": "Name", "value": "final_price" },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                      "kind": "SelectionSet",
+                      "selections": [
+                        { "kind": "Field", "name": { "kind": "Name", "value": "currency" }, "arguments": [], "directives": [] },
+                        { "kind": "Field", "name": { "kind": "Name", "value": "value" }, "arguments": [], "directives": [] }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "Field",
+                    "name": { "kind": "Name", "value": "regular_price" },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                      "kind": "SelectionSet",
+                      "selections": [
+                        { "kind": "Field", "name": { "kind": "Name", "value": "currency" }, "arguments": [], "directives": [] },
+                        { "kind": "Field", "name": { "kind": "Name", "value": "value" }, "arguments": [], "directives": [] }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Field",
+              "name": { "kind": "Name", "value": "minimum_price" },
+              "arguments": [],
+              "directives": [],
+              "selectionSet": {
+                "kind": "SelectionSet",
+                "selections": [
+                  {
+                    "kind": "Field",
+                    "name": { "kind": "Name", "value": "final_price" },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                      "kind": "SelectionSet",
+                      "selections": [
+                        { "kind": "Field", "name": { "kind": "Name", "value": "currency" }, "arguments": [], "directives": [] },
+                        { "kind": "Field", "name": { "kind": "Name", "value": "value" }, "arguments": [], "directives": [] }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "Field",
+                    "name": { "kind": "Name", "value": "regular_price" },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                      "kind": "SelectionSet",
+                      "selections": [
+                        { "kind": "Field", "name": { "kind": "Name", "value": "currency" }, "arguments": [], "directives": [] },
+                        { "kind": "Field", "name": { "kind": "Name", "value": "value" }, "arguments": [], "directives": [] }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "variables": {
+    "isInBond": true,
+    "filter": { "sku": { "eq": "20101261017" } },
+    "buyingOption": "IN_BOND",
+    "attributeCodes": ["alcohol","body","colour","drinking_from_year","drinking_to_year","en_primeur","event_type","event_start_time","event_end_time","event_start_date","events_location_data","event_max_tickets","event_dress_code","event_hosts","family_type","grape_list","grape_filters","grape_filters_data","grape_varieties","internal_publication_date","internal_reviewer","is_a_gift_card","main_image","main_ingredients","maturity","property","region","style_temp","sweetness","tasting_note","vintage","bottle_order_unit","bottle_volume","case_order_unit","dutiable_volume_ml"],
+    "variantAttributeCodes": ["bottle_order_unit","bottle_volume","case_order_unit","dutiable_volume_ml"]
+  }
+}]
