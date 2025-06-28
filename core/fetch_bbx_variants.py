@@ -21,6 +21,8 @@ API_URL = "https://www.bbr.com/api/magento/customProductDetail"
 BASE_URL = "https://www.bbr.com"
 
 
+
+
 def fetch_bbx_listing_variants(sku: str, product_path: str, payload_file: Path) -> dict:
     """
     Fetch all variant listings for a given parent SKU from BBR’s GraphQL endpoint.
@@ -101,7 +103,7 @@ def main():
     parser.add_argument(
         "--payload", "-p",
         type=Path,
-        default=Path("payload.json"),
+        default=Path("../data/payload.json"),
         help="Path to the GraphQL payload JSON file"
     )
     args = parser.parse_args()

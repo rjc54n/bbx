@@ -1,3 +1,40 @@
+"""
+================================================================================
+    BBX New Listings Extractor – Production Script
+    ------------------------------------------------------------------------
+    Purpose:
+        This script queries the Algolia-powered BBX index to extract all
+        listings marked as "New to BBX" within the past day. It then enriches
+        the dataset using the BBX pricing API to provide relevant fields
+        including listing price, market value, transaction history, and
+        format metadata.
+
+    Key Features:
+        • Pulls newly listed BBX wines using Algolia's 'new_to_bbx' facet.
+        • Enriches listings with pricing, format, and availability data.
+        • Joins metadata and pricing to produce a complete dataset.
+        • Outputs CSV file to the /data directory for use by downstream scripts.
+
+    Output:
+        /data/bbx_new_enriched.csv – merged and deduplicated dataset.
+
+    Notes:
+        • Runs daily or on-demand as a precursor to analysis/filtering scripts.
+        • Used by scheduled Heroku tasks and optionally in Streamlit front end.
+        • Keeps scope intentionally narrow: no filtering logic is applied.
+
+    Dependencies:
+        - Python 3.10+
+        - requests, pandas
+        - Valid Algolia credentials (APP_ID and API_KEY)
+        - Network access to bbr.com APIs
+
+    Author:
+        Richard Carvell
+================================================================================
+"""
+
+
 import requests
 import json
 import pandas as pd
@@ -11,8 +48,10 @@ ALGOLIA_INDEX = "prod_product"
 HITS_PER_PAGE = 100
 MAX_PAGES = 100
 BATCH_SIZE = 24
-BASE_DIR = Path(__file__).parent
-OUTPUT_CSV = BASE_DIR / "bbx_new_enriched.csv"
+BASE_DIR = Path(__file__).resolve().parents[1]  # Project root
+DATA_DIR = BASE_DIR / "data"
+OUTPUT_CSV = DATA_DIR / "bbx_new_enriched.csv"
+
 
 
 ALGOLIA_URL = f"https://{ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/*/queries"

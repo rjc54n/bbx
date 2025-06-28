@@ -1,21 +1,52 @@
-# --- Arbitrage Detection & Slack Alerting v1.1 ---
-# Author: Richard Carvell
-# Description: Filters BBX listings for internal arbitrage opportunities, enriches with variant pricing,
-# calculates adjusted profit based on competition, and sends Slack alerts for each opportunity.
+"""
+================================================================================
+BBX Arbitrage Detection & Slack Alerting Script (v1.1)
+--------------------------------------------------------------------------------
+Author: Richard Carvell
+Purpose:
+    This script identifies internal arbitrage opportunities within BBX listings,
+    enriches selected entries with real-time competitive pricing data via the
+    BBX GraphQL API, and calculates potential and adjusted profits.
+
+    Opportunities are filtered based on price advantage vs. last transaction
+    and market prices. Slack notifications are sent for each qualified listing.
+
+Inputs:
+    - CSV file of enriched BBX listings (output of new_listings.py)
+    - GraphQL payload template (payload.json)
+
+Outputs:
+    - CSV of arbitrage-qualified listings (bbx_arbitrage_opportunities.csv)
+    - Slack message for each opportunity
+
+Dependencies:
+    - pandas
+    - requests
+    - fetch_bbx_variants (internal BBX helper module)
+
+Notes:
+    - Adjusts profit expectations by comparing against competing BBX listings.
+    - Designed to run hourly on Heroku or manually in development.
+    - Payload file must be located in the /data directory.
+
+Last Updated: 2025-06-28
+================================================================================
+"""
+
 
 import pandas as pd
-import json
 import logging
 import requests
 from pathlib import Path
-from fetch_bbx_variants import fetch_bbx_listing_variants
+from core.fetch_bbx_variants import fetch_bbx_listing_variants
 
 # --- CONFIGURATION ---
-BASE_DIR = Path(__file__).parent
-INPUT_CSV = BASE_DIR / "bbx_new_enriched.csv"
-OUTPUT_CSV = BASE_DIR / "bbx_arbitrage_opportunities.csv"
-PAYLOAD_PATH = BASE_DIR / "payload.json"
-SLACK_WEBHOOK_URL = "***REMOVED***"  # Replace with your actual webhook if needed
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR.parent / "data"
+INPUT_CSV = DATA_DIR / "bbx_new_enriched.csv"
+OUTPUT_CSV = DATA_DIR / "bbx_arbitrage_opportunities.csv"
+PAYLOAD_PATH = DATA_DIR / "payload.json"
+SLACK_WEBHOOK_URL = "***REMOVED***"
 
 # --- FORMAT HELPERS ---
 def format_case_string(raw_format):
