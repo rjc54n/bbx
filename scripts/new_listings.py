@@ -42,8 +42,8 @@ import time
 import random
 from pathlib import Path
 # --- CONFIGURATION ---
-ALGOLIA_APP_ID = "***REMOVED***"
-ALGOLIA_API_KEY = "***REMOVED***"
+ALGOLIA_APP_ID  = st.secrets["ALGOLIA_APP_ID"]
+ALGOLIA_API_KEY = st.secrets["ALGOLIA_API_KEY"]
 ALGOLIA_INDEX = "prod_product"
 HITS_PER_PAGE = 100
 MAX_PAGES = 100
@@ -77,7 +77,7 @@ for page in range(MAX_PAGES):
 
     raw_params = (
         f"hitsPerPage={HITS_PER_PAGE}&page={page}"
-        f"&filters=stock_origin:'BBX' AND new_to_bbx:'1 Day'"
+        f"&filters=stock_origin:'BBX' AND new_to_bbx:'2 Days'"
     )
 
     payload = {

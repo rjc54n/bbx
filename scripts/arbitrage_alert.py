@@ -39,6 +39,7 @@ import logging
 import requests
 from pathlib import Path
 from core.fetch_bbx_variants import fetch_bbx_listing_variants
+import streamlit as st
 
 # --- CONFIGURATION ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -46,7 +47,7 @@ DATA_DIR = BASE_DIR.parent / "data"
 INPUT_CSV = DATA_DIR / "bbx_new_enriched.csv"
 OUTPUT_CSV = DATA_DIR / "bbx_arbitrage_opportunities.csv"
 PAYLOAD_PATH = DATA_DIR / "payload.json"
-SLACK_WEBHOOK_URL = "***REMOVED***"
+SLACK_WEBHOOK_URL = st.secrets["SLACK_WEBHOOK"]
 
 # --- FORMAT HELPERS ---
 def format_case_string(raw_format):

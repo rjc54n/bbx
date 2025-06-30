@@ -6,11 +6,12 @@ import requests
 import json
 import time
 import random
+import streamlit as st
 from pathlib import Path
 
 # 1) API credentials and endpoints (from your production script)
-ALGOLIA_APP_ID  = "***REMOVED***"
-ALGOLIA_API_KEY = "***REMOVED***"
+ALGOLIA_APP_ID  = st.secrets["ALGOLIA_APP_ID"]
+ALGOLIA_API_KEY = st.secrets["ALGOLIA_API_KEY"]
 # Use the same index as your production extractor
 ALGOLIA_INDEX   = "prod_product"
 # Algolia host for DSN (search) operations
