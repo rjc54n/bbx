@@ -139,7 +139,7 @@ if st.sidebar.button("Run Bargain Hunter"):
         st.dataframe(pd.DataFrame(debug2))
 
     # Phase 3: GraphQL enrichment + debug3 trail
-    st.info("Enriching with GraphQL and applying final filters...")
+    st.info("Checking for other sellers and applying final filters...")
     gql_bar = st.progress(0)
     final_list = []
     debug3 = []
