@@ -209,7 +209,7 @@ if st.sidebar.button("Run Bargain Hunter"):
             rec3["passed"] = True
             debug3.append(rec3)
 
-            
+
             # Determine the proper PDP URL
             pdp_path = v.get("product_url") or v.get("product_path", "")
             # If it’s already a full URL, use it; otherwise prepend the BBR domain
