@@ -209,6 +209,13 @@ if st.sidebar.button("Run Bargain Hunter"):
             rec3["passed"] = True
             debug3.append(rec3)
 
+            
+            # Determine the proper PDP URL
+            pdp_path = v.get("product_url") or v.get("product_path", "")
+            # If it’s already a full URL, use it; otherwise prepend the BBR domain
+            bbx_url = pdp_path if pdp_path.startswith("http") else f"https://www.bbr.com{pdp_path}"
+
+
             # Build final record
             final_list.append({
                 "name":                v["name"],
@@ -222,7 +229,7 @@ if st.sidebar.button("Run Bargain Hunter"):
                 "pct_discount_market": v["pct_discount_market"],
                 "pct_discount_last":   v["pct_discount_last"],
                 "pct_discount_next":   pct_next,
-                "bbx_url":             f"https://www.bbr.com{v.get('bbx_url','')}"
+                "bbx_url":             bbx_url
             })
 
         except Exception as e:
