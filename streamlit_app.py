@@ -192,8 +192,10 @@ if st.sidebar.button("Run Bargain Hunter"):
                 debug3.append(rec3)
                 continue
 
-            unique = sorted(set(prices))
-            lowest, next_lowest = unique[0], unique[1] if len(unique)>1 else None
+            # Determine lowest vs next-lowest price (keep duplicates)
+            sorted_prices = sorted(prices)
+            lowest = sorted_prices[0]
+            next_lowest = sorted_prices[1] if len(sorted_prices) > 1 else None
             rec3.update(lowest=lowest, next_lowest=next_lowest)
 
             pct_next = None
