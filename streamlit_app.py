@@ -234,19 +234,25 @@ if st.sidebar.button("Run Bargain Hunter"):
             rec3.update(passed=True)
             debug3.append(rec3)
 
+            raw_path = v.get("product_url") or v.get("product_path") or ""
+            if raw_path.startswith("http"):
+                bbx_url = raw_path
+            else:
+                bbx_url = f"https://www.bbr.com{raw_path}"
+
             final_list.append({
-                "name":                v["name"],
-                "vintage":             v["vintage"],
-                "region":              v["region"],
-                "case_format":         case_fmt,
-                "ask_price":           ask_price,
-                "market_price":        v["market_price"],
-                "last_tx":             v["last_tx"],
-                "next_lowest_price":   next_lowest,
+                "name": v["name"],
+                "vintage": v["vintage"],
+                "region": v["region"],
+                "case_format": case_fmt,
+                "ask_price": ask_price,
+                "market_price": v["market_price"],
+                "last_tx": v["last_tx"],
+                "next_lowest_price": next_lowest,
                 "pct_discount_market": v["pct_discount_market"],
-                "pct_discount_last":   v["pct_discount_last"],
-                "pct_discount_next":   pct_next,
-                "bbx_url":             f"https://www.bbr.com{v.get('bbx_url', '')}"
+                "pct_discount_last": v["pct_discount_last"],
+                "pct_discount_next": pct_next,
+                "bbx_url": bbx_url
             })
 
         except Exception as e:
