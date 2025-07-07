@@ -181,17 +181,22 @@ if st.sidebar.button("Run Bargain Hunter"):
             variants = items[0].get("variants", [])
             rec3["variant_count"] = len(variants)
 
-            # Case-format sanity-check
-            if case_fmt != "Any":
-                ok = any(
-                    case_fmt in variant.get("product", {}).get("item_name", "")
-                    for variant in variants
-                )
-                rec3["case_check"] = ok
-                if not ok:
-                    rec3.update(passed=False, reason="mismatched case format")
-                    debug3.append(rec3)
-                    continue
+            # --- Case‐format extraction and sanity‐check ---
+            # Build a proper case‐format string from the Algolia hit
+            if isinstance(v.get("format"), str) and " x " in v.get("format"):
+                computed_fmt = v["format"]
+            elif v.get("case_size") and v.get("bottle_volume"):
+                computed_fmt = f"{v['case_size']} x {v['bottle_volume']}"
+            else:
+                computed_fmt = None
+
+            rec3["computed_case_format"] = computed_fmt
+
+            # Only enforce if user selected a specific format
+            if case_fmt != "Any" and computed_fmt != case_fmt:
+                rec3.update(passed=False, reason=f"case format {computed_fmt!r} != {case_fmt!r}")
+                debug3.append(rec3)
+                continue
 
             # Gather all variant prices from GraphQL
             prices = []
@@ -244,7 +249,7 @@ if st.sidebar.button("Run Bargain Hunter"):
                 "name": v["name"],
                 "vintage": v["vintage"],
                 "region": v["region"],
-                "case_format": case_fmt,
+                "case_format": computed_fmt,
                 "ask_price": ask_price,
                 "market_price": v["market_price"],
                 "last_tx": v["last_tx"],
