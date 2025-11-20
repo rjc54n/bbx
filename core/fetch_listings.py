@@ -25,7 +25,7 @@ HEADERS = {
 
 # 2) Paging parameters
 HITS_PER_PAGE = 100  # same as production
-MAX_PAGES     = 100  # upper bound; loop breaks early if no more hits
+MAX_PAGES     = 500  # upper bound; loop breaks early if no more hits
 
 
 def fetch_listings(
