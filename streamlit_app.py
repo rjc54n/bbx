@@ -28,6 +28,12 @@ max_price        = st.sidebar.number_input("Max price per case (£)", min_value=
 lookback_choice  = st.sidebar.radio("Days to look back on BBX", [1, 2, 3, 7], index=0)
 lookback_label   = f"{lookback_choice} Day" if lookback_choice == 1 else f"{lookback_choice} Days"
 case_fmt         = st.sidebar.selectbox("Case format", ["Any", "6 x 75 cl", "12 x 75 cl", "3 x 75 cl"])
+colour_choice = st.sidebar.radio(
+    "Colour",
+    ["Any", "Red", "White", "Rosé"],
+    index=0,
+    horizontal=True
+)
 min_pct_next     = st.sidebar.slider("Min % discount vs next lowest listing", 0, 100, 15)
 show_debug       = st.sidebar.checkbox("Show debug logs", value=False)
 
@@ -36,7 +42,7 @@ if st.sidebar.button("Run Bargain Hunter"):
 
     # Phase 1: Fetch listings (no case filter at this stage)
     with st.spinner("Fetching listings from BBX..."):
-        listings = fetch_listings(days_label=lookback_label, case_format=None)
+        listings = fetch_listings(days_label=lookback_label, case_format=None, colour_choice=colour_choice)
     st.success(f"Fetched {len(listings)} listings")
 
     # Phase 2: Batched REST pricing & preliminary filtering
