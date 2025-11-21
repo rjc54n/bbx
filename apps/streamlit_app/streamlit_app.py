@@ -1,13 +1,24 @@
+import sys
+from pathlib import Path
+
+# -------------------------------------------------------------------
+# Ensure project root is on sys.path so "core" package is importable
+# when running `streamlit run apps/streamlit_app/streamlit_app.py`.
+# -------------------------------------------------------------------
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import streamlit as st
 import pandas as pd
 import requests
 import random
-from pathlib import Path
 
 from core.fetch_listings import fetch_listings
 from core.fetch_bbx_variants import fetch_bbx_listing_variants
 from core.filters import apply_bargain_filters
 from core.enrichment import REST_URL, REST_HEADERS
+
 
 # --------------------------------------------------
 # Streamlit App: BBX Fine Wine Bargain Hunter
