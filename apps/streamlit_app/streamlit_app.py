@@ -19,6 +19,13 @@ from core.fetch_bbx_variants import fetch_bbx_listing_variants
 from core.filters import apply_bargain_filters
 from core.enrichment import REST_URL, REST_HEADERS
 
+# ---------------------------------------------
+# Algolia credentials for the Streamlit front-end
+# ---------------------------------------------
+# Read once from Streamlit secrets and pass explicitly into core.fetch_listings.
+ALGOLIA_APP_ID = st.secrets["ALGOLIA_APP_ID"]
+ALGOLIA_API_KEY = st.secrets["ALGOLIA_API_KEY"]
+
 
 # --------------------------------------------------
 # Streamlit App: BBX Fine Wine Bargain Hunter
@@ -57,7 +64,7 @@ if scope_mode == "New to BBX":
 else:
     # In “All BBX” mode we pass None to fetch_listings
     lookback_choice = None
-    lookback_label  = None
+    lookback_label = None
 
 # 2) Colour facet (Algolia string facet)
 colour_choice = st.sidebar.radio(
@@ -100,8 +107,8 @@ bottle_mode = st.sidebar.radio(
 st.sidebar.header("Discount Thresholds")
 
 min_pct_market = st.sidebar.slider("Min % discount vs market", 0, 100, 15)
-min_pct_last   = st.sidebar.slider("Min % discount vs last transaction", 0, 100, 15)
-min_pct_next   = st.sidebar.slider("Min % discount vs next lowest listing", 0, 100, 15)
+min_pct_last = st.sidebar.slider("Min % discount vs last transaction", 0, 100, 15)
+min_pct_next = st.sidebar.slider("Min % discount vs next lowest listing", 0, 100, 15)
 
 # Debug output
 show_debug = st.sidebar.checkbox("Show debug logs", value=False)
@@ -118,12 +125,14 @@ if st.sidebar.button("Run Bargain Hunter"):
     st.info("Fetching listings from BBX (Algolia)...")
 
     # Convert bottle format mode into the parameter used by fetch_listings:
-    #   None    -> All formats
+    #   None     -> All formats
     #   "Bottle" -> restrict to bottle-orderable listings
     format_filter = None if bottle_mode == "All Formats" else "Bottle"
 
     with st.spinner("Fetching listings from BBX..."):
         listings = fetch_listings(
+            ALGOLIA_APP_ID,
+            ALGOLIA_API_KEY,
             days_label=lookback_label,         # None means All BBX
             colour_choice=colour_choice,       # Algolia colour facet
             price_bands=price_band_choices,    # Algolia price facet
@@ -151,10 +160,10 @@ if st.sidebar.button("Run Bargain Hunter"):
         if v.get("parent_sku")
     ]
 
-    total_batches   = (len(prelim) + BATCH_SIZE - 1) // BATCH_SIZE
-    batch_bar       = st.progress(0)
+    total_batches = (len(prelim) + BATCH_SIZE - 1) // BATCH_SIZE
+    batch_bar = st.progress(0)
     rest_candidates = []   # listings that pass REST-level filters
-    debug2          = []   # debug rows for Phase 2
+    debug2 = []            # debug rows for Phase 2
 
     for b in range(total_batches):
         start = b * BATCH_SIZE
@@ -187,22 +196,22 @@ if st.sidebar.button("Run Bargain Hunter"):
 
         # Process each item in the batch using the REST response
         for v, sku, fmt in batch:
-            rec     = {"sku": sku, "format": fmt}
+            rec = {"sku": sku, "format": fmt}
             entries = data.get(sku) or []
 
             if not entries:
                 debug2.append({**rec, "reason": "no REST data", "passed": False})
                 continue
 
-            entry    = entries[0]
-            raw_ask  = entry.get("least_listing_price")
-            raw_mkt  = entry.get("market_price")
+            entry = entries[0]
+            raw_ask = entry.get("least_listing_price")
+            raw_mkt = entry.get("market_price")
             raw_last = entry.get("last_bbx_transaction")
             rec.update({"raw_ask": raw_ask, "raw_mkt": raw_mkt, "raw_last": raw_last})
 
             # Convert REST prices to floats
             try:
-                ask_price    = float(raw_ask)
+                ask_price = float(raw_ask)
                 market_price = float(raw_mkt)
             except Exception:
                 debug2.append({**rec, "reason": "invalid ask/market", "passed": False})
@@ -217,12 +226,12 @@ if st.sidebar.button("Run Bargain Hunter"):
 
             # Discount vs last transaction is optional because last_tx may be missing
             pct_last = None
-            last_tx  = None
+            last_tx = None
             try:
                 last_tx_val = float(raw_last)
                 if last_tx_val > 0:
-                    last_tx    = last_tx_val
-                    pct_last   = round((last_tx_val - ask_price) / last_tx_val * 100, 1)
+                    last_tx = last_tx_val
+                    pct_last = round((last_tx_val - ask_price) / last_tx_val * 100, 1)
             except Exception:
                 pct_last = None
 
@@ -243,29 +252,29 @@ if st.sidebar.button("Run Bargain Hunter"):
                 debug2.append({
                     **rec,
                     "pct_market": pct_market,
-                    "pct_last":   pct_last,
-                    "reason":     "; ".join(reasons),
-                    "passed":     False
+                    "pct_last": pct_last,
+                    "reason": "; ".join(reasons),
+                    "passed": False
                 })
                 continue
 
             # Attach the numeric fields to the Algolia hit dict so later phases
             # (GraphQL enrichment and display) can use them.
             v.update({
-                "price_per_case":      ask_price,
-                "market_price":        market_price,
-                "last_tx":             last_tx,
+                "price_per_case": ask_price,
+                "market_price": market_price,
+                "last_tx": last_tx,
                 "pct_discount_market": pct_market,
-                "pct_discount_last":   pct_last
+                "pct_discount_last": pct_last
             })
             rest_candidates.append(v)
 
             debug2.append({
                 **rec,
                 "pct_market": pct_market,
-                "pct_last":   pct_last,
-                "reason":     "passed",
-                "passed":     True
+                "pct_last": pct_last,
+                "reason": "passed",
+                "passed": True
             })
 
         batch_bar.progress((b + 1) / max(total_batches, 1))
@@ -281,21 +290,21 @@ if st.sidebar.button("Run Bargain Hunter"):
     # ----------------------------
     st.info("Checking for other sellers and applying final filters...")
 
-    gql_bar    = st.progress(0)
+    gql_bar = st.progress(0)
     final_list = []
-    debug3     = []
+    debug3 = []
     total_rest = len(rest_candidates)
 
     for idx, v in enumerate(rest_candidates, start=1):
         gql_bar.progress(idx / max(total_rest, 1))
-        sku   = v.get("parent_sku")
-        rec3  = {"sku": sku}
-        path  = v.get("product_path", v.get("product_url", "")).lstrip('/')
+        sku = v.get("parent_sku")
+        rec3 = {"sku": sku}
+        path = v.get("product_path", v.get("product_url", "")).lstrip('/')
 
         try:
-            gql_data  = fetch_bbx_listing_variants(sku, path, Path("data/payload.json"))
+            gql_data = fetch_bbx_listing_variants(sku, path, Path("data/payload.json"))
             data_node = gql_data.get("data", {}).get("products")
-            items     = data_node.get("items", []) if data_node else []
+            items = data_node.get("items", []) if data_node else []
             rec3["item_count"] = len(items)
 
             if not items:
@@ -348,8 +357,8 @@ if st.sidebar.button("Run Bargain Hunter"):
 
             # Sort GraphQL prices and find the first price greater than ask_price.
             sorted_prices = sorted(prices)
-            next_prices   = [p for p in sorted_prices if p > ask_price]
-            next_lowest   = next_prices[0] if next_prices else None
+            next_prices = [p for p in sorted_prices if p > ask_price]
+            next_lowest = next_prices[0] if next_prices else None
             rec3.update(lowest=ask_price, next_lowest=next_lowest)
 
             # Compute discount vs next lowest listing (if one exists)
@@ -373,18 +382,18 @@ if st.sidebar.button("Run Bargain Hunter"):
                 bbx_url = f"https://www.bbr.com{raw_path}"
 
             final_list.append({
-                "name":                 v["name"],
-                "vintage":              v["vintage"],
-                "region":               v["region"],
-                "case_format":          computed_fmt,
-                "ask_price":            ask_price,
-                "market_price":         v["market_price"],
-                "last_tx":              v["last_tx"],
-                "next_lowest_price":    next_lowest,
-                "pct_discount_market":  v["pct_discount_market"],
-                "pct_discount_last":    v["pct_discount_last"],
-                "pct_discount_next":    pct_next,
-                "bbx_url":              bbx_url,
+                "name": v["name"],
+                "vintage": v["vintage"],
+                "region": v["region"],
+                "case_format": computed_fmt,
+                "ask_price": ask_price,
+                "market_price": v["market_price"],
+                "last_tx": v["last_tx"],
+                "next_lowest_price": next_lowest,
+                "pct_discount_market": v["pct_discount_market"],
+                "pct_discount_last": v["pct_discount_last"],
+                "pct_discount_next": pct_next,
+                "bbx_url": bbx_url,
             })
 
         except Exception as e:
