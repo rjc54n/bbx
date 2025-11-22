@@ -15,6 +15,8 @@
 #   - Duplicate alerts allowed for now (v1)
 #
 # --------------------------------------------------------------
+print("ALGOLIA_APP_ID repr:", repr(os.environ.get("ALGOLIA_APP_ID")))
+print("ALGOLIA_API_KEY repr:", repr(os.environ.get("ALGOLIA_API_KEY")))
 
 import sys
 from pathlib import Path
