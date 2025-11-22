@@ -193,7 +193,7 @@ def _fetch_with_filters(filter_clauses):
 # 4) Public entry point used by the Streamlit app
 # --------------------------------------------------
 
-def fetch_listings(days_label, colour_choice, price_bands, bottle_format):
+def fetch_listings(days_label, colour_choice="Any", price_bands=None, bottle_format=None):
     """
     Fetch listings from Algolia, using the same filters as the Streamlit UI.
 
