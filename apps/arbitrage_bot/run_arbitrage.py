@@ -30,7 +30,6 @@ if str(ROOT_DIR) not in sys.path:
 import os
 import json
 import logging
-from pathlib import Path
 
 from core.fetch_listings import fetch_listings
 from core.fetch_bbx_variants import fetch_bbx_listing_variants
@@ -68,26 +67,64 @@ STATE_FILE = Path("data/arbitrage_state.json")
 
 
 # --------------------------------------------------------------
+# Environment / credentials helpers
+# --------------------------------------------------------------
+
+def get_algolia_credentials():
+    """
+    Read Algolia credentials from environment variables.
+
+    This is designed for non-Streamlit environments such as:
+      - local CLI runs
+      - GitHub Actions
+
+    Required environment variables:
+      - ALGOLIA_APP_ID
+      - ALGOLIA_API_KEY
+    """
+    app_id = os.environ.get("ALGOLIA_APP_ID")
+    api_key = os.environ.get("ALGOLIA_API_KEY")
+
+    if not app_id or not api_key:
+        raise RuntimeError(
+            "Algolia credentials not found in environment. "
+            "Set ALGOLIA_APP_ID and ALGOLIA_API_KEY before running."
+        )
+
+    return app_id, api_key
+
+
+# --------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------
 
 def compute_discounts(entry, rest_data, gql_data):
     """
     Computes pct_market, pct_last, pct_next for a listing.
-    Mirrors the logic in Streamlit.
+    Mirrors the logic in the Streamlit app.
 
-    entry: Algolia hit
-    rest_data: the REST pricing record for this SKU
-    gql_data: entire GraphQL response (raw)
+    Parameters
+    ----------
+    entry : dict
+        Algolia hit.
+    rest_data : dict
+        The REST pricing record for this SKU.
+    gql_data : dict
+        Entire GraphQL response (raw).
+
+    Returns
+    -------
+    dict or None
+        Discount metrics and prices, or None if they cannot be computed.
     """
-    ask_raw    = rest_data.get("least_listing_price")
-    mkt_raw    = rest_data.get("market_price")
-    last_raw   = rest_data.get("last_bbx_transaction")
+    ask_raw  = rest_data.get("least_listing_price")
+    mkt_raw  = rest_data.get("market_price")
+    last_raw = rest_data.get("last_bbx_transaction")
 
     try:
         ask = float(ask_raw)
         mkt = float(mkt_raw)
-    except:
+    except Exception:
         return None
 
     if ask <= 0 or mkt <= 0:
@@ -100,7 +137,7 @@ def compute_discounts(entry, rest_data, gql_data):
         last = float(last_raw)
         if last > 0:
             pct_last = round((last - ask) / last * 100, 1)
-    except:
+    except Exception:
         pct_last = None
 
     # Now extract next-lowest price from GraphQL
@@ -114,10 +151,15 @@ def compute_discounts(entry, rest_data, gql_data):
     for variant in variants:
         try:
             amt = (
-                variant["product"]["custom_prices"]["price_per_case"]["amount"]["value"]
+                variant["product"]
+                ["custom_prices"]
+                ["price_per_case"]
+                ["amount"]
+                ["value"]
             )
             prices.append(float(amt))
-        except:
+        except Exception:
+            # Skip variants with malformed data
             pass
 
     if not prices:
@@ -148,27 +190,60 @@ def compute_discounts(entry, rest_data, gql_data):
 # --------------------------------------------------------------
 
 def run_arbitrage():
+    """
+    Run a single arbitrage scan:
+      - Fetch "new to BBX" listings from Algolia
+      - Enrich with REST pricing
+      - Enrich with GraphQL variant prices
+      - Apply discount thresholds
+
+    Returns
+    -------
+    list[dict]
+        A list of candidate opportunities with pricing and discount metrics.
+    """
     logging.info("Starting BBX arbitrage scan...")
 
-    # Phase 1 — Fetch "new to BBX"
+    # Resolve Algolia credentials from environment (GitHub Actions / CLI)
+    algolia_app_id, algolia_api_key = get_algolia_credentials()
+
+    # Phase 1 — Fetch "new to BBX" via Algolia
     label = f"{LOOKBACK_DAYS} Day" if LOOKBACK_DAYS == 1 else f"{LOOKBACK_DAYS} Days"
-    listings = fetch_listings(days_label=label)
+
+    logging.info(f"Fetching listings for 'new_to_bbx' window: {label}")
+    listings = fetch_listings(
+        algolia_app_id,
+        algolia_api_key,
+        days_label=label,      # same facet label used in the Streamlit UI
+        colour_choice="Any",   # all colours
+        price_bands=None,      # all price bands
+        bottle_format=None,    # all formats
+    )
 
     if not listings:
-        logging.warning("No listings fetched.")
+        logging.warning("No listings fetched from Algolia.")
         return []
+
+    logging.info(f"Fetched {len(listings)} listings from Algolia.")
 
     # Build preliminary list (only entries with parent_sku)
     prelim = [
-        (v, v.get("parent_sku")) for v in listings if v.get("parent_sku")
+        (v, v.get("parent_sku"))
+        for v in listings
+        if v.get("parent_sku")
     ]
+
+    if not prelim:
+        logging.warning("No listings had a parent_sku. Nothing to process.")
+        return []
 
     # Phase 2 — REST batch pricing
     rest_results = {}
     BATCH = 24
 
+    logging.info(f"Running REST pricing in batches of {BATCH}...")
     for i in range(0, len(prelim), BATCH):
-        batch = prelim[i:i+BATCH]
+        batch = prelim[i:i + BATCH]
         _, skus = zip(*batch)
         sku_list = ",".join(skus)
 
@@ -191,11 +266,17 @@ def run_arbitrage():
 
         # Merge into rest_results dict
         for sku in skus:
-            if sku in data:
+            if sku in data and data[sku]:
                 rest_results[sku] = data[sku][0]
+
+    if not rest_results:
+        logging.warning("No REST pricing results were obtained.")
+        return []
 
     # Phase 3 — GraphQL enrichment
     candidates = []
+    logging.info("Running GraphQL enrichment and applying discount filters...")
+
     for entry, sku in prelim:
         rest_rec = rest_results.get(sku)
         if not rest_rec:
@@ -204,7 +285,7 @@ def run_arbitrage():
         # Sanity price check
         try:
             ask = float(rest_rec.get("least_listing_price"))
-        except:
+        except Exception:
             continue
 
         if ask <= MIN_CASE_PRICE:
@@ -241,6 +322,7 @@ def run_arbitrage():
             "url": f"https://www.bbr.com/{path}",
         })
 
+    logging.info(f"Arbitrage scan complete. {len(candidates)} candidates found.")
     return candidates
 
 
@@ -251,6 +333,15 @@ def run_arbitrage():
 def format_slack_message(candidates):
     """
     Build a compact Slack message summarising candidates.
+
+    Parameters
+    ----------
+    candidates : list[dict]
+
+    Returns
+    -------
+    str
+        A message suitable for sending to a Slack webhook.
     """
     if not candidates:
         return "BBX arbitrage scan: no opportunities found."
@@ -288,3 +379,4 @@ if __name__ == "__main__":
         print(msg)
     else:
         send_slack_message(msg)
+
