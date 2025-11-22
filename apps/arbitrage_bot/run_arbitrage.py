@@ -15,8 +15,7 @@
 #   - Duplicate alerts allowed for now (v1)
 #
 # --------------------------------------------------------------
-print("ALGOLIA_APP_ID repr:", repr(os.environ.get("ALGOLIA_APP_ID")))
-print("ALGOLIA_API_KEY repr:", repr(os.environ.get("ALGOLIA_API_KEY")))
+
 
 import sys
 from pathlib import Path
@@ -205,7 +204,8 @@ def run_arbitrage():
         A list of candidate opportunities with pricing and discount metrics.
     """
     logging.info("Starting BBX arbitrage scan...")
-
+    print("ALGOLIA_APP_ID repr:", repr(os.environ.get("ALGOLIA_APP_ID")))
+    print("ALGOLIA_API_KEY repr:", repr(os.environ.get("ALGOLIA_API_KEY")))
     # Resolve Algolia credentials from environment (GitHub Actions / CLI)
     algolia_app_id, algolia_api_key = get_algolia_credentials()
 
