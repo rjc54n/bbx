@@ -17,19 +17,24 @@
 
 # -*- coding: utf-8 -*-
 
+import os
 import requests
 import json
 import time
 import random
 import streamlit as st
 
+
 # --------------------------------------------------
 # 1) Algolia configuration
 # --------------------------------------------------
 
 # App ID and API key are provided via Streamlit secrets.
-ALGOLIA_APP_ID  = st.secrets["ALGOLIA_APP_ID"]
-ALGOLIA_API_KEY = st.secrets["ALGOLIA_API_KEY"]
+# Prefer environment variables (for GitHub Actions, CLI runs),
+# but fall back to Streamlit secrets when running under Streamlit.
+ALGOLIA_APP_ID  = os.environ.get("ALGOLIA_APP_ID")  or st.secrets["ALGOLIA_APP_ID"]
+ALGOLIA_API_KEY = os.environ.get("ALGOLIA_API_KEY") or st.secrets["ALGOLIA_API_KEY"]
+
 
 # We query the same index as your offline scripts.
 ALGOLIA_INDEX   = "prod_product"
