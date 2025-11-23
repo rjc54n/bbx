@@ -7,15 +7,10 @@
 #   2) REST pricing enrichment
 #   3) GraphQL enrichment (next-lowest price)
 #   4) Apply discount filters
-#   5) Slack notify with compact summary
-#
-# Aims:
-#   - Run on a cadence (configured in GitHub Actions)
-#   - One Slack message per run
-#   - Duplicate alerts allowed for now (v1)
+#   5) Deduplicate against prior notifications
+#   6) Slack notify with compact summary
 #
 # --------------------------------------------------------------
-
 
 import sys
 from pathlib import Path
@@ -29,13 +24,17 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 import os
-import json
 import logging
 
 from core.fetch_listings import fetch_listings
 from core.fetch_bbx_variants import fetch_bbx_listing_variants
 from core.enrichment import REST_URL, REST_HEADERS
 from core.slack import send_slack_message
+from core.notification_state import (
+    load_notification_state,
+    save_notification_state,
+    filter_new_or_improved,
+)
 
 import requests
 
@@ -63,8 +62,16 @@ MAX_WINES_PER_ALERT = 20
 # When True: print Slack messages locally but do not send
 DRY_RUN = False
 
-# Path for optional future persistent state (duplicates)
+# Path for persistent notification state
 STATE_FILE = Path("data/arbitrage_state.json")
+
+# Re-notification interval when ask is unchanged (in days)
+REMINDER_INTERVAL_DAYS = 7
+
+# Control whether we send "no new or improved opportunities" messages.
+# For implementation testing, you can set this to True.
+# In steady state, you probably want this False to avoid hourly noise.
+SEND_EMPTY_ALERTS = True
 
 
 # --------------------------------------------------------------
@@ -75,7 +82,7 @@ def get_algolia_credentials():
     """
     Read Algolia credentials from environment variables.
 
-    This is designed for non-Streamlit environments such as:
+    Designed for non-Streamlit environments such as:
       - local CLI runs
       - GitHub Actions
 
@@ -91,6 +98,9 @@ def get_algolia_credentials():
             "Algolia credentials not found in environment. "
             "Set ALGOLIA_APP_ID and ALGOLIA_API_KEY before running."
         )
+
+    logging.info(f"Algolia APP ID length: {len(app_id)}")
+    logging.info(f"Algolia API KEY length: {len(api_key)}")
 
     return app_id, api_key
 
@@ -187,7 +197,7 @@ def compute_discounts(entry, rest_data, gql_data):
 
 
 # --------------------------------------------------------------
-# Main arbitrage function
+# Main arbitrage function (raw candidates, no dedup)
 # --------------------------------------------------------------
 
 def run_arbitrage():
@@ -202,10 +212,10 @@ def run_arbitrage():
     -------
     list[dict]
         A list of candidate opportunities with pricing and discount metrics.
+        Deduplication and notification state are applied elsewhere.
     """
     logging.info("Starting BBX arbitrage scan...")
-    print("ALGOLIA_APP_ID repr:", repr(os.environ.get("ALGOLIA_APP_ID")))
-    print("ALGOLIA_API_KEY repr:", repr(os.environ.get("ALGOLIA_API_KEY")))
+
     # Resolve Algolia credentials from environment (GitHub Actions / CLI)
     algolia_app_id, algolia_api_key = get_algolia_credentials()
 
@@ -324,7 +334,7 @@ def run_arbitrage():
             "url": f"https://www.bbr.com/{path}",
         })
 
-    logging.info(f"Arbitrage scan complete. {len(candidates)} candidates found.")
+    logging.info(f"Arbitrage scan complete. {len(candidates)} raw candidates found.")
     return candidates
 
 
@@ -332,21 +342,32 @@ def run_arbitrage():
 # Slack message builder
 # --------------------------------------------------------------
 
-def format_slack_message(candidates):
+def format_slack_message(candidates, suppressed=None):
     """
     Build a compact Slack message summarising candidates.
 
     Parameters
     ----------
     candidates : list[dict]
+        Candidates that will be notified this run.
+    suppressed : list[dict] or None
+        Candidates that were suppressed due to deduplication rules.
 
     Returns
     -------
     str
-        A message suitable for sending to a Slack webhook.
+        Message suitable for sending to a Slack webhook.
     """
+    suppressed = suppressed or []
+    suppressed_count = len(suppressed)
+
     if not candidates:
-        return "BBX arbitrage scan: no opportunities found."
+        # For initial testing of the deduplication logic. Once validated,
+        # you can disable empty alerts via SEND_EMPTY_ALERTS = False.
+        base = "BBX arbitrage scan: no new or improved opportunities found."
+        if suppressed_count:
+            return f"{base}\n(Suppressed {suppressed_count} previously-notified opportunities this run.)"
+        return base
 
     header = (
         f"BBX arbitrage scan – {len(candidates)} candidates "
@@ -365,6 +386,9 @@ def format_slack_message(candidates):
     if len(candidates) > MAX_WINES_PER_ALERT:
         lines.append(f"... and {len(candidates) - MAX_WINES_PER_ALERT} more.")
 
+    if suppressed_count:
+        lines.append(f"(Suppressed {suppressed_count} previously-notified opportunities this run.)")
+
     return "\n".join(lines)
 
 
@@ -374,11 +398,31 @@ def format_slack_message(candidates):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    results = run_arbitrage()
-    msg = format_slack_message(results)
 
+    # 1) Load prior notification state
+    state = load_notification_state(STATE_FILE)
+
+    # 2) Run arbitrage scan to get raw candidates
+    all_candidates = run_arbitrage()
+
+    # 3) Apply deduplication rules
+    notified, suppressed, new_state = filter_new_or_improved(
+        all_candidates,
+        state,
+        reminder_days=REMINDER_INTERVAL_DAYS,
+    )
+
+    # 4) Build Slack message
+    msg = format_slack_message(notified, suppressed)
+
+    # 5) Send or print, depending on DRY_RUN and SEND_EMPTY_ALERTS
     if DRY_RUN:
         print(msg)
     else:
-        send_slack_message(msg)
+        if notified or SEND_EMPTY_ALERTS:
+            send_slack_message(msg)
+
+    # 6) Persist updated notification state
+    save_notification_state(STATE_FILE, new_state)
+
 
