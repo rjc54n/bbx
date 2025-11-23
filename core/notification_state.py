@@ -13,29 +13,27 @@
 #     than `reminder_days`: notify (time-based reminder).
 #   - Otherwise: suppress.
 #
-# Storage format (JSON):
-#   {
-#       "PARENT123": {
-#           "sku": "PARENT123",
-#           "ask_last_notified": 1320.0,
-#           "first_notified_at": "2025-11-23T08:10:00Z",
-#           "last_notified_at": "2025-11-23T08:10:00Z",
-#           "notification_count": 1
-#       },
-#       ...
-#   }
+# Storage backends:
+#   - In GitHub Actions: S3 object, using env vars S3_BUCKET and S3_STATE_KEY.
+#   - Locally (CLI dev): JSON file at the Path passed in.
 # --------------------------------------------------------------
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Any
 
-
 StateDict = Dict[str, Dict[str, Any]]
+
+# boto3 is required in CI but the local CLI can run without S3 configuration.
+try:
+    import boto3  # type: ignore
+except ImportError:
+    boto3 = None  # type: ignore
 
 
 def _now_utc() -> datetime:
@@ -64,12 +62,101 @@ def _parse_iso_z(ts: str) -> datetime:
     return datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
 
 
+# --------------------------------------------------------------
+# Backend selection helpers
+# --------------------------------------------------------------
+
+def _get_s3_config():
+    """
+    Return (bucket, key, region) if S3 is configured via env vars,
+    otherwise (None, None, None).
+    """
+    bucket = os.environ.get("S3_BUCKET")
+    key = os.environ.get("S3_STATE_KEY")
+    region = os.environ.get("AWS_REGION")
+    if bucket and key:
+        return bucket, key, region
+    return None, None, None
+
+
+def _load_state_from_s3(bucket: str, key: str, region: str | None) -> StateDict:
+    """
+    Load notification state from S3. Returns {} if the object is missing
+    or if any error occurs.
+    """
+    if boto3 is None:
+        logging.error(
+            "boto3 is not available but S3_BUCKET/S3_STATE_KEY are set. "
+            "Falling back to empty state."
+        )
+        return {}
+
+    try:
+        client_kwargs = {}
+        if region:
+            client_kwargs["region_name"] = region
+        s3 = boto3.client("s3", **client_kwargs)  # type: ignore[arg-type]
+
+        logging.info(f"Loading notification state from s3://{bucket}/{key}")
+        resp = s3.get_object(Bucket=bucket, Key=key)
+        body = resp["Body"].read().decode("utf-8")
+        data = json.loads(body)
+        if not isinstance(data, dict):
+            raise ValueError("State file in S3 must contain a JSON object at top level.")
+        return data  # type: ignore[return-value]
+    except Exception as e:
+        logging.info(
+            f"No existing or readable notification state in S3 "
+            f"(bucket={bucket}, key={key}): {e}. Starting fresh."
+        )
+        return {}
+
+
+def _save_state_to_s3(bucket: str, key: str, region: str | None, state: StateDict) -> None:
+    """
+    Save notification state to S3. Errors are logged but not raised.
+    """
+    if boto3 is None:
+        logging.error(
+            "boto3 is not available but S3_BUCKET/S3_STATE_KEY are set. "
+            "Cannot save state to S3."
+        )
+        return
+
+    try:
+        client_kwargs = {}
+        if region:
+            client_kwargs["region_name"] = region
+        s3 = boto3.client("s3", **client_kwargs)  # type: ignore[arg-type]
+
+        body = json.dumps(state, indent=2, sort_keys=True).encode("utf-8")
+        s3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType="application/json",
+        )
+        logging.info(f"Notification state saved to s3://{bucket}/{key}")
+    except Exception as e:
+        logging.error(f"Failed to save notification state to S3: {e}")
+
+
+# --------------------------------------------------------------
+# Public load / save interface
+# --------------------------------------------------------------
+
 def load_notification_state(path: Path) -> StateDict:
     """
-    Load notification state from a JSON file.
+    Load notification state from S3 if configured, otherwise from a local JSON file.
 
-    If the file does not exist or cannot be parsed, returns an empty dict.
+    S3 mode is enabled when both S3_BUCKET and S3_STATE_KEY are present in env.
+    Local mode is used otherwise.
     """
+    bucket, key, region = _get_s3_config()
+    if bucket and key:
+        return _load_state_from_s3(bucket, key, region)
+
+    # Local JSON file mode (CLI and local development)
     if not path.exists():
         logging.info(f"No existing notification state at {path}, starting fresh.")
         return {}
@@ -87,11 +174,16 @@ def load_notification_state(path: Path) -> StateDict:
 
 def save_notification_state(path: Path, state: StateDict) -> None:
     """
-    Save notification state to disk in a simple JSON file.
+    Save notification state to S3 if configured, otherwise to a local JSON file.
 
-    Writes atomically via a temporary file and rename. Failure to save is logged
-    but does not raise (the arbitrage run should not crash on state failure).
+    Errors are logged but do not raise, to avoid breaking the arbitrage run.
     """
+    bucket, key, region = _get_s3_config()
+    if bucket and key:
+        _save_state_to_s3(bucket, key, region, state)
+        return
+
+    # Local JSON file mode
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_suffix(path.suffix + ".tmp")
@@ -102,6 +194,10 @@ def save_notification_state(path: Path, state: StateDict) -> None:
     except Exception as e:
         logging.error(f"Failed to save notification state to {path}: {e}")
 
+
+# --------------------------------------------------------------
+# Deduplication logic
+# --------------------------------------------------------------
 
 def filter_new_or_improved(
     candidates: List[Dict[str, Any]],

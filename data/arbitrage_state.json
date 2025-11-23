@@ -1,0 +1,16 @@
+{
+  "20141097177": {
+    "ask_last_notified": 300.0,
+    "first_notified_at": "2025-11-23T13:58:38Z",
+    "last_notified_at": "2025-11-23T13:58:38Z",
+    "notification_count": 1,
+    "sku": "20141097177"
+  },
+  "20151055030": {
+    "ask_last_notified": 1600.0,
+    "first_notified_at": "2025-11-23T13:58:38Z",
+    "last_notified_at": "2025-11-23T13:58:38Z",
+    "notification_count": 1,
+    "sku": "20151055030"
+  }
+}
