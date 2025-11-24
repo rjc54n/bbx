@@ -39,12 +39,12 @@ from core.notification_state import (
 import requests
 
 # --------------------------------------------------------------
-# PARAMETERS — ADJUST FREELY
+# PARAMETERS
 # --------------------------------------------------------------
 
 CADENCE_MINUTES = 60
 
-# Lookback window for Algolia’s "new_to_bbx" facet.
+# Lookback window for Algolia "new_to_bbx" facet.
 # Maps to "1 Day", "2 Days", "3 Days", "7 Days".
 LOOKBACK_DAYS = 1
 
@@ -62,15 +62,13 @@ MAX_WINES_PER_ALERT = 20
 # When True: print Slack messages locally but do not send
 DRY_RUN = False
 
-# Path for persistent notification state
+# Path for persistent notification state (used locally; CI uses S3)
 STATE_FILE = Path("data/arbitrage_state.json")
 
 # Re-notification interval when ask is unchanged (in days)
 REMINDER_INTERVAL_DAYS = 7
 
 # Control whether we send "no new or improved opportunities" messages.
-# For implementation testing, you can set this to True.
-# In steady state, you probably want this False to avoid hourly noise.
 SEND_EMPTY_ALERTS = True
 
 
@@ -196,6 +194,30 @@ def compute_discounts(entry, rest_data, gql_data):
     }
 
 
+def derive_case_format(entry):
+    """
+    Derive a compact case format string for Slack output, eg "6x75cl".
+
+    Priority:
+      1) Use case_size and bottle_volume if present.
+      2) Fall back to entry["format"] if available, normalised a bit.
+      3) Return "N/A" if nothing useful is present.
+    """
+    case_size = entry.get("case_size")
+    bottle_volume = entry.get("bottle_volume")
+
+    if case_size and bottle_volume:
+        # Expect something like 6 and "75cl" -> "6x75cl"
+        return f"{case_size}x{bottle_volume}"
+
+    fmt = entry.get("format")
+    if isinstance(fmt, str) and fmt.strip():
+        # Normalise common "6 x 75cl" to "6x75cl"
+        return fmt.replace(" x ", "x").replace(" ", "")
+
+    return "N/A"
+
+
 # --------------------------------------------------------------
 # Main arbitrage function (raw candidates, no dedup)
 # --------------------------------------------------------------
@@ -219,7 +241,7 @@ def run_arbitrage():
     # Resolve Algolia credentials from environment (GitHub Actions / CLI)
     algolia_app_id, algolia_api_key = get_algolia_credentials()
 
-    # Phase 1 — Fetch "new to BBX" via Algolia
+    # Phase 1: Fetch "new to BBX" via Algolia
     label = f"{LOOKBACK_DAYS} Day" if LOOKBACK_DAYS == 1 else f"{LOOKBACK_DAYS} Days"
 
     logging.info(f"Fetching listings for 'new_to_bbx' window: {label}")
@@ -249,7 +271,7 @@ def run_arbitrage():
         logging.warning("No listings had a parent_sku. Nothing to process.")
         return []
 
-    # Phase 2 — REST batch pricing
+    # Phase 2: REST batch pricing
     rest_results = {}
     BATCH = 24
 
@@ -285,7 +307,7 @@ def run_arbitrage():
         logging.warning("No REST pricing results were obtained.")
         return []
 
-    # Phase 3 — GraphQL enrichment
+    # Phase 3: GraphQL enrichment
     candidates = []
     logging.info("Running GraphQL enrichment and applying discount filters...")
 
@@ -324,12 +346,16 @@ def run_arbitrage():
         if disc["pct_next"] is not None and disc["pct_next"] < MIN_PCT_NEXT:
             continue
 
+        # Derive case format for Slack output
+        case_format = derive_case_format(entry)
+
         # Build result record
         candidates.append({
             "name": entry.get("name"),
             "vintage": entry.get("vintage"),
             "region": entry.get("region"),
             "sku": sku,
+            "case_format": case_format,
             **disc,
             "url": f"https://www.bbr.com/{path}",
         })
@@ -362,24 +388,26 @@ def format_slack_message(candidates, suppressed=None):
     suppressed_count = len(suppressed)
 
     if not candidates:
-        # For initial testing of the deduplication logic. Once validated,
-        # you can disable empty alerts via SEND_EMPTY_ALERTS = False.
         base = "BBX arbitrage scan: no new or improved opportunities found."
         if suppressed_count:
-            return f"{base}\n(Suppressed {suppressed_count} previously-notified opportunities this run.)"
+            return (
+                f"{base}\n"
+                f"(Suppressed {suppressed_count} previously-notified opportunities this run.)"
+            )
         return base
 
     header = (
-        f"BBX arbitrage scan – {len(candidates)} candidates "
-        f"(mkt≥{MIN_PCT_MARKET}%, last≥{MIN_PCT_LAST}%, next≥{MIN_PCT_NEXT}%)"
+        f"BBX arbitrage scan - {len(candidates)} candidates "
+        f"(mkt>={MIN_PCT_MARKET}%, last>={MIN_PCT_LAST}%, next>={MIN_PCT_NEXT}%)"
     )
 
     lines = [header]
     for i, c in enumerate(candidates[:MAX_WINES_PER_ALERT], start=1):
+        case_fmt = c.get("case_format", "N/A")
         line = (
-            f"{i}. {c['name']} ({c['vintage']}, {c['region']}) – "
+            f"{i}. {c['name']} ({c['vintage']}, {c['region']}, {case_fmt}) - "
             f"£{c['ask']} ask | £{c['mkt']} mkt ({c['pct_market']}%) | "
-            f"last {c['pct_last']}% | next {c['pct_next']}% – {c['url']}"
+            f"last {c['pct_last']}% | next {c['pct_next']}% - {c['url']}"
         )
         lines.append(line)
 
@@ -387,7 +415,9 @@ def format_slack_message(candidates, suppressed=None):
         lines.append(f"... and {len(candidates) - MAX_WINES_PER_ALERT} more.")
 
     if suppressed_count:
-        lines.append(f"(Suppressed {suppressed_count} previously-notified opportunities this run.)")
+        lines.append(
+            f"(Suppressed {suppressed_count} previously-notified opportunities this run.)"
+        )
 
     return "\n".join(lines)
 
@@ -424,5 +454,6 @@ if __name__ == "__main__":
 
     # 6) Persist updated notification state
     save_notification_state(STATE_FILE, new_state)
+
 
 

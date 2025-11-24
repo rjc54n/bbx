@@ -1,14 +1,14 @@
 # .github/workflows/arbitrage.yml
 # --------------------------------------------------------------
 # Scheduled arbitrage scanner for BBX.
-# Runs run_arbitrage.py every 60 minutes.
+# Runs run_arbitrage.py once an hour, between 08:00 and 23:00 UTC.
 # --------------------------------------------------------------
 
 name: BBX Arbitrage Scanner
 
 on:
   schedule:
-    - cron: "0 * * * *"     # every hour, on the hour
+    - cron: "0 8-23 * * *"   # every hour, 08:00 to 23:00 UTC
   workflow_dispatch:         # manual run option
 
 jobs:
