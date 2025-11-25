@@ -69,7 +69,7 @@ STATE_FILE = Path("data/arbitrage_state.json")
 REMINDER_INTERVAL_DAYS = 7
 
 # Control whether we send "no new or improved opportunities" messages.
-SEND_EMPTY_ALERTS = True
+SEND_EMPTY_ALERTS = False
 
 
 # --------------------------------------------------------------
