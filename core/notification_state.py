@@ -232,7 +232,9 @@ def filter_new_or_improved(
 
     notified: List[Dict[str, Any]] = []
     suppressed: List[Dict[str, Any]] = []
-    new_state: StateDict = dict(state)  # shallow copy is fine
+    # Copy each record too: we mutate records below, and a shallow copy of the
+    # outer dict would silently modify the caller's state.
+    new_state: StateDict = {k: dict(v) for k, v in state.items()}
 
     for c in candidates:
         sku = c.get("sku")

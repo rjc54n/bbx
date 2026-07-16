@@ -11,9 +11,15 @@ on:
     - cron: "0 8-23 * * *"   # every hour, 08:00 to 23:00 UTC
   workflow_dispatch:         # manual run option
 
+# Never let two runs overlap (they would race on the S3 state object).
+concurrency:
+  group: bbx-arbitrage
+  cancel-in-progress: false
+
 jobs:
   run-arbitrage:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     env:
       # Algolia
@@ -35,14 +41,27 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/ -q
 
       - name: Run arbitrage scanner
         run: |
           python apps/arbitrage_bot/run_arbitrage.py
+
+      # A dead scanner must not fail silently: alert Slack on any job failure.
+      - name: Notify Slack on failure
+        if: failure()
+        run: |
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":warning: BBX arbitrage scan FAILED. Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$SLACK_WEBHOOK"

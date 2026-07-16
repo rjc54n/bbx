@@ -123,8 +123,11 @@ def _fetch_with_filters(
         )
 
         if response.status_code != 200:
-            # You may want to log or raise in production; for now we just break.
-            break
+            # Fail loudly: a bad/expired key must not look like "no results".
+            raise RuntimeError(
+                f"Algolia query failed with status {response.status_code}: "
+                f"{response.text[:500]}"
+            )
 
         data = response.json()
         hits = data.get("results", [{}])[0].get("hits", [])
@@ -202,40 +205,20 @@ def fetch_listings(
     if price_filter:
         base_filters.append(price_filter)
 
-    # Case 1: Specific colour -> single query
+    # "Any" means no colour filter at all. (Previously this was implemented as
+    # the union of Red/White/Rosé, which silently excluded any listing whose
+    # colour facet was missing or had another value.)
     if colour_choice != "Any":
         colour_filter = COLOUR_MAP.get(colour_choice)
-        filters = base_filters + ([colour_filter] if colour_filter else [])
+        if colour_filter:
+            base_filters.append(colour_filter)
 
-        return _fetch_with_filters(
-            algolia_app_id=algolia_app_id,
-            algolia_api_key=algolia_api_key,
-            filter_clauses=filters,
-            index_name=index_name,
-            hits_per_page=hits_per_page,
-            max_pages=max_pages,
-        )
-
-    # Case 2: Any colour -> union of the three colours
-    combined: Dict[str, Dict] = {}
-
-    for colour_filter in COLOUR_MAP.values():
-        filters = base_filters + [colour_filter]
-
-        hits = _fetch_with_filters(
-            algolia_app_id=algolia_app_id,
-            algolia_api_key=algolia_api_key,
-            filter_clauses=filters,
-            index_name=index_name,
-            hits_per_page=hits_per_page,
-            max_pages=max_pages,
-        )
-
-        # De-duplicate by objectID
-        for hit in hits:
-            object_id = hit.get("objectID")
-            if object_id is not None:
-                combined[object_id] = hit
-
-    return list(combined.values())
+    return _fetch_with_filters(
+        algolia_app_id=algolia_app_id,
+        algolia_api_key=algolia_api_key,
+        filter_clauses=base_filters,
+        index_name=index_name,
+        hits_per_page=hits_per_page,
+        max_pages=max_pages,
+    )
 

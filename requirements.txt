@@ -1,4 +1,4 @@
-pandas
-requests
-boto3>=1.35.0
-streamlit>=1.25.0
+pandas==2.3.3
+requests==2.32.5
+boto3>=1.35,<2
+streamlit==1.51.0

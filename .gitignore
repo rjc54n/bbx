@@ -2,9 +2,17 @@
 # Local Streamlit secret file
 .streamlit/secrets.toml
 
+# IDE
+.idea/
+
+# Local runtime state (CI uses S3)
+data/arbitrage_state.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 .venv/
-__pycache__/
 *.pyc
+
+# Test / tooling caches
+.pytest_cache/
