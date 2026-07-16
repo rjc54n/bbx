@@ -121,9 +121,10 @@ Implemented in `core/notification_state.py`:
 - **Phase 0 (done)** — shared pipeline, dead-code removal, tests, hardened CI.
 - **Phase 0.5 (done)** — facet-sharded fetch so full-book scans get past
   Algolia's 1,000-hit cap (prerequisite for the full-book sweep below).
-- **Phase 1 (planned)** — a persistent scan store (append-only log of price
-  observations) enabling price history, days-on-market, and instant browsing.
-  See [`docs/PHASE1.md`](docs/PHASE1.md) for a plain-language explainer with
-  worked examples.
+- **Phase 1 (planned)** — a persistent scan store (append-only **changelog** of
+  price observations, not full daily snapshots) enabling price history,
+  days-on-market, and instant browsing. Backend: free-tier **Supabase (Postgres)**
+  with a local **SQLite** fallback for dev/tests. See [`docs/PHASE1.md`](docs/PHASE1.md)
+  for a plain-language explainer with worked examples.
 - **Phase 2 (planned)** — rewrite the web app as a fast reader over the Phase 1
   store, with saved searches, watchlists, and per-wine detail/history pages.

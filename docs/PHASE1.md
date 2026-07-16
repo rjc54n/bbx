@@ -51,16 +51,19 @@ below.
 
 ### Worked example — one wine over time
 
-Each scan appends a row. Nothing is ever overwritten:
+We append a row only when something **changes** (see
+[Store changes, not snapshots](#store-changes-not-snapshots-what-keeps-it-small)
+below). Nothing is ever overwritten:
 
 | observed_at       | sku          | ask  | market | last_tx | status  |
 |-------------------|--------------|------|--------|---------|---------|
 | 14 Jul 02:00      | 201012...017 | £720 | £900   | £810    | listed  |
-| 15 Jul 02:00      | 201012...017 | £720 | £900   | £810    | listed  |
 | 16 Jul 02:00      | 201012...017 | £680 | £900   | £810    | listed  |
 | 17 Jul 02:00      | 201012...017 | —    | £900   | £810    | **gone**|
 
-From this single history we can now read off, with **zero** extra API calls:
+Note there's **no 15 Jul row** — nothing changed that day, so we wrote nothing.
+The gaps are meaningful: a row's absence means "same as the row above". From this
+compact history we can read off, with **zero** extra API calls:
 
 - **Days on market:** first seen 14 Jul, so it sat for 3+ days.
 - **Price drop:** ask fell £720 → £680 on 16 Jul (a real, dated change).
@@ -83,8 +86,8 @@ We don't need one giant scan doing everything. We split by purpose:
 2. **Daily — the full-book sweep (new).**
    Once a day, overnight: walk the *entire* ~15,000-listing book with Algolia +
    REST only (no GraphQL — that's only needed for candidates we're seriously
-   considering). This refreshes ask / market / last-transaction for everything
-   and appends a fresh snapshot to the store.
+   considering). This re-prices everything, then **compares each wine to its
+   last-known state and writes only what changed** — see below.
 
 Why this split matters for **not annoying BBR**:
 
@@ -99,9 +102,10 @@ Why this split matters for **not annoying BBR**:
 ### Worked example — a day in the life
 
 ```
-02:00  Daily sweep:   15,000 listings priced, snapshot written to store.
+02:00  Daily sweep:   15,000 listings priced; ~600 changed vs yesterday,
+                      so ~600 rows appended (not 15,000).
 08:00  Hourly bot:    40 new listings today; 2 clear the arbitrage bar → Slack.
-09:15  You open app:  loads instantly from the 02:00 snapshot.
+09:15  You open app:  loads instantly from the store's latest-known state.
                       Banner: "Prices as of 7h ago."
 09:16  You click a wine: app re-checks THAT wine live (~1s) → shows
                       "still £680, confirmed just now."
@@ -109,6 +113,28 @@ Why this split matters for **not annoying BBR**:
 
 Staleness bounds end up: ~1 hour for brand-new listings, ≤24 hours for the whole
 book, and ~0 for anything you actually look at.
+
+---
+
+## Store changes, not snapshots (what keeps it small)
+
+We do **not** save a full copy of all 15,000 listings every day. We save a row
+only when a wine is **new**, has **changed** (ask / market / last-transaction), or
+has **gone**. Each sweep diffs against the last-known state and writes just the
+difference.
+
+Why this matters — the numbers:
+
+- **Full daily snapshots:** 15,000 rows/day → ~5.5 million rows/year → roughly
+  1–1.5 GB. That overruns a 500 MB free database in about four months.
+- **Change-based logging:** fine wine barely moves day-to-day, so a typical
+  sweep changes a few percent of listings — a few hundred rows/day, not 15,000.
+  That's comfortably under 500 MB for **years**.
+
+It's also better data design regardless of size: your price history is a clean
+changelog, not 99% identical rows. This is the concrete meaning of "log, not
+cache" — the log records *transitions*, and a wine with no new row simply hasn't
+changed since its last one.
 
 ---
 
@@ -173,12 +199,51 @@ Once history accumulates, these become simple queries rather than new API work:
 
 ## Rough shape (for when we build it)
 
-- **Storage:** start simple — SQLite synced to the S3 bucket we already use, or
-  DuckDB/parquet on the same bucket. One table of observations, append-only.
-- **Writers:** the hourly bot and the daily sweep both append their snapshots.
+### Storage backend: Supabase (Postgres), with a local SQLite fallback
+
+We'll use the existing **free-tier Supabase** project as the production store,
+and fall back to a **local SQLite file** when no database URL is configured —
+mirroring the S3-or-local pattern `notification_state.py` already uses:
+
+- `DATABASE_URL` set → Supabase Postgres (production, GitHub Actions).
+- `DATABASE_URL` unset → local SQLite file (dev and the offline test suite).
+
+Same schema, same code path, so tests stay offline and local dev needs zero
+setup.
+
+**Why Supabase over SQLite-on-S3**, given Phase 2 is a networked web app:
+
+- Postgres is queryable **over the network** from wherever the app runs
+  (Streamlit Cloud, Vercel, …). SQLite-on-S3 forces every reader and writer to
+  download the whole file, mutate it, and re-upload — the same
+  read-modify-write-the-whole-file pattern as today's `arbitrage_state.json`,
+  which only gets worse as the file grows.
+- Concurrent writes (hourly bot + daily sweep) and reads (the app) just work,
+  with no file-locking dance.
+- Indexes on `(sku, observed_at)` make "history for this wine" and "latest
+  state" fast at millions of rows; analytical SQL (rolling-median fair value,
+  days-on-market via window functions) is Postgres's home turf.
+
+**Free-tier caveats, both handled:**
+
+- **500 MB database limit** — a non-issue once we store changes not snapshots
+  (see above); a local SQLite fallback also keeps dev/test off the quota.
+- **Projects pause after ~1 week of inactivity** — the daily sweep (never mind
+  the hourly bot) writes every day, so the project never idles.
+- A Postgres connection string becomes one more CI/Streamlit secret — minor, and
+  no worse than the AWS creds already present. Lock-in is low: it's plain
+  Postgres, so `pg_dump` moves it anywhere.
+
+### The rest
+
+- **Schema:** one append-only `observations` table (the changelog: sku,
+  observed_at, ask, market, last_tx, status, …) plus a small `listings`
+  dimension for slow-changing descriptive fields (name, vintage, region,
+  format). First-seen / days-on-market derive from the observation history.
+- **Writers:** the hourly bot and the daily sweep, each diffing against
+  last-known state and appending only changes.
 - **Readers:** the web app (Phase 2) and any analysis.
-- **Retention:** keep raw observations; the log is the asset. Revisit only if it
-  ever gets genuinely large (years of daily 15k-row snapshots is still modest).
+- **Retention:** keep raw observations; the changelog is the asset.
 
 The prerequisite — sweeping the *whole* book past Algolia's 1,000-hit cap — is
 already done (see [README: Pagination cap and facet sharding](../README.md#pagination-cap-and-facet-sharding)).
