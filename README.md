@@ -19,6 +19,14 @@ Three phases, ordered cheapest-first:
 
 Threshold semantics: `pct_market` is always enforced; `pct_last` and `pct_next` are enforced only when computable (a wine with no last transaction or no competing seller passes on `pct_market` alone).
 
+### Pagination cap and facet sharding
+
+The `prod_product` index truncates any single query at **1,000 hits** (10 pages × 100; larger `hitsPerPage` is clamped). The full BBX book is ~15,000 listings, so a broad query (e.g. "All BBX") cannot be paged in full by one filter set.
+
+`fetch_listings` handles this by **sharding**: when a filter set exceeds the cap it splits by facet (region → colour → price band → vintage), recursing only into shards still over the cap, with a `NOT` query per level to catch records missing the facet, and de-duplication by `objectID`. Sharding is lazy — narrow queries (the hourly bot's "new in last 1 day") never shard and cost the same ~3 requests they always did.
+
+Politeness is built in: a jittered sleep after every request, exponential backoff on `429`/`5xx`, short-page early exit, and reuse of parent facet counts so under-cap shards skip their own count query. A full-book sweep is a few hundred requests over ~3 minutes.
+
 ---
 
 ## Repository structure
@@ -36,7 +44,9 @@ bbx/
     notification_state.py  # dedup rules + S3/local state persistence
   data/
     payload.json           # GraphQL payload template
-  tests/                   # pytest unit tests (dedup rules, discount maths)
+  tests/                   # pytest unit tests (dedup, discount maths, sharding)
+  docs/
+    PHASE1.md              # plain-language explainer for the planned scan store
   .github/workflows/arbitrage.yml
 ```
 
@@ -103,3 +113,17 @@ Implemented in `core/notification_state.py`:
 2. Ask improved → notify.
 3. Ask unchanged & older than `REMINDER_INTERVAL_DAYS` → notify (reminder).
 4. Otherwise → suppress.
+
+---
+
+## Roadmap
+
+- **Phase 0 (done)** — shared pipeline, dead-code removal, tests, hardened CI.
+- **Phase 0.5 (done)** — facet-sharded fetch so full-book scans get past
+  Algolia's 1,000-hit cap (prerequisite for the full-book sweep below).
+- **Phase 1 (planned)** — a persistent scan store (append-only log of price
+  observations) enabling price history, days-on-market, and instant browsing.
+  See [`docs/PHASE1.md`](docs/PHASE1.md) for a plain-language explainer with
+  worked examples.
+- **Phase 2 (planned)** — rewrite the web app as a fast reader over the Phase 1
+  store, with saved searches, watchlists, and per-wine detail/history pages.
