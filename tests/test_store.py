@@ -1,5 +1,6 @@
 """Integration tests for core.store — scan store operations against SQLite."""
 import sqlite3
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -404,3 +405,58 @@ class TestCommitSweep:
         )
         prods = load_current_products(conn)
         assert prods["SKU1"]["consecutive_misses"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Regression guard: psycopg2 connections have no .execute() shorthand.
+#
+# sqlite3.Connection supports conn.execute(sql, params) as a convenience
+# that implicitly creates and returns a cursor — psycopg2 connections do
+# not. A previous bug called conn.execute() directly in several store.py
+# functions, which passed every test here (SQLite-only) and only broke in
+# production against Postgres. These doubles restrict the connection to
+# the real psycopg2 connection surface (cursor/commit/rollback/close) so
+# a reintroduced conn.execute() call fails loudly, not just in prod.
+# ---------------------------------------------------------------------------
+
+def _pg_like_conn():
+    conn = MagicMock(spec=["cursor", "commit", "rollback", "close"])
+    cur = MagicMock(spec=["execute", "fetchall", "fetchone", "close"])
+    cur.fetchall.return_value = []
+    conn.cursor.return_value = cur
+    return conn, cur
+
+
+class TestPostgresConnectionCompat:
+    def test_update_run_discovery_uses_cursor(self):
+        conn, cur = _pg_like_conn()
+        update_run_discovery(
+            conn, "run1", algolia_complete=True,
+            algolia_hits_expected=10, algolia_hits_collected=10,
+        )
+        cur.execute.assert_called_once()
+        conn.commit.assert_called_once()
+
+    def test_update_run_rest_uses_cursor(self):
+        conn, cur = _pg_like_conn()
+        update_run_rest(
+            conn, "run1", rest_skus_expected=5, rest_skus_priced=5,
+            rest_skus_failed=0, rest_failed_skus=[],
+        )
+        cur.execute.assert_called_once()
+        conn.commit.assert_called_once()
+
+    def test_load_current_products_uses_cursor(self):
+        conn, cur = _pg_like_conn()
+        assert load_current_products(conn) == {}
+        cur.execute.assert_called_once()
+
+    def test_load_current_skus_uses_cursor(self):
+        conn, cur = _pg_like_conn()
+        assert load_current_skus(conn) == {}
+        cur.execute.assert_called_once()
+
+    def test_load_current_offers_uses_cursor(self):
+        conn, cur = _pg_like_conn()
+        assert load_current_offers(conn) == {}
+        cur.execute.assert_called_once()

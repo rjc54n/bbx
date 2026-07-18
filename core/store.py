@@ -48,12 +48,14 @@ def update_run_discovery(
     algolia_hits_collected: int,
 ) -> None:
     p = placeholder()
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         f"UPDATE scan_runs SET algolia_complete = {p}, algolia_hits_expected = {p}, "
         f"algolia_hits_collected = {p} WHERE id = {p}",
         (algolia_complete, algolia_hits_expected, algolia_hits_collected, run_id),
     )
     conn.commit()
+    cur.close()
 
 
 def update_run_rest(
@@ -64,13 +66,15 @@ def update_run_rest(
     rest_failed_skus: List[str],
 ) -> None:
     p = placeholder()
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         f"UPDATE scan_runs SET rest_skus_expected = {p}, rest_skus_priced = {p}, "
         f"rest_skus_failed = {p}, rest_failed_skus = {p} WHERE id = {p}",
         (rest_skus_expected, rest_skus_priced, rest_skus_failed,
          _adapt_array_param(rest_failed_skus), run_id),
     )
     conn.commit()
+    cur.close()
 
 
 # ---------------------------------------------------------------------------
@@ -78,8 +82,10 @@ def update_run_rest(
 # ---------------------------------------------------------------------------
 
 def load_current_products(conn) -> Dict[str, Dict[str, Any]]:
-    cur = conn.execute("SELECT * FROM products")
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM products")
     rows = cur.fetchall()
+    cur.close()
     result = {}
     for row in rows:
         d = dict(row)
@@ -89,14 +95,18 @@ def load_current_products(conn) -> Dict[str, Dict[str, Any]]:
 
 
 def load_current_skus(conn) -> Dict[str, Dict[str, Any]]:
-    cur = conn.execute("SELECT * FROM skus")
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM skus")
     rows = cur.fetchall()
+    cur.close()
     return {f"{dict(r)['parent_sku']}|{dict(r)['format_code']}": dict(r) for r in rows}
 
 
 def load_current_offers(conn) -> Dict[str, Dict[str, Any]]:
-    cur = conn.execute("SELECT * FROM offers")
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM offers")
     rows = cur.fetchall()
+    cur.close()
     return {dict(r)["bbx_listing_id"]: dict(r) for r in rows}
 
 

@@ -33,7 +33,10 @@ def get_connection():
     if is_postgres():
         if psycopg2 is None:
             raise ImportError("psycopg2 required for Postgres; pip install psycopg2-binary")
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        conn = psycopg2.connect(
+            os.environ["DATABASE_URL"],
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
         try:
             yield conn
         except BaseException:
