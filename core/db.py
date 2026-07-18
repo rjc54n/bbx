@@ -208,7 +208,7 @@ def _bootstrap_postgres(conn) -> None:
     conn.commit()
 
     cur.execute("SELECT name FROM _migrations ORDER BY name")
-    applied = {row[0] for row in cur.fetchall()}
+    applied = {row["name"] for row in cur.fetchall()}
 
     for sql_file in sorted(MIGRATIONS_DIR.glob("*.sql")):
         if sql_file.name in applied:
