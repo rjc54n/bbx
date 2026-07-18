@@ -22,11 +22,14 @@
 # lazy — narrow queries (e.g. "new in last N days") never shard and cost
 # the same handful of requests they always did.
 
+from __future__ import annotations
+
 import json
 import logging
 import time
 import random
 import requests
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
@@ -60,6 +63,18 @@ SHARD_DIMENSIONS = ["region", "colour", PRICE_FACET_FIELD, "vintage"]
 REQUEST_JITTER = (0.2, 0.5)      # seconds slept after every request
 MAX_RETRIES = 3                  # attempts per request on 429/5xx
 BACKOFF_BASE = 2.0               # seconds; doubles per retry
+
+
+@dataclass
+class FetchResult:
+    hits: List[Dict]
+    total_index_hits: int = 0
+    collected_count: int = 0
+    truncated: bool = False
+
+    @property
+    def discovery_complete(self) -> bool:
+        return not self.truncated and self.collected_count >= self.total_index_hits
 
 
 # ------------------------------------------------------------
@@ -243,6 +258,7 @@ def _fetch_sharded(
     index_name: str = DEFAULT_ALGOLIA_INDEX,
     hits_per_page: int = DEFAULT_HITS_PER_PAGE,
     known_count: Optional[int] = None,
+    truncation_flag: Optional[List[bool]] = None,
 ) -> None:
     """
     Recursively fetch a filter set, splitting by facet whenever it exceeds
@@ -277,6 +293,8 @@ def _fetch_sharded(
                 f"Filter set {filter_clauses} has {nb_hits} hits but no shard "
                 f"dimensions remain; truncating at {PAGINATION_CAP}."
             )
+            if truncation_flag is not None:
+                truncation_flag[0] = True
         hits = _fetch_with_filters(
             algolia_app_id, algolia_api_key, filter_clauses,
             index_name=index_name, hits_per_page=hits_per_page,
@@ -292,10 +310,10 @@ def _fetch_sharded(
     counts = facets.get(facet_field) or {}
 
     if not counts:
-        # Facet unusable here (no values under this filter set) — try the next.
         _fetch_sharded(
             algolia_app_id, algolia_api_key, filter_clauses, shard_dims[1:],
             collected, index_name, hits_per_page,
+            truncation_flag=truncation_flag,
         )
         return
 
@@ -312,6 +330,7 @@ def _fetch_sharded(
             algolia_app_id, algolia_api_key, sub_filters, shard_dims[1:],
             collected, index_name, hits_per_page,
             known_count=value_count,
+            truncation_flag=truncation_flag,
         )
 
     # Records with no value for this facet match none of the shards above.
@@ -327,6 +346,7 @@ def _fetch_sharded(
     _fetch_sharded(
         algolia_app_id, algolia_api_key, not_filters, shard_dims[1:],
         collected, index_name, hits_per_page,
+        truncation_flag=truncation_flag,
     )
 
 
@@ -401,10 +421,21 @@ def fetch_listings(
         and not (d == PRICE_FACET_FIELD and price_bands)
     ]
 
+    total_index_hits, _ = _count_and_facets(
+        algolia_app_id, algolia_api_key, base_filters, [], index_name,
+    )
+
+    truncation_flag = [False]
     collected: Dict[str, Dict] = {}
     _fetch_sharded(
         algolia_app_id, algolia_api_key, base_filters, shard_dims,
         collected, index_name, hits_per_page,
+        truncation_flag=truncation_flag,
     )
 
-    return list(collected.values())
+    return FetchResult(
+        hits=list(collected.values()),
+        total_index_hits=total_index_hits,
+        collected_count=len(collected),
+        truncated=truncation_flag[0],
+    )

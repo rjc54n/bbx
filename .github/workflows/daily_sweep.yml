@@ -1,0 +1,54 @@
+# .github/workflows/daily_sweep.yml
+# ----------------------------------------------------------------
+# Daily full-book sweep: fetches the entire BBX listing book via
+# Algolia + REST, diffs against the persistent scan store, and
+# records state transitions (appeared, price changed, disappeared).
+# ----------------------------------------------------------------
+
+name: BBX Daily Sweep
+
+on:
+  schedule:
+    - cron: "0 2 * * *"    # 02:00 UTC daily
+  workflow_dispatch:        # manual trigger
+
+concurrency:
+  group: bbx-daily-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
+      ALGOLIA_API_KEY: ${{ secrets.ALGOLIA_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: python -m pytest tests/ -q
+
+      - name: Run daily sweep
+        run: python apps/daily_sweep/run_sweep.py
+
+      - name: Notify Slack on failure
+        if: failure()
+        run: |
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":warning: BBX daily sweep FAILED. Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$SLACK_WEBHOOK"

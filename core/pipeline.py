@@ -386,6 +386,49 @@ def fetch_rest_pricing(
     return results, debug, failed_skus
 
 
+def fetch_rest_pricing_full(
+    skus: List[str],
+    *,
+    batch_size: int = REST_BATCH_SIZE,
+    progress: Optional[ProgressFn] = None,
+) -> Tuple[Dict[str, List[Dict[str, Any]]], List[str]]:
+    """
+    Fetch REST pricing keeping ALL format entries per SKU (not just entries[0]).
+
+    Returns (results keyed by SKU → list of format entries, failed_skus).
+    Used by the daily sweep where per-format detail matters.
+    """
+    results: Dict[str, List[Dict[str, Any]]] = {}
+    failed_skus: List[str] = []
+    total_batches = (len(skus) + batch_size - 1) // batch_size
+
+    for b in range(total_batches):
+        batch = skus[b * batch_size:(b + 1) * batch_size]
+        sku_list = ",".join(batch)
+
+        try:
+            data = _fetch_rest_batch(sku_list)
+        except Exception as e:
+            logging.error(
+                f"REST batch {b + 1}/{total_batches} failed after "
+                f"{REST_MAX_RETRIES} attempts: {e}"
+            )
+            failed_skus.extend(batch)
+            if progress:
+                progress("rest", b + 1, total_batches)
+            continue
+
+        for sku in batch:
+            entries = data.get(sku) or []
+            if entries:
+                results[sku] = entries
+
+        if progress:
+            progress("rest", b + 1, total_batches)
+
+    return results, failed_skus
+
+
 # --------------------------------------------------------------
 # Full scan
 # --------------------------------------------------------------
@@ -403,7 +446,7 @@ def run_scan(
     outcome = ScanOutcome()
 
     # ---- Phase 1: Algolia discovery ----
-    listings = fetch_listings(
+    fetch_result = fetch_listings(
         algolia_app_id,
         algolia_api_key,
         days_label=config.days_label,
@@ -411,6 +454,7 @@ def run_scan(
         price_bands=config.price_bands,
         bottle_format=config.bottle_format,
     )
+    listings = fetch_result.hits
     outcome.listings_count = len(listings)
     logging.info(f"Fetched {len(listings)} listings from Algolia.")
 

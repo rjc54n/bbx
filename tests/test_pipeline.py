@@ -14,6 +14,7 @@ from core.pipeline import (
     derive_case_format,
     extract_variant_prices,
     fetch_rest_pricing,
+    fetch_rest_pricing_full,
     order_book_readable,
     threshold_failures,
 )
@@ -349,3 +350,42 @@ def test_coverage_partial_on_failed_batches():
 
 def test_coverage_is_one_when_nothing_expected():
     assert ScanOutcome().coverage == 1.0
+
+
+# ----------------------------------------------------------------
+# fetch_rest_pricing_full — keeps all format entries
+# ----------------------------------------------------------------
+
+def _priced_multi_format(skus):
+    """Return multiple format entries per SKU, like the real API."""
+    result = {}
+    for s in skus:
+        result[s] = [
+            {"format": "06-00750", "least_listing_price": 290, "market_price": 168,
+             "qty_available": 15, "highest_bid": 0, "last_bbx_transaction": 0},
+            {"format": "03-01500", "least_listing_price": 179, "market_price": 168,
+             "qty_available": 1, "highest_bid": 0, "last_bbx_transaction": 0},
+        ]
+    return result
+
+
+def test_fetch_rest_pricing_full_keeps_all_entries(monkeypatch):
+    def fake_post(url, headers=None, json=None, timeout=None):
+        skus = json[0]["product_codes"].split(",")
+        return _Resp(_priced_multi_format(skus))
+
+    monkeypatch.setattr(pipeline.requests, "post", fake_post)
+    results, failed = fetch_rest_pricing_full(["SKU1", "SKU2"])
+    assert failed == []
+    assert len(results) == 2
+    assert len(results["SKU1"]) == 2
+    assert results["SKU1"][0]["format"] == "06-00750"
+    assert results["SKU1"][1]["format"] == "03-01500"
+
+
+def test_fetch_rest_pricing_full_reports_failures(monkeypatch):
+    monkeypatch.setattr(pipeline.requests, "post", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(pipeline.time, "sleep", lambda *_: None)
+    results, failed = fetch_rest_pricing_full(["SKU1"])
+    assert results == {}
+    assert failed == ["SKU1"]

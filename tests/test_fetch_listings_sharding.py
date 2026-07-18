@@ -6,6 +6,7 @@ import pytest
 
 import core.fetch_listings as fl
 from core.fetch_listings import (
+    FetchResult,
     _build_not_filter,
     _escape_facet_value,
     _fetch_sharded,
@@ -222,6 +223,7 @@ def _capture_shard_dims(monkeypatch):
         captured["dims"] = dims
 
     monkeypatch.setattr(fl, "_fetch_sharded", fake_sharded)
+    monkeypatch.setattr(fl, "_count_and_facets", lambda *a, **kw: (0, {}))
     return captured
 
 
@@ -257,3 +259,50 @@ def test_build_not_filter():
     assert _build_not_filter("region", ["A", "B"]) == [
         "NOT region:'A'", "NOT region:'B'"
     ]
+
+
+# ----------------------------------------------------------------
+# FetchResult and discovery completeness
+# ----------------------------------------------------------------
+
+
+class TestFetchResult:
+    def test_complete_when_all_collected(self):
+        r = FetchResult(hits=[{"a": 1}], total_index_hits=1, collected_count=1, truncated=False)
+        assert r.discovery_complete is True
+
+    def test_incomplete_when_truncated(self):
+        r = FetchResult(hits=[{"a": 1}], total_index_hits=2000, collected_count=1000, truncated=True)
+        assert r.discovery_complete is False
+
+    def test_incomplete_when_collected_lt_total(self):
+        r = FetchResult(hits=[], total_index_hits=100, collected_count=50, truncated=False)
+        assert r.discovery_complete is False
+
+    def test_complete_with_zero_hits(self):
+        r = FetchResult(hits=[], total_index_hits=0, collected_count=0, truncated=False)
+        assert r.discovery_complete is True
+
+
+def test_fetch_listings_returns_fetch_result(use_fake_index):
+    records = [{"objectID": str(i), "stock_origin": "BBX", "region": f"R{i}"}
+               for i in range(50)]
+    fake = FakeIndex(records)
+    use_fake_index(fake)
+    result = fetch_listings("app", "key", days_label=None)
+    assert isinstance(result, FetchResult)
+    assert len(result.hits) == 50
+    assert result.total_index_hits == 50
+    assert result.collected_count == 50
+    assert result.discovery_complete is True
+
+
+def test_truncated_set_when_shard_dims_exhausted(use_fake_index, caplog):
+    """When no shard dimensions remain but hits exceed the cap, truncated is set."""
+    records = [{"objectID": str(i), "stock_origin": "BBX", "new_to_bbx": "1 Day"}
+               for i in range(1500)]
+    fake = FakeIndex(records, cap=fl.PAGINATION_CAP)
+    use_fake_index(fake)
+    result = fetch_listings("app", "key", days_label="1 Day")
+    assert result.truncated is True
+    assert result.discovery_complete is False
