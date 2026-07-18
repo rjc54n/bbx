@@ -10,9 +10,11 @@ from core.pipeline import (
     build_bbx_url,
     classify_order_book,
     compute_discounts,
+    count_variant_nodes,
     derive_case_format,
     extract_variant_prices,
     fetch_rest_pricing,
+    order_book_readable,
     threshold_failures,
 )
 from core.fetch_listings import _build_price_filter, _build_bottle_filter
@@ -211,6 +213,36 @@ def test_extract_variant_prices_skips_malformed():
 def test_extract_variant_prices_empty_response():
     assert extract_variant_prices({}) == []
     assert extract_variant_prices({"data": {"products": {"items": []}}}) == []
+
+
+# ----------------------------------------------------------------
+# count_variant_nodes / order_book_readable — parse-integrity guard
+# ----------------------------------------------------------------
+
+def test_count_variant_nodes():
+    assert count_variant_nodes(_gql_response([100, 90])) == 2
+    assert count_variant_nodes({}) == 0
+
+
+def test_order_book_readable_when_all_variants_parse():
+    gql = _gql_response([80, 100])
+    assert order_book_readable(gql, extract_variant_prices(gql)) is True
+
+
+def test_order_book_not_readable_on_partial_parse():
+    # Two variant nodes, but one has no parseable price: must NOT be trusted,
+    # or the surviving [80] would look like a confirmed sole seller.
+    gql = _gql_response([80])
+    gql["data"]["products"]["items"][0]["variants"].append({"product": {}})
+    prices = extract_variant_prices(gql)
+    assert prices == [80.0]
+    assert order_book_readable(gql, prices) is False
+
+
+def test_order_book_not_readable_on_graphql_errors():
+    gql = _gql_response([80, 100])
+    gql["errors"] = [{"message": "boom"}]
+    assert order_book_readable(gql, extract_variant_prices(gql)) is False
 
 
 # ----------------------------------------------------------------

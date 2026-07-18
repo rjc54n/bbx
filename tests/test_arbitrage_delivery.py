@@ -90,3 +90,16 @@ def test_incomplete_coverage_raises_before_sending(wire_bot):
         bot.main()
     assert sends == []
     assert saves == []
+
+
+def test_total_pricing_wipeout_raises(wire_bot):
+    # Transport OK (100% coverage, no failed batches) but nothing priced ->
+    # endpoint likely changed shape; fail rather than report "no opportunities".
+    outcome = ScanOutcome(
+        candidates=[], expected_skus=80, queried_skus=80, failed_skus=0, priced_skus=0,
+    )
+    sends, saves = wire_bot(outcome=outcome)
+    with pytest.raises(RuntimeError):
+        bot.main()
+    assert sends == []
+    assert saves == []

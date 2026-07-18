@@ -108,6 +108,30 @@ class ScanOutcome:
 # Pure helpers (unit-tested)
 # --------------------------------------------------------------
 
+def count_variant_nodes(gql_data: dict) -> int:
+    """Number of variant nodes present in the response, regardless of whether
+    each one's price parses. Used to detect a partially-parseable order book."""
+    try:
+        items = gql_data.get("data", {}).get("products", {}).get("items", [])
+        variants = items[0].get("variants", []) if items else []
+    except AttributeError:
+        return 0
+    return len(variants)
+
+
+def order_book_readable(gql_data: dict, prices: List[float]) -> bool:
+    """
+    Whether the order book can be trusted as complete.
+
+    False if the response carries GraphQL errors, or if any variant node failed
+    to yield a price. A partial parse must NOT be trusted: if a competing offer
+    silently drops out, the survivors can look like a confirmed sole seller.
+    """
+    if gql_data.get("errors"):
+        return False
+    return len(prices) == count_variant_nodes(gql_data)
+
+
 def extract_variant_prices(gql_data: dict) -> List[float]:
     """Pull all well-formed per-case variant prices out of a GraphQL response."""
     try:
@@ -472,7 +496,10 @@ def run_scan(
             continue
 
         prices = extract_variant_prices(gql)
-        disc = compute_discounts(rest_rec, prices)
+        # A partially-parseable or errored order book must not be trusted: pass
+        # no prices so it classifies as UNAVAILABLE rather than a false "sole".
+        readable = order_book_readable(gql, prices)
+        disc = compute_discounts(rest_rec, prices if readable else [])
         if disc is None:
             row.update(passed=False, reason="invalid ask/market")
             outcome.debug_gql.append(row)
@@ -482,6 +509,8 @@ def run_scan(
 
         row.update(
             variant_prices=prices,
+            variant_nodes=count_variant_nodes(gql),
+            book_readable=readable,
             ob_status=disc["ob_status"],
             next_lowest=disc["next_lowest"],
             pct_next=disc["pct_next"],

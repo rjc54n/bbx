@@ -130,12 +130,20 @@ Implemented in `core/notification_state.py`:
   `:00`.
 - **Phase 1A (planned)** — entity model: define product / SKU / seller-offer;
   decide offer-level identity for the candidate subset vs SKU-level availability
-  for the full book; validate against captured API responses.
+  for the full book; validate against captured API responses. **Includes**
+  hardening the GraphQL order-book parse so a partially-parseable book is treated
+  as unavailable end-to-end (the pipeline already does this via
+  `order_book_readable`; 1A extends it as the entity model is formalised).
 - **Phase 1B (planned)** — persistent scan store: an append-only **changelog**
   (`observation_events`) plus `scan_runs` metadata (so "unchanged" is
   distinguishable from "not observed"), `current_state`, and `products`. Backend:
   free-tier **Supabase (Postgres)** via the Supavisor pooler, with local
-  **SQLite** for dev/tests only. See [`docs/PHASE1.md`](docs/PHASE1.md) for a
-  plain-language explainer with worked examples.
+  **SQLite** for dev/tests only. **Prerequisite:** `fetch_listings` must expose
+  **discovery completeness** — a storage-producing full sweep has to raise (or
+  return `discovery_complete=False`) when shard dimensions are exhausted above
+  the 1,000-hit cap, and compare root `nbHits` to the unique records collected.
+  Discovery completeness and REST pricing coverage are **separate** fields; only
+  a complete discovery scan may advance missing-SKU / `gone` counters. See
+  [`docs/PHASE1.md`](docs/PHASE1.md).
 - **Phase 2 (planned)** — rewrite the web app as a fast reader over the store,
   with saved searches, watchlists, and per-wine detail/history pages.

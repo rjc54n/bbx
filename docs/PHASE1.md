@@ -43,14 +43,21 @@ Right now:
 - The **web app** scans live when you press a button, shows you a list, and
   forgets everything when you close the tab.
 
-So there is no memory. We can't answer questions like:
+So there is no memory. A store gives us memory by keeping what we already fetch.
 
-- "Has this wine been sitting unsold for three weeks, or did it appear today?"
-- "This ask is £600 — is that a genuine drop, or has it always been £600?"
-- "What did this case trade at over the last few months?"
+How far that memory reaches depends on **what we observe** — and that varies by
+question (the full breakdown is in
+[What the store unlocks](#what-the-store-unlocks--and-what-it-does-not)):
 
-A store gives us all of that for free, because it simply keeps what we already
-fetch.
+- "When did we first see this SKU, and is it still in the book?" — **yes**, from
+  the daily full-book sweep (SKU availability as *we observed* it).
+- "This ask is £600 — is that a genuine drop, or has it always been the ask we
+  saw?" — **yes**, as an observed-ask changelog.
+- "Has this *specific seller's offer* been sitting unsold for three weeks?" /
+  "What did this case actually trade at over recent months?" — **only partially,
+  and only for watched wines.** These need seller-offer identity and true
+  transaction data, which live in the GraphQL order book; we capture that just
+  for the candidate / watchlist subset, not the whole book. Not "for free".
 
 ---
 
@@ -60,34 +67,45 @@ This is the distinction that resolves the "won't it go stale?" worry.
 
 - A **cache** tries to be a mirror of "what is true right now". Caches rot: the
   moment a wine sells or an ask changes, the cache is wrong.
-- A **log** records "what we observed, and when". A log is **never wrong** — it's
-  a history. "On 16 July at 02:00, SKU 20101261017 was listed at £680" stays
-  true forever, even after the wine sells.
+- A **log** records "what *we observed*, and when". An immutable row records what
+  the collector reported at that time — "at the 16 July 02:00 scan, SKU
+  20101261017 was listed at £680". That statement stays accurate as a record of
+  our observation, even after the offer is gone. (It is *not* a claim that the
+  price was £680 at every moment, nor that we observed every change.)
 
 We store observations. When we need "what's true right now" for a decision, we
 take a fresh look — see [Freshness](#freshness-how-we-avoid-acting-on-stale-prices)
 below.
 
-### Worked example — one wine over time
+### Worked example — one wine, as *we observed* it
 
-We append a row only when something **changes** (see
+We append a row only when something **changes between scans** (see
 [Store changes, not snapshots](#store-changes-not-snapshots-what-keeps-it-small)
 below). Nothing is ever overwritten:
 
-| observed_at       | sku          | ask  | market | last_tx | status  |
-|-------------------|--------------|------|--------|---------|---------|
-| 14 Jul 02:00      | 201012...017 | £720 | £900   | £810    | listed  |
-| 16 Jul 02:00      | 201012...017 | £680 | £900   | £810    | listed  |
-| 17 Jul 02:00      | 201012...017 | —    | £900   | £810    | **gone**|
+| observed_at       | sku          | ask  | market | last_tx | status         |
+|-------------------|--------------|------|--------|---------|----------------|
+| 14 Jul 02:00      | 201012...017 | £720 | £900   | £810    | seen           |
+| 16 Jul 02:00      | 201012...017 | £680 | £900   | £810    | seen           |
+| 17 Jul 02:00      | 201012...017 | —    | £900   | £810    | **not seen**   |
 
-Note there's **no 15 Jul row** — nothing changed that day, so we wrote nothing.
-The gaps are meaningful: a row's absence means "same as the row above". From this
-compact history we can read off, with **zero** extra API calls:
+There's **no 15 Jul row** — but read that carefully: a row's absence means "no
+observed change since the row above" **only if a complete scan actually ran on 15
+July**. If the 15 July scan failed or was skipped, absence means "we didn't
+look", not "unchanged" — which is exactly why the store records every scan in
+`scan_runs` (see [schema](#schema-needs-scan-metadata-to-be-trustworthy)). From
+this history, and only against completed scans, we can read off with zero extra
+API calls:
 
-- **Days on market:** first seen 14 Jul, so it sat for 3+ days.
-- **Price drop:** ask fell £720 → £680 on 16 Jul (a real, dated change).
-- **Outcome:** it disappeared on 17 Jul — sold or delisted. That "gone" row is
-  itself a signal (see liquidity below).
+- **SKU availability observed by us:** the SKU first appeared on 14 Jul and was
+  no longer in the book by 17 Jul. (This is *availability*, not an individual
+  seller's "days on market" — the offer behind the ask can change without the ask
+  changing. See [what the store does not support](#what-the-store-unlocks--and-what-it-does-not).)
+- **Observed ask change:** the ask we saw fell £720 → £680 between the 14 Jul and
+  16 Jul scans.
+- **Disappearance:** the SKU was not seen on 17 Jul. That is a signal worth
+  investigating — but it does *not* by itself prove a sale (it may have been
+  withdrawn).
 
 None of this is knowable today, because today we keep nothing.
 
@@ -320,9 +338,18 @@ first-class table, not an afterthought:
 
 Two rules that follow from the entity discussion above:
 
-- Only a **complete full-book scan** (coverage above threshold) may emit `gone`
-  for a SKU — and preferably only after **two consecutive misses**, to absorb a
-  single flaky scan.
+- Only a **complete full-book scan** may emit `gone` for a SKU — and preferably
+  only after **two consecutive misses**, to absorb a single flaky scan.
+  "Complete" here has **two independent parts** that must both hold, tracked as
+  separate `scan_runs` fields:
+  - **Discovery completeness** — Algolia returned the *whole* book. Today
+    `fetch_listings` silently truncates if shard dimensions are exhausted above
+    the 1,000-hit cap; before a writer consumes it, `fetch_listings` must expose
+    this (raise / `discovery_complete=False`) and cross-check root `nbHits`
+    against unique records collected. **(Open — Phase 1B prerequisite.)**
+  - **Pricing coverage** — REST priced enough of the discovered SKUs
+    (`ScanOutcome.coverage`, already implemented). A SKU absent from a scan with
+    incomplete discovery must **not** count as a miss.
 - Offer-level rows exist only for the **candidate / watchlist subset** that gets
   GraphQL; the full book is SKU-level availability.
 

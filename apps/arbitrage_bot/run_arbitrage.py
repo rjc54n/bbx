@@ -167,6 +167,19 @@ def main():
             f"SKUs in failed REST batches); not sending partial alerts."
         )
 
+    # 2b) Transport can succeed (no failed batches -> 100% coverage) while the
+    #     REST endpoint returns pricing for nothing — e.g. its response shape or
+    #     auth changed and every SKU comes back empty. Total wipeout is
+    #     unambiguously broken, so fail rather than report "no opportunities".
+    #     (Finer pricing-rate anomaly detection needs a baseline, which the
+    #     Phase 1 history store will provide.)
+    if outcome.expected_skus > 0 and outcome.priced_skus == 0:
+        raise RuntimeError(
+            f"REST returned no pricing for any of {outcome.expected_skus} SKUs "
+            f"despite {outcome.coverage:.0%} transport coverage; endpoint may have "
+            f"changed. Not sending."
+        )
+
     # 3) Apply deduplication rules
     notified, suppressed, new_state = filter_new_or_improved(
         outcome.candidates,
