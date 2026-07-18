@@ -1,0 +1,302 @@
+{
+  "_note": "Real BBX Algolia prod_product hits captured 2026-07-18. _highlightResult (search-highlight metadata, not product data) removed. Each object is one parent_sku; purchase_options enumerates all live seller offers for that wine (across formats), each with its own bbx_listing_id.",
+  "multi_offer": {
+    "parent_sku": "20171135668",
+    "name": "2017 Au Bon Climat, Knox Alexander, Pinot Noir, Santa Maria Valley, California, USA",
+    "product_url": "/products-20171135668-2017-au-bon-climat-knox-alexander-pinot-noir-santa-maria-valley-california-usa",
+    "family_type": "Wines",
+    "main_image": "20171135668",
+    "maturity": "Ready - at best",
+    "maturity_sort_order": 30,
+    "colour": "Red",
+    "country": "USA",
+    "region": "California",
+    "subregion": "North Coast",
+    "grape_varieties": [
+      "Pinot Noir"
+    ],
+    "vintage": 2017,
+    "sweetness": "Dry",
+    "producer": "Au Bon Climat",
+    "category_ids": [
+      "Trading Goods > Wine > Still",
+      "Trading Goods > Wine",
+      "Trading Goods",
+      "Wine Regional Hierarchy > USA > California > North Coast > Sonoma County > Northern Sonoma > Alexander Valley",
+      "Wine Regional Hierarchy > USA > California > North Coast > Sonoma County > Northern Sonoma",
+      "Wine Regional Hierarchy > USA > California > North Coast > Sonoma County",
+      "Wine Regional Hierarchy > USA > California > North Coast",
+      "Wine Regional Hierarchy > USA > California",
+      "Wine Regional Hierarchy > USA",
+      "Wine Regional Hierarchy",
+      "Digital Trading > All wines to drink now > Manual > Au Bon Climat",
+      "Digital Trading > All wines to drink now > Manual",
+      "Digital Trading > All wines to drink now",
+      "Digital Trading"
+    ],
+    "category_uids": [
+      "NzkwMA==",
+      "NzkwMQ==",
+      "NzkwMg==",
+      "ODE0Mg==",
+      "MTI3MzA=",
+      "MTI3MzE=",
+      "MTI3NDI=",
+      "MTI3ODQ=",
+      "MTI3ODk=",
+      "MTI3OTA=",
+      "MjI2Mjk=",
+      "MjI4NTk=",
+      "MjI2NjE=",
+      "NTgxNDI="
+    ],
+    "sku": "2017-06-00750-00-1135668",
+    "alcohol_percentage": [
+      "13.5"
+    ],
+    "purchase_mode": "In Bond",
+    "en_primeur": "Not En Primeur",
+    "stock_origin": "BBX",
+    "brand": null,
+    "prices": {
+      "price_per_case_exact": 240,
+      "price_per_case": "£200-£499.99"
+    },
+    "case_size": 6,
+    "main_ingredients": null,
+    "bottle_volume": "75 cl",
+    "bottle_order_unit": "Bottle",
+    "bbx_listing_id": "169009",
+    "accessory_type": null,
+    "bbx_categories": [],
+    "bbx_listing_date": "2026-07-18",
+    "new_wines": [],
+    "new_to_bbx": [
+      "1 Day",
+      "2 Days",
+      "3 Days",
+      "7 Days"
+    ],
+    "hybris_bbx_listing_id": "",
+    "come_in_stock_in": null,
+    "spirit_type": null,
+    "spirit_age": null,
+    "own_selection": false,
+    "critic_scores": [
+      {
+        "nickname": "Antonio Galloni",
+        "score": "91/100"
+      }
+    ],
+    "roundel_code": "",
+    "labels": [],
+    "is_a_gift_card": null,
+    "index_last_update": "18-07-2026 1pm",
+    "ga_category_uid": "MTI3OTA=",
+    "ga_category_path": "region-w-usf4002005005001-alexander-valley",
+    "purchase_options": [
+      {
+        "sku": "2017-06-00750-00-1135668",
+        "bbx_listing_id": "133111",
+        "stock_origin": "BBX",
+        "purchase_mode": "In Bond",
+        "en_primeur": "Not En Primeur",
+        "case_size": 6,
+        "sale_by_case_only": false,
+        "bottle_volume": "75 cl",
+        "bottle_order_unit": "Bottle",
+        "prices": {
+          "price_per_case_exact": 250,
+          "price_per_case": "£200-£499.99"
+        },
+        "hybris_bbx_listing_id": "",
+        "bbx_categories": [],
+        "new_wines": [],
+        "new_to_bbx": [],
+        "labels": []
+      },
+      {
+        "sku": "2017-06-00750-00-1135668",
+        "bbx_listing_id": "137028",
+        "stock_origin": "BBX",
+        "purchase_mode": "In Bond",
+        "en_primeur": "Not En Primeur",
+        "case_size": 6,
+        "sale_by_case_only": false,
+        "bottle_volume": "75 cl",
+        "bottle_order_unit": "Bottle",
+        "prices": {
+          "price_per_case_exact": 260,
+          "price_per_case": "£200-£499.99"
+        },
+        "hybris_bbx_listing_id": "",
+        "bbx_categories": [],
+        "new_wines": [],
+        "new_to_bbx": [],
+        "labels": []
+      },
+      {
+        "sku": "2017-06-00750-00-1135668",
+        "bbx_listing_id": "164943",
+        "stock_origin": "BBX",
+        "purchase_mode": "In Bond",
+        "en_primeur": "Not En Primeur",
+        "case_size": 6,
+        "sale_by_case_only": false,
+        "bottle_volume": "75 cl",
+        "bottle_order_unit": "Bottle",
+        "prices": {
+          "price_per_case_exact": 250,
+          "price_per_case": "£200-£499.99"
+        },
+        "hybris_bbx_listing_id": "",
+        "bbx_categories": [],
+        "new_wines": [],
+        "new_to_bbx": [],
+        "labels": []
+      },
+      {
+        "sku": "2017-06-00750-00-1135668",
+        "bbx_listing_id": "169009",
+        "stock_origin": "BBX",
+        "purchase_mode": "In Bond",
+        "en_primeur": "Not En Primeur",
+        "case_size": 6,
+        "sale_by_case_only": false,
+        "bottle_volume": "75 cl",
+        "bottle_order_unit": "Bottle",
+        "prices": {
+          "price_per_case_exact": 240,
+          "price_per_case": "£200-£499.99"
+        },
+        "hybris_bbx_listing_id": "",
+        "bbx_categories": [],
+        "new_wines": [],
+        "new_to_bbx": [
+          "1 Day",
+          "2 Days",
+          "3 Days",
+          "7 Days"
+        ],
+        "labels": [
+          {
+            "sort_order": "7",
+            "label": "New To BBX",
+            "code": "new_to_bbx"
+          }
+        ]
+      }
+    ],
+    "objectID": "169009"
+  },
+  "sole_offer": {
+    "parent_sku": "20158024224",
+    "name": "2015 Doctors Flat, Pinot Noir, Central Otago, New Zealand",
+    "product_url": "/products-20158024224-2015-doctors-flat-pinot-noir-central-otago-new-zealand",
+    "family_type": "Wines",
+    "main_image": "20158024224",
+    "maturity": "Ready - mature",
+    "maturity_sort_order": 40,
+    "colour": "Red",
+    "country": "New Zealand",
+    "region": "Central Otago",
+    "subregion": "Bannockburn",
+    "grape_varieties": [
+      "Pinot Noir"
+    ],
+    "vintage": 2015,
+    "sweetness": "Dry",
+    "producer": "Doctors Flat Vineyard",
+    "category_ids": [
+      "Trading Goods > Wine > Still",
+      "Trading Goods > Wine",
+      "Trading Goods",
+      "Wine Regional Hierarchy > New Zealand > Central Otago > Bannockburn",
+      "Wine Regional Hierarchy > New Zealand > Central Otago",
+      "Wine Regional Hierarchy > New Zealand",
+      "Wine Regional Hierarchy"
+    ],
+    "category_uids": [
+      "NzkwMA==",
+      "NzkwMQ==",
+      "NzkwMg==",
+      "ODE0Mg==",
+      "MTMwMjY=",
+      "MTMwNTE=",
+      "MTMwNTM="
+    ],
+    "sku": "2015-06-00750-00-8024224",
+    "alcohol_percentage": [
+      "13.5"
+    ],
+    "purchase_mode": "In Bond",
+    "en_primeur": "Not En Primeur",
+    "stock_origin": "BBX",
+    "brand": null,
+    "prices": {
+      "price_per_case_exact": 180,
+      "price_per_case": "up to £200"
+    },
+    "case_size": 6,
+    "main_ingredients": null,
+    "bottle_volume": "75 cl",
+    "bottle_order_unit": "Bottle",
+    "bbx_listing_id": "169005",
+    "accessory_type": null,
+    "bbx_categories": [],
+    "bbx_listing_date": "2026-07-18",
+    "new_wines": [],
+    "new_to_bbx": [
+      "1 Day",
+      "2 Days",
+      "3 Days",
+      "7 Days"
+    ],
+    "hybris_bbx_listing_id": "",
+    "come_in_stock_in": null,
+    "spirit_type": null,
+    "spirit_age": null,
+    "own_selection": false,
+    "critic_scores": [],
+    "roundel_code": "",
+    "labels": [],
+    "is_a_gift_card": null,
+    "index_last_update": "18-07-2026 1pm",
+    "ga_category_uid": "MTMwNTM=",
+    "ga_category_path": "region-w-nzc4002-bannockburn",
+    "purchase_options": [
+      {
+        "sku": "2015-06-00750-00-8024224",
+        "bbx_listing_id": "169005",
+        "stock_origin": "BBX",
+        "purchase_mode": "In Bond",
+        "en_primeur": "Not En Primeur",
+        "case_size": 6,
+        "sale_by_case_only": false,
+        "bottle_volume": "75 cl",
+        "bottle_order_unit": "Bottle",
+        "prices": {
+          "price_per_case_exact": 180,
+          "price_per_case": "up to £200"
+        },
+        "hybris_bbx_listing_id": "",
+        "bbx_categories": [],
+        "new_wines": [],
+        "new_to_bbx": [
+          "1 Day",
+          "2 Days",
+          "3 Days",
+          "7 Days"
+        ],
+        "labels": [
+          {
+            "sort_order": "7",
+            "label": "New To BBX",
+            "code": "new_to_bbx"
+          }
+        ]
+      }
+    ],
+    "objectID": "169005"
+  }
+}

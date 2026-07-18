@@ -1,0 +1,341 @@
+{
+  "data": {
+    "products": {
+      "items": [
+        {
+          "uid": "MTM4Mzc3NA==",
+          "sku": "20171135668",
+          "name": "2017 Au Bon Climat, Knox Alexander, Pinot Noir, Santa Maria Valley, California, USA",
+          "is_more_variant_available": false,
+          "variants": [
+            {
+              "attributes": [
+                {
+                  "code": "case_order_unit",
+                  "label": "6",
+                  "uid": "Y29uZmlndXJhYmxlLzc5Mi8yNTYxMg==",
+                  "value_index": 25612,
+                  "__typename": "ConfigurableAttributeOption"
+                },
+                {
+                  "code": "bottle_volume",
+                  "label": "75 cl",
+                  "uid": "Y29uZmlndXJhYmxlLzgwNS8yNTU0Ng==",
+                  "value_index": 25546,
+                  "__typename": "ConfigurableAttributeOption"
+                },
+                {
+                  "code": "variant_axis",
+                  "label": "00",
+                  "uid": "Y29uZmlndXJhYmxlLzg4NS8zMjY0Mg==",
+                  "value_index": 32642,
+                  "__typename": "ConfigurableAttributeOption"
+                }
+              ],
+              "product": {
+                "__typename": "SimpleProduct",
+                "uid": "MTM4MTk0OA==",
+                "stock_status": "IN_STOCK",
+                "name": "2017 Au Bon Climat, Knox Alexander, Pinot Noir, Santa Maria Valley, California, USA",
+                "sku": "2017-06-00750-00-1135668",
+                "sell_by_case_only": null,
+                "custom_prices": {
+                  "price_value": {
+                    "amount": {
+                      "currency": "GBP",
+                      "value": 41.666666666667,
+                      "__typename": "Money"
+                    },
+                    "__typename": "CustomPrice"
+                  },
+                  "price_per_case": {
+                    "amount": {
+                      "currency": "GBP",
+                      "value": 250,
+                      "__typename": "Money"
+                    },
+                    "__typename": "CustomPrice"
+                  },
+                  "__typename": "CustomPrices"
+                },
+                "stock_data": {
+                  "case_qty": 1,
+                  "qty": 6,
+                  "stock_status": "IN_STOCK",
+                  "__typename": "ProductStockData"
+                },
+                "product_labels": [],
+                "labels": [],
+                "listing_type": "BBX",
+                "item_name": "6 x 75 cl bottle",
+                "listing_id": 133111,
+                "ext_listing_id": 0,
+                "attributes_value": [
+                  {
+                    "label": "Case Order Unit",
+                    "value": "6",
+                    "code": "case_order_unit",
+                    "option_code": "6",
+                    "position": "0",
+                    "attribute_uid": "Nzky",
+                    "uid": "Y29uZmlndXJhYmxlLzc5Mi8yNTYxMg==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Bottle order unit",
+                    "value": "Bottle",
+                    "code": "bottle_order_unit",
+                    "option_code": "BOTTLE",
+                    "position": "0",
+                    "attribute_uid": "ODA0",
+                    "uid": "Y29uZmlndXJhYmxlLzgwNC8yNTQ0OQ==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Bottle Volume",
+                    "value": "75 cl",
+                    "code": "bottle_volume",
+                    "option_code": "75CL",
+                    "position": "0",
+                    "attribute_uid": "ODA1",
+                    "uid": "Y29uZmlndXJhYmxlLzgwNS8yNTU0Ng==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Dutiable Volume (ml)",
+                    "value": "750.0000",
+                    "code": "dutiable_volume_ml",
+                    "option_code": "",
+                    "position": "0",
+                    "attribute_uid": "ODIy",
+                    "uid": "",
+                    "__typename": "ProductCustomAttributes"
+                  }
+                ]
+              },
+              "__typename": "ConfigurableVariant"
+            },
+            {
+              "attributes": [
+                {
+                  "code": "case_order_unit",
+                  "label": "6",
+                  "uid": "Y29uZmlndXJhYmxlLzc5Mi8yNTYxMg==",
+                  "value_index": 25612,
+                  "__typename": "ConfigurableAttributeOption"
+                },
+                {
+                  "code": "bottle_volume",
+                  "label": "75 cl",
+                  "uid": "Y29uZmlndXJhYmxlLzgwNS8yNTU0Ng==",
+                  "value_index": 25546,
+                  "__typename": "ConfigurableAttributeOption"
+                },
+                {
+                  "code": "variant_axis",
+                  "label": "00",
+                  "uid": "Y29uZmlndXJhYmxlLzg4NS8zMjY0Mg==",
+                  "value_index": 32642,
+                  "__typename": "ConfigurableAttributeOption"
+                }
+              ],
+              "product": {
+                "__typename": "SimpleProduct",
+                "uid": "MTM4MTk0OA==",
+                "stock_status": "IN_STOCK",
+                "name": "2017 Au Bon Climat, Knox Alexander, Pinot Noir, Santa Maria Valley, California, USA",
+                "sku": "2017-06-00750-00-1135668",
+                "sell_by_case_only": null,
+                "custom_prices": {
+                  "price_value": {
+                    "amount": {
+                      "currency": "GBP",
+                      "value": 43.333333333333,
+                      "__typename": "Money"
+                    },
+                    "__typename": "CustomPrice"
+                  },
+                  "price_per_case": {
+                    "amount": {
+                      "currency": "GBP",
+                      "value": 260,
+                      "__typename": "Money"
+                    },
+                    "__typename": "CustomPrice"
+                  },
+                  "__typename": "CustomPrices"
+                },
+                "stock_data": {
+                  "case_qty": 1,
+                  "qty": 6,
+                  "stock_status": "IN_STOCK",
+                  "__typename": "ProductStockData"
+                },
+                "product_labels": [],
+                "labels": [],
+                "listing_type": "BBX",
+                "item_name": "6 x 75 cl bottle",
+                "listing_id": 137028,
+                "ext_listing_id": 0,
+                "attributes_value": [
+                  {
+                    "label": "Case Order Unit",
+                    "value": "6",
+                    "code": "case_order_unit",
+                    "option_code": "6",
+                    "position": "0",
+                    "attribute_uid": "Nzky",
+                    "uid": "Y29uZmlndXJhYmxlLzc5Mi8yNTYxMg==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Bottle order unit",
+                    "value": "Bottle",
+                    "code": "bottle_order_unit",
+                    "option_code": "BOTTLE",
+                    "position": "0",
+                    "attribute_uid": "ODA0",
+                    "uid": "Y29uZmlndXJhYmxlLzgwNC8yNTQ0OQ==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Bottle Volume",
+                    "value": "75 cl",
+                    "code": "bottle_volume",
+                    "option_code": "75CL",
+                    "position": "0",
+                    "attribute_uid": "ODA1",
+                    "uid": "Y29uZmlndXJhYmxlLzgwNS8yNTU0Ng==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Dutiable Volume (ml)",
+                    "value": "750.0000",
+                    "code": "dutiable_volume_ml",
+                    "option_code": "",
+                    "position": "0",
+                    "attribute_uid": "ODIy",
+                    "uid": "",
+                    "__typename": "ProductCustomAttributes"
+                  }
+                ]
+              },
+              "__typename": "ConfigurableVariant"
+            },
+            {
+              "attributes": [
+                {
+                  "code": "case_order_unit",
+                  "label": "6",
+                  "uid": "Y29uZmlndXJhYmxlLzc5Mi8yNTYxMg==",
+                  "value_index": 25612,
+                  "__typename": "ConfigurableAttributeOption"
+                },
+                {
+                  "code": "bottle_volume",
+                  "label": "75 cl",
+                  "uid": "Y29uZmlndXJhYmxlLzgwNS8yNTU0Ng==",
+                  "value_index": 25546,
+                  "__typename": "ConfigurableAttributeOption"
+                },
+                {
+                  "code": "variant_axis",
+                  "label": "00",
+                  "uid": "Y29uZmlndXJhYmxlLzg4NS8zMjY0Mg==",
+                  "value_index": 32642,
+                  "__typename": "ConfigurableAttributeOption"
+                }
+              ],
+              "product": {
+                "__typename": "SimpleProduct",
+                "uid": "MTM4MTk0OA==",
+                "stock_status": "IN_STOCK",
+                "name": "2017 Au Bon Climat, Knox Alexander, Pinot Noir, Santa Maria Valley, California, USA",
+                "sku": "2017-06-00750-00-1135668",
+                "sell_by_case_only": null,
+                "custom_prices": {
+                  "price_value": {
+                    "amount": {
+                      "currency": "GBP",
+                      "value": 41.666666666667,
+                      "__typename": "Money"
+                    },
+                    "__typename": "CustomPrice"
+                  },
+                  "price_per_case": {
+                    "amount": {
+                      "currency": "GBP",
+                      "value": 250,
+                      "__typename": "Money"
+                    },
+                    "__typename": "CustomPrice"
+                  },
+                  "__typename": "CustomPrices"
+                },
+                "stock_data": {
+                  "case_qty": 1,
+                  "qty": 6,
+                  "stock_status": "IN_STOCK",
+                  "__typename": "ProductStockData"
+                },
+                "product_labels": [],
+                "labels": [],
+                "listing_type": "BBX",
+                "item_name": "6 x 75 cl bottle",
+                "listing_id": 164943,
+                "ext_listing_id": 0,
+                "attributes_value": [
+                  {
+                    "label": "Case Order Unit",
+                    "value": "6",
+                    "code": "case_order_unit",
+                    "option_code": "6",
+                    "position": "0",
+                    "attribute_uid": "Nzky",
+                    "uid": "Y29uZmlndXJhYmxlLzc5Mi8yNTYxMg==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Bottle order unit",
+                    "value": "Bottle",
+                    "code": "bottle_order_unit",
+                    "option_code": "BOTTLE",
+                    "position": "0",
+                    "attribute_uid": "ODA0",
+                    "uid": "Y29uZmlndXJhYmxlLzgwNC8yNTQ0OQ==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Bottle Volume",
+                    "value": "75 cl",
+                    "code": "bottle_volume",
+                    "option_code": "75CL",
+                    "position": "0",
+                    "attribute_uid": "ODA1",
+                    "uid": "Y29uZmlndXJhYmxlLzgwNS8yNTU0Ng==",
+                    "__typename": "ProductCustomAttributes"
+                  },
+                  {
+                    "label": "Dutiable Volume (ml)",
+                    "value": "750.0000",
+                    "code": "dutiable_volume_ml",
+                    "option_code": "",
+                    "position": "0",
+                    "attribute_uid": "ODIy",
+                    "uid": "",
+                    "__typename": "ProductCustomAttributes"
+                  }
+                ]
+              },
+              "__typename": "ConfigurableVariant"
+            }
+          ],
+          "__typename": "ConfigurableProduct"
+        }
+      ],
+      "__typename": "Products"
+    }
+  },
+  "loading": false,
+  "networkStatus": 7
+}

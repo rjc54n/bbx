@@ -1,0 +1,150 @@
+{
+  "_note": "Raw getBiddableCprStock response for 6 parent_skus, 2026-07-18. Each parent_sku maps to a LIST with one entry per format (format = casesize-bottleml, e.g. 06-00750). 20158007342 has 7 formats.",
+  "20138117265": [
+    {
+      "format": "03-01500",
+      "qty_available": 1,
+      "highest_bid": 0,
+      "least_listing_price": 179,
+      "last_bbx_transaction": 0,
+      "market_price": 168,
+      "has_already_bidded": false
+    },
+    {
+      "format": "06-00750",
+      "qty_available": 15,
+      "highest_bid": 0,
+      "least_listing_price": 290,
+      "last_bbx_transaction": 0,
+      "market_price": 168,
+      "has_already_bidded": false
+    }
+  ],
+  "20158007342": [
+    {
+      "format": "01-03000",
+      "qty_available": 13,
+      "highest_bid": 225,
+      "least_listing_price": 0,
+      "last_bbx_transaction": 0,
+      "market_price": 248,
+      "has_already_bidded": false
+    },
+    {
+      "format": "01-06000",
+      "qty_available": 6,
+      "highest_bid": 405,
+      "least_listing_price": 0,
+      "last_bbx_transaction": 0,
+      "market_price": 496,
+      "has_already_bidded": false
+    },
+    {
+      "format": "03-01500",
+      "qty_available": 60,
+      "highest_bid": 365,
+      "least_listing_price": 0,
+      "last_bbx_transaction": 420,
+      "market_price": 372,
+      "has_already_bidded": false
+    },
+    {
+      "format": "06-00750",
+      "qty_available": 1713,
+      "highest_bid": 355,
+      "least_listing_price": 375,
+      "last_bbx_transaction": 360,
+      "market_price": 372,
+      "has_already_bidded": false
+    },
+    {
+      "format": "06-01500",
+      "qty_available": 1,
+      "highest_bid": 565,
+      "least_listing_price": 0,
+      "last_bbx_transaction": 0,
+      "market_price": 744,
+      "has_already_bidded": false
+    },
+    {
+      "format": "12-00375",
+      "qty_available": 22,
+      "highest_bid": 350,
+      "least_listing_price": 420,
+      "last_bbx_transaction": 0,
+      "market_price": 372,
+      "has_already_bidded": false
+    },
+    {
+      "format": "12-00750",
+      "qty_available": 22,
+      "highest_bid": 734,
+      "least_listing_price": 0,
+      "last_bbx_transaction": 0,
+      "market_price": 744,
+      "has_already_bidded": false
+    }
+  ],
+  "20158024224": [
+    {
+      "format": "06-00750",
+      "qty_available": 28,
+      "highest_bid": 0,
+      "least_listing_price": 180,
+      "last_bbx_transaction": 0,
+      "market_price": 180,
+      "has_already_bidded": false
+    }
+  ],
+  "20171130940": [
+    {
+      "format": "01-03000",
+      "qty_available": 80,
+      "highest_bid": 74.5,
+      "least_listing_price": 85,
+      "last_bbx_transaction": 80,
+      "market_price": 72,
+      "has_already_bidded": false
+    },
+    {
+      "format": "06-01500",
+      "qty_available": 38,
+      "highest_bid": 152,
+      "least_listing_price": 214,
+      "last_bbx_transaction": 125,
+      "market_price": 216,
+      "has_already_bidded": false
+    },
+    {
+      "format": "12-00750",
+      "qty_available": 90,
+      "highest_bid": 216,
+      "least_listing_price": 220,
+      "last_bbx_transaction": 0,
+      "market_price": 216,
+      "has_already_bidded": false
+    }
+  ],
+  "20171135668": [
+    {
+      "format": "06-00750",
+      "qty_available": 113,
+      "highest_bid": 177,
+      "least_listing_price": 240,
+      "last_bbx_transaction": 178,
+      "market_price": 252,
+      "has_already_bidded": false
+    }
+  ],
+  "20201335042": [
+    {
+      "format": "06-00750",
+      "qty_available": 14,
+      "highest_bid": 430,
+      "least_listing_price": 798,
+      "last_bbx_transaction": 435,
+      "market_price": 798,
+      "has_already_bidded": false
+    }
+  ]
+}
