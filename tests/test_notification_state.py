@@ -14,6 +14,15 @@ from core.notification_state import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _force_local_state_mode(monkeypatch):
+    # load/save route to S3 whenever S3_BUCKET/S3_STATE_KEY are set. CI sets
+    # those for the whole job, which would otherwise make these local-file
+    # tests hit real S3 and ignore the tmp_path they pass in. Pin local mode.
+    monkeypatch.delenv("S3_BUCKET", raising=False)
+    monkeypatch.delenv("S3_STATE_KEY", raising=False)
+
+
 def _candidate(sku="SKU1", ask=100.0, **extra):
     return {"sku": sku, "ask": ask, "name": "Test Wine", **extra}
 
