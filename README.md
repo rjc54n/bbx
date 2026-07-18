@@ -121,10 +121,21 @@ Implemented in `core/notification_state.py`:
 - **Phase 0 (done)** — shared pipeline, dead-code removal, tests, hardened CI.
 - **Phase 0.5 (done)** — facet-sharded fetch so full-book scans get past
   Algolia's 1,000-hit cap (prerequisite for the full-book sweep below).
-- **Phase 1 (planned)** — a persistent scan store (append-only **changelog** of
-  price observations, not full daily snapshots) enabling price history,
-  days-on-market, and instant browsing. Backend: free-tier **Supabase (Postgres)**
-  with a local **SQLite** fallback for dev/tests. See [`docs/PHASE1.md`](docs/PHASE1.md)
-  for a plain-language explainer with worked examples.
-- **Phase 2 (planned)** — rewrite the web app as a fast reader over the Phase 1
-  store, with saved searches, watchlists, and per-wine detail/history pages.
+- **Phase 0.75 (done)** — reliability pass: notification state is persisted only
+  after a confirmed Slack send (dry runs never persist; storage errors fail the
+  job); three-way order-book classification (sole / competing / unavailable, with
+  ties counted as zero headroom); scan-coverage metrics + REST retries with a
+  coverage floor that fails the run rather than alerting on partial data; sharding
+  complement always queried (safe for multi-valued facets); hourly cron moved off
+  `:00`.
+- **Phase 1A (planned)** — entity model: define product / SKU / seller-offer;
+  decide offer-level identity for the candidate subset vs SKU-level availability
+  for the full book; validate against captured API responses.
+- **Phase 1B (planned)** — persistent scan store: an append-only **changelog**
+  (`observation_events`) plus `scan_runs` metadata (so "unchanged" is
+  distinguishable from "not observed"), `current_state`, and `products`. Backend:
+  free-tier **Supabase (Postgres)** via the Supavisor pooler, with local
+  **SQLite** for dev/tests only. See [`docs/PHASE1.md`](docs/PHASE1.md) for a
+  plain-language explainer with worked examples.
+- **Phase 2 (planned)** — rewrite the web app as a fast reader over the store,
+  with saved searches, watchlists, and per-wine detail/history pages.

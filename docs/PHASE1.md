@@ -4,6 +4,25 @@ This document explains, in simple terms, what Phase 1 is, why we want it, and
 how it behaves — with worked examples. No code here; it's the shared mental
 model before we build.
 
+> **Where this sits (revised sequencing).** An independent review reordered the
+> roadmap, and we adopted it:
+>
+> - **Phase 0.75 — reliability (done).** Delivery correctness (persist only after
+>   a confirmed Slack send; dry runs never persist; storage errors fail the job),
+>   three-way order-book classification, scan-coverage metrics + REST retries,
+>   sharding-complement fix, cron moved off `:00`.
+> - **Phase 1A — entity model (next).** Pin down product / SKU / seller-offer;
+>   decide the "offer identity for candidates only, SKU availability for the full
+>   book" split; validate the model against *captured* real API responses before
+>   writing storage code.
+> - **Phase 1B — storage.** Postgres (via the Supavisor pooler), the tables
+>   below, idempotency, complete-scan `gone` semantics, backups.
+> - **Phase 2 — reader UI** over confirmed capabilities.
+>
+> This doc describes the *store* (Phase 1A/1B). Read it knowing the entity
+> caveats in [What the store unlocks](#what-the-store-unlocks--and-what-it-does-not)
+> are the part 1A must nail down first.
+
 ---
 
 ## The one-sentence version
@@ -158,29 +177,63 @@ ranking, and history. The live check happens exactly when it's worth doing.
 ```
 Store says:   SKU ...017 — ask £680, 18% under market   (from 02:00)
 You click it at 14:30.
-Live re-check: ask is now £950 (the £680 seller sold; next seller is dearer).
+Live re-check: ask is now £950 (the £680 offer is gone; next offer is dearer).
 App shows:    "⚠ Price changed since last scan: £680 → £950. No longer a bargain."
 ```
+
+(Note we say the offer is *gone*, not *sold* — SKU-level data can't tell a sale
+from a withdrawal. See [What the store unlocks](#what-the-store-unlocks--and-what-it-does-not).)
 
 You were never at risk of bidding on the old number, because the detail view
 always re-prices before you can act.
 
 ---
 
-## What the store unlocks (beyond instant loading)
+## What the store unlocks — and what it does *not*
 
-Once history accumulates, these become simple queries rather than new API work:
+This is the most important correction to an earlier draft of this doc. What the
+store can prove depends entirely on **what entity we observe**, and the daily
+full-book sweep observes **SKU-level reference pricing** (`least_listing_price`,
+`market_price`, `last_bbx_transaction`), not individual seller offers.
 
-- **Days on market** and **first-seen** date per listing.
-- **Ask-change tracking** — the dedup logic (currently a hand-rolled JSON file)
-  becomes "compare today's ask to yesterday's row".
-- **Liquidity signal** — how often a wine actually trades or turns over on BBX. A
-  30%-under-market wine that never sells is a trap, not a bargain; the store can
-  tell them apart.
-- **A better "fair value"** — instead of trusting a single `market_price` of
-  unknown age, compare the ask to a rolling median of recent observed
-  transactions, and flag when `market_price` and `last_bbx_transaction` disagree
-  wildly (a sign the market number is stale).
+**Supportable from SKU-level history (the daily sweep):**
+
+- **SKU availability history** — when a SKU first appeared in the book and when
+  it stopped appearing. (Not the same as an individual offer's lifetime — see
+  below.)
+- **Observed reference-price changes** — the dated changelog of ask / market /
+  last-transaction as *observed at each scan*.
+- **Ask-change dedup** — the current hand-rolled JSON state becomes "compare this
+  scan's ask to the last stored row".
+- **A better "fair value"** — compare the ask to a rolling series of *observed*
+  reference prices, and flag when `market_price` and `last_bbx_transaction`
+  disagree wildly (a stale-market signal).
+
+**NOT supportable from SKU-level data (needs stable seller-offer IDs):**
+
+- **Seller-offer days-on-market** — the cheapest ask can hold at £680 while the
+  *seller behind it* changes; SKU-level pricing can't see that turnover.
+- **Sold vs. withdrawn** — a SKU leaving the book, or an ask ticking up, does not
+  prove a sale; the offer may have been cancelled.
+- **True liquidity / turnover** — repeated trades at the same price are invisible.
+- **Transaction history** — `last_bbx_transaction` is only the *latest value seen
+  at scan time*; trades between scans, and repeat trades at one price, are lost.
+
+Getting the second group requires **seller-offer identity**, which lives in the
+**GraphQL order book** — and that is the crux of the design tension below.
+
+### The tension: politeness vs. offer-level tracking
+
+Offer identity is only in GraphQL, and the daily sweep is deliberately
+**REST-only** to stay polite (running GraphQL page-loads on all ~15k SKUs daily
+is exactly the load we agreed not to generate). So we cannot have both full-book
+coverage *and* offer-level liquidity at daily cadence.
+
+Planned resolution (decided in Phase 1A, not now): track **offer-level identity
+only for the narrow candidate / watchlist set** — those already pay for a GraphQL
+call — and keep **SKU-level availability** for the full book. Broad liquidity and
+"days on market" claims are scoped to that subset, and the full-book claims are
+reduced to availability + observed-reference-price history as above.
 
 ---
 
@@ -208,8 +261,16 @@ mirroring the S3-or-local pattern `notification_state.py` already uses:
 - `DATABASE_URL` set → Supabase Postgres (production, GitHub Actions).
 - `DATABASE_URL` unset → local SQLite file (dev and the offline test suite).
 
-Same schema, same code path, so tests stay offline and local dev needs zero
-setup.
+The two share a schema, but **not every query path is identical**: production
+uses Postgres window functions, concurrency, and rolling medians that SQLite
+does not reproduce faithfully. So SQLite is scoped to **local dev and small
+adapter tests**; anything analytical is tested against Postgres, not assumed
+equivalent because it passed on SQLite.
+
+Connection detail that will otherwise bite us: **GitHub Actions is IPv4-only,
+while Supabase's direct database endpoint is IPv6 on the free plan.** The writers
+must connect through the **Supavisor session pooler** (the IPv4-reachable
+connection string), not a bare direct `DATABASE_URL`.
 
 **Why Supabase over SQLite-on-S3**, given Phase 2 is a networked web app:
 
@@ -228,22 +289,50 @@ setup.
 
 - **500 MB database limit** — a non-issue once we store changes not snapshots
   (see above); a local SQLite fallback also keeps dev/test off the quota.
-- **Projects pause after ~1 week of inactivity** — the daily sweep (never mind
-  the hourly bot) writes every day, so the project never idles.
+- **Projects pause after ~1 week of insufficient activity** — the daily sweep
+  and hourly bot both write regularly, which should keep it active; but Supabase
+  defines "sufficient activity" loosely, so we add an explicit tiny keepalive
+  query rather than *assume* the writes qualify.
 - A Postgres connection string becomes one more CI/Streamlit secret — minor, and
   no worse than the AWS creds already present. Lock-in is low: it's plain
   Postgres, so `pg_dump` moves it anywhere.
 
-### The rest
+### Schema (needs scan metadata to be trustworthy)
 
-- **Schema:** one append-only `observations` table (the changelog: sku,
-  observed_at, ask, market, last_tx, status, …) plus a small `listings`
-  dimension for slow-changing descriptive fields (name, vintage, region,
-  format). First-seen / days-on-market derive from the observation history.
+A change-only log is only meaningful if we also record **which scans ran**. "No
+row for SKU X on 15 July" means "unchanged" *only if a complete scan succeeded
+on 15 July* — otherwise it means "we didn't look". So scan bookkeeping is a
+first-class table, not an afterthought:
+
+- **`scan_runs`** — one row per scan: scope, started_at, finished_at, expected /
+  queried / priced / failed counts, coverage, and status. Everything else joins
+  back to this so gaps are explicit. (The pipeline now returns exactly these
+  counts via `ScanOutcome.coverage` et al.)
+- **`observation_events`** — append-only changelog, each row linked to the
+  `scan_runs` id that produced it (sku, observed_at, ask, market, last_tx,
+  status).
+- **`current_state`** — latest known state per SKU (or per offer, for the
+  candidate subset) for fast reads without scanning the whole changelog.
+- **`products`** — slow-changing descriptive fields (name, vintage, region,
+  format).
+- **Idempotency constraints** so a retried or concurrent writer cannot append
+  duplicate events for the same (scan, entity).
+
+Two rules that follow from the entity discussion above:
+
+- Only a **complete full-book scan** (coverage above threshold) may emit `gone`
+  for a SKU — and preferably only after **two consecutive misses**, to absorb a
+  single flaky scan.
+- Offer-level rows exist only for the **candidate / watchlist subset** that gets
+  GraphQL; the full book is SKU-level availability.
+
+### Writers / readers / retention
+
 - **Writers:** the hourly bot and the daily sweep, each diffing against
-  last-known state and appending only changes.
+  `current_state` and appending only changes, tagged with a `scan_runs` id.
 - **Readers:** the web app (Phase 2) and any analysis.
-- **Retention:** keep raw observations; the changelog is the asset.
+- **Retention:** keep raw events; the changelog is the asset. Add backups
+  (`pg_dump`) once real history accumulates.
 
 The prerequisite — sweeping the *whole* book past Algolia's 1,000-hit cap — is
 already done (see [README: Pagination cap and facet sharding](../README.md#pagination-cap-and-facet-sharding)).
