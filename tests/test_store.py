@@ -14,6 +14,7 @@ from core.store import (
     load_current_offers,
     load_current_products,
     load_current_skus,
+    mark_run_failed,
     process_disappearances,
     start_run,
     update_run_discovery,
@@ -425,6 +426,17 @@ def _pg_like_conn():
     cur.fetchall.return_value = []
     conn.cursor.return_value = cur
     return conn, cur
+
+
+class TestMarkRunFailed:
+    def test_sets_failed_status_and_error(self, conn):
+        run_id = start_run(conn, scope="full_book", run_date="2026-07-18")
+        mark_run_failed(conn, run_id, "boom")
+        cur = conn.execute("SELECT status, error_message, finished_at FROM scan_runs WHERE id = ?", (run_id,))
+        row = dict(cur.fetchone())
+        assert row["status"] == "failed"
+        assert row["error_message"] == "boom"
+        assert row["finished_at"] is not None
 
 
 class TestPostgresConnectionCompat:

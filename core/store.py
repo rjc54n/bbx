@@ -7,11 +7,19 @@ event inserts, and run-status update in a single transaction.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from core.db import is_postgres, placeholder, placeholders, _adapt_array_param, _parse_array_column
 from core.models import ObservationEvent, Offer, Product, Sku, _now_utc, _uuid
+
+try:
+    from psycopg2.extras import execute_values
+except ImportError:
+    execute_values = None
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +80,18 @@ def update_run_rest(
         f"rest_skus_failed = {p}, rest_failed_skus = {p} WHERE id = {p}",
         (rest_skus_expected, rest_skus_priced, rest_skus_failed,
          _adapt_array_param(rest_failed_skus), run_id),
+    )
+    conn.commit()
+    cur.close()
+
+
+def mark_run_failed(conn, run_id: str, error_message: str) -> None:
+    p = placeholder()
+    cur = conn.cursor()
+    cur.execute(
+        f"UPDATE scan_runs SET status='failed', finished_at={p}, error_message={p} "
+        f"WHERE id={p}",
+        (_now_utc(), error_message, run_id),
     )
     conn.commit()
     cur.close()
@@ -279,74 +299,130 @@ def commit_sweep(
     p = placeholder()
     cur = conn.cursor()
 
+    log.info(
+        "commit_sweep starting: %d products, %d skus, %d offers, %d events",
+        len(products), len(skus), len(offers), len(events),
+    )
+
     try:
-        # --- upsert products ---
-        for prod in products:
-            gv = _adapt_array_param(prod.grape_varieties)
-            cur.execute(
-                f"INSERT INTO products (parent_sku, name, vintage, region, subregion, "
-                f"colour, country, producer, grape_varieties, product_url, "
-                f"first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, "
-                f"consecutive_misses, gone_since) "
-                f"VALUES ({placeholders(16)}) "
-                f"ON CONFLICT (parent_sku) DO UPDATE SET "
-                f"name=excluded.name, vintage=excluded.vintage, region=excluded.region, "
-                f"subregion=excluded.subregion, colour=excluded.colour, country=excluded.country, "
-                f"producer=excluded.producer, grape_varieties=excluded.grape_varieties, "
-                f"product_url=excluded.product_url, last_seen_run_id=excluded.last_seen_run_id, "
-                f"last_seen_at=excluded.last_seen_at, consecutive_misses=0, gone_since=NULL",
-                (prod.parent_sku, prod.name, prod.vintage, prod.region,
-                 prod.subregion, prod.colour, prod.country, prod.producer,
-                 gv, prod.product_url, run_id, now, run_id, now, 0, None),
+        # --- upsert products (batched: execute_values on Postgres, executemany on SQLite) ---
+        product_rows = [
+            (prod.parent_sku, prod.name, prod.vintage, prod.region,
+             prod.subregion, prod.colour, prod.country, prod.producer,
+             _adapt_array_param(prod.grape_varieties), prod.product_url,
+             run_id, now, run_id, now, 0, None)
+            for prod in products
+        ]
+        if product_rows:
+            log.info("Upserting %d products", len(product_rows))
+            product_conflict = (
+                "ON CONFLICT (parent_sku) DO UPDATE SET "
+                "name=excluded.name, vintage=excluded.vintage, region=excluded.region, "
+                "subregion=excluded.subregion, colour=excluded.colour, country=excluded.country, "
+                "producer=excluded.producer, grape_varieties=excluded.grape_varieties, "
+                "product_url=excluded.product_url, last_seen_run_id=excluded.last_seen_run_id, "
+                "last_seen_at=excluded.last_seen_at, consecutive_misses=0, gone_since=NULL"
             )
+            if is_postgres():
+                execute_values(
+                    cur,
+                    "INSERT INTO products (parent_sku, name, vintage, region, subregion, "
+                    "colour, country, producer, grape_varieties, product_url, "
+                    "first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, "
+                    "consecutive_misses, gone_since) VALUES %s " + product_conflict,
+                    product_rows, page_size=1000,
+                )
+            else:
+                cur.executemany(
+                    f"INSERT INTO products (parent_sku, name, vintage, region, subregion, "
+                    f"colour, country, producer, grape_varieties, product_url, "
+                    f"first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, "
+                    f"consecutive_misses, gone_since) VALUES ({placeholders(16)}) " + product_conflict,
+                    product_rows,
+                )
 
         # --- upsert skus ---
-        for sku in skus:
-            cur.execute(
-                f"INSERT INTO skus (parent_sku, format_code, case_size, bottle_volume_ml, "
-                f"least_listing_price_p, market_price_p, last_transaction_p, highest_bid_p, "
-                f"qty_available, source_agreement, first_seen_run_id, first_seen_at, "
-                f"last_seen_run_id, last_seen_at, consecutive_misses, gone_since) "
-                f"VALUES ({placeholders(16)}) "
-                f"ON CONFLICT (parent_sku, format_code) DO UPDATE SET "
-                f"least_listing_price_p=excluded.least_listing_price_p, "
-                f"market_price_p=excluded.market_price_p, "
-                f"last_transaction_p=excluded.last_transaction_p, "
-                f"highest_bid_p=excluded.highest_bid_p, "
-                f"qty_available=excluded.qty_available, "
-                f"source_agreement=excluded.source_agreement, "
-                f"last_seen_run_id=excluded.last_seen_run_id, "
-                f"last_seen_at=excluded.last_seen_at, "
-                f"consecutive_misses=0, gone_since=NULL",
-                (sku.parent_sku, sku.format_code, sku.case_size,
-                 sku.bottle_volume_ml, sku.least_listing_price_p,
-                 sku.market_price_p, sku.last_transaction_p,
-                 sku.highest_bid_p, sku.qty_available, sku.source_agreement,
-                 run_id, now, run_id, now, 0, None),
+        sku_rows = [
+            (sku.parent_sku, sku.format_code, sku.case_size,
+             sku.bottle_volume_ml, sku.least_listing_price_p,
+             sku.market_price_p, sku.last_transaction_p,
+             sku.highest_bid_p, sku.qty_available, sku.source_agreement,
+             run_id, now, run_id, now, 0, None)
+            for sku in skus
+        ]
+        if sku_rows:
+            log.info("Upserting %d skus", len(sku_rows))
+            sku_conflict = (
+                "ON CONFLICT (parent_sku, format_code) DO UPDATE SET "
+                "least_listing_price_p=excluded.least_listing_price_p, "
+                "market_price_p=excluded.market_price_p, "
+                "last_transaction_p=excluded.last_transaction_p, "
+                "highest_bid_p=excluded.highest_bid_p, "
+                "qty_available=excluded.qty_available, "
+                "source_agreement=excluded.source_agreement, "
+                "last_seen_run_id=excluded.last_seen_run_id, "
+                "last_seen_at=excluded.last_seen_at, "
+                "consecutive_misses=0, gone_since=NULL"
             )
+            if is_postgres():
+                execute_values(
+                    cur,
+                    "INSERT INTO skus (parent_sku, format_code, case_size, bottle_volume_ml, "
+                    "least_listing_price_p, market_price_p, last_transaction_p, highest_bid_p, "
+                    "qty_available, source_agreement, first_seen_run_id, first_seen_at, "
+                    "last_seen_run_id, last_seen_at, consecutive_misses, gone_since) VALUES %s "
+                    + sku_conflict,
+                    sku_rows, page_size=1000,
+                )
+            else:
+                cur.executemany(
+                    f"INSERT INTO skus (parent_sku, format_code, case_size, bottle_volume_ml, "
+                    f"least_listing_price_p, market_price_p, last_transaction_p, highest_bid_p, "
+                    f"qty_available, source_agreement, first_seen_run_id, first_seen_at, "
+                    f"last_seen_run_id, last_seen_at, consecutive_misses, gone_since) "
+                    f"VALUES ({placeholders(16)}) " + sku_conflict,
+                    sku_rows,
+                )
 
         # --- upsert offers ---
-        for offer in offers:
-            cur.execute(
-                f"INSERT INTO offers (bbx_listing_id, parent_sku, format_code, "
-                f"match_confidence, case_size, bottle_volume_ml, price_per_case_p, "
-                f"first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, "
-                f"consecutive_misses, gone_since) "
-                f"VALUES ({placeholders(13)}) "
-                f"ON CONFLICT (bbx_listing_id) DO UPDATE SET "
-                f"price_per_case_p=excluded.price_per_case_p, "
-                f"format_code=excluded.format_code, "
-                f"match_confidence=excluded.match_confidence, "
-                f"last_seen_run_id=excluded.last_seen_run_id, "
-                f"last_seen_at=excluded.last_seen_at, "
-                f"consecutive_misses=0, gone_since=NULL",
-                (offer.bbx_listing_id, offer.parent_sku, offer.format_code,
-                 offer.match_confidence, offer.case_size, offer.bottle_volume_ml,
-                 offer.price_per_case_p, run_id, now, run_id, now, 0, None),
+        offer_rows = [
+            (offer.bbx_listing_id, offer.parent_sku, offer.format_code,
+             offer.match_confidence, offer.case_size, offer.bottle_volume_ml,
+             offer.price_per_case_p, run_id, now, run_id, now, 0, None)
+            for offer in offers
+        ]
+        if offer_rows:
+            log.info("Upserting %d offers", len(offer_rows))
+            offer_conflict = (
+                "ON CONFLICT (bbx_listing_id) DO UPDATE SET "
+                "price_per_case_p=excluded.price_per_case_p, "
+                "format_code=excluded.format_code, "
+                "match_confidence=excluded.match_confidence, "
+                "last_seen_run_id=excluded.last_seen_run_id, "
+                "last_seen_at=excluded.last_seen_at, "
+                "consecutive_misses=0, gone_since=NULL"
             )
+            if is_postgres():
+                execute_values(
+                    cur,
+                    "INSERT INTO offers (bbx_listing_id, parent_sku, format_code, "
+                    "match_confidence, case_size, bottle_volume_ml, price_per_case_p, "
+                    "first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, "
+                    "consecutive_misses, gone_since) VALUES %s " + offer_conflict,
+                    offer_rows, page_size=1000,
+                )
+            else:
+                cur.executemany(
+                    f"INSERT INTO offers (bbx_listing_id, parent_sku, format_code, "
+                    f"match_confidence, case_size, bottle_volume_ml, price_per_case_p, "
+                    f"first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, "
+                    f"consecutive_misses, gone_since) VALUES ({placeholders(13)}) " + offer_conflict,
+                    offer_rows,
+                )
 
         # --- disappearances (only on completed runs) ---
         if final_status == "completed":
+            log.info("Applying disappearance checks")
             _apply_disappearances(cur, "product", seen_product_keys,
                                   current_products, run_id, now,
                                   algolia_complete, rest_failed_skus, events)
@@ -357,20 +433,33 @@ def commit_sweep(
                                   current_offers, run_id, now,
                                   algolia_complete, rest_failed_skus, events)
 
-        # --- insert events ---
-        for evt in events:
-            md = json.dumps(evt.metadata) if evt.metadata else None
-            cur.execute(
-                f"INSERT INTO observation_events "
-                f"(scan_run_id, observed_at, entity_type, entity_key, event_type, "
-                f"field_name, old_value_raw, new_value_raw, metadata) "
-                f"VALUES ({placeholders(9)}) "
-                + ("ON CONFLICT DO NOTHING" if not is_postgres()
-                   else "ON CONFLICT (scan_run_id, entity_type, entity_key, event_type, field_name) DO NOTHING"),
-                (evt.scan_run_id, evt.observed_at, evt.entity_type,
-                 evt.entity_key, evt.event_type, evt.field_name,
-                 evt.old_value_raw, evt.new_value_raw, md),
-            )
+        # --- insert events (batched) ---
+        event_rows = [
+            (evt.scan_run_id, evt.observed_at, evt.entity_type,
+             evt.entity_key, evt.event_type, evt.field_name,
+             evt.old_value_raw, evt.new_value_raw,
+             json.dumps(evt.metadata) if evt.metadata else None)
+            for evt in events
+        ]
+        if event_rows:
+            log.info("Inserting %d observation events", len(event_rows))
+            if is_postgres():
+                execute_values(
+                    cur,
+                    "INSERT INTO observation_events "
+                    "(scan_run_id, observed_at, entity_type, entity_key, event_type, "
+                    "field_name, old_value_raw, new_value_raw, metadata) VALUES %s "
+                    "ON CONFLICT (scan_run_id, entity_type, entity_key, event_type, field_name) DO NOTHING",
+                    event_rows, page_size=1000,
+                )
+            else:
+                cur.executemany(
+                    f"INSERT INTO observation_events "
+                    f"(scan_run_id, observed_at, entity_type, entity_key, event_type, "
+                    f"field_name, old_value_raw, new_value_raw, metadata) "
+                    f"VALUES ({placeholders(9)}) ON CONFLICT DO NOTHING",
+                    event_rows,
+                )
 
         # --- finish run ---
         finished_at = _now_utc()
@@ -380,6 +469,7 @@ def commit_sweep(
         )
 
         conn.commit()
+        log.info("commit_sweep committed as '%s'", final_status)
     except BaseException:
         conn.rollback()
         raise

@@ -293,7 +293,7 @@ class TestRunDailySweep:
         assert run2 is not None
         assert run2 != run1
 
-    def test_events_recorded(self, conn, monkeypatch):
+    def test_first_sweep_records_bootstrap_event_not_per_entity(self, conn, monkeypatch):
         hits = [_hit("SKU1")]
         rest = _rest_entries("SKU1")
         _patch_fetchers(monkeypatch, hits, rest)
@@ -305,9 +305,56 @@ class TestRunDailySweep:
         cur = conn.execute(
             "SELECT * FROM observation_events WHERE scan_run_id = ?", (run_id,),
         )
-        events = cur.fetchall()
-        event_types = {dict(e)["event_type"] for e in events}
+        events = [dict(e) for e in cur.fetchall()]
+        assert len(events) == 1
+        assert events[0]["event_type"] == "bootstrap"
+        assert events[0]["entity_type"] == "run"
+
+    def test_appeared_event_after_bootstrap_for_new_entity(self, conn, monkeypatch):
+        hits = [_hit("SKU1")]
+        rest = _rest_entries("SKU1")
+        _patch_fetchers(monkeypatch, hits, rest)
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+        hits2 = [_hit("SKU1"), _hit("SKU2")]
+        rest2 = {**_rest_entries("SKU1"), **_rest_entries("SKU2")}
+        _patch_fetchers(monkeypatch, hits2, rest2)
+        run_id2 = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
+
+        cur = conn.execute(
+            "SELECT * FROM observation_events WHERE scan_run_id = ?", (run_id2,),
+        )
+        event_types = {dict(e)["event_type"] for e in cur.fetchall()}
         assert "appeared" in event_types
+
+    def test_failure_marks_run_failed(self, conn, monkeypatch):
+        def boom(*a, **kw):
+            raise RuntimeError("simulated Algolia outage")
+
+        monkeypatch.setattr(sweep, "fetch_listings", boom)
+
+        with pytest.raises(RuntimeError):
+            run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+        cur = conn.execute("SELECT status, error_message FROM scan_runs")
+        row = dict(cur.fetchone())
+        assert row["status"] == "failed"
+        assert "simulated Algolia outage" in row["error_message"]
+
+    def test_discovery_anomaly_logged_not_fatal(self, conn, monkeypatch, caplog):
+        hits = [_hit("SKU1")]
+        rest = _rest_entries("SKU1")
+        result = FetchResult(hits=hits, total_index_hits=0, collected_count=1, truncated=False)
+        monkeypatch.setattr(sweep, "fetch_listings", lambda *a, **kw: result)
+        monkeypatch.setattr(sweep, "fetch_rest_pricing_full", lambda *a, **kw: (rest, []))
+
+        with caplog.at_level("WARNING"):
+            run_id = run_daily_sweep(
+                conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18",
+            )
+
+        assert run_id is not None
+        assert any("index likely grew" in r.message for r in caplog.records)
 
     def test_price_change_on_second_sweep(self, conn, monkeypatch):
         hits = [_hit("SKU1")]
