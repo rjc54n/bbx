@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -37,6 +38,27 @@ REST_HEADERS = {
 
 REST_BATCH_SIZE = 24
 REST_TIMEOUT = 10
+REST_MAX_RETRIES = 3       # attempts per batch before giving up on it
+REST_BACKOFF_BASE = 1.5    # seconds; doubles each retry
+
+# Order-book classification (from the GraphQL variant listings for a SKU).
+#   NOT_CHECKED : the order book has not been fetched yet (REST-only phase).
+#   SOLE        : this listing is the only live offer -> pass without a next-price test.
+#   COMPETING   : other offers exist -> enforce the next-lowest discount threshold.
+#   UNAVAILABLE : the order book could not be read (empty/malformed) -> do NOT
+#                 treat as a sole seller; reject rather than alert on unverified data.
+#   CHANGED     : the order-book floor disagrees with the REST ask (a cheaper or
+#                 different offer appeared mid-scan) -> reject/recompute.
+OB_NOT_CHECKED = "not_checked"
+OB_SOLE = "sole"
+OB_COMPETING = "competing"
+OB_UNAVAILABLE = "unavailable"
+OB_CHANGED = "changed"
+
+# How close a GraphQL variant price must be to the REST ask to count as "the
+# same offer" (the listing's own), absorbing cross-endpoint float/rounding noise.
+def _ask_match_tol(ask: float) -> float:
+    return max(0.005 * ask, 0.01)
 
 # progress(phase, done, total) — phases are "rest" and "graphql".
 ProgressFn = Callable[[str, int, int], None]
@@ -68,6 +90,19 @@ class ScanOutcome:
     debug_rest: List[Dict[str, Any]] = field(default_factory=list)
     debug_gql: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Coverage metrics — how much of the discovered book we actually priced.
+    expected_skus: int = 0        # listings with a parent_sku
+    queried_skus: int = 0         # SKUs in REST batches that succeeded
+    priced_skus: int = 0          # SKUs that returned pricing
+    failed_skus: int = 0          # SKUs in REST batches that never succeeded
+
+    @property
+    def coverage(self) -> float:
+        """Fraction of expected SKUs we successfully queried (1.0 if none)."""
+        if self.expected_skus == 0:
+            return 1.0
+        return self.queried_skus / self.expected_skus
+
 
 # --------------------------------------------------------------
 # Pure helpers (unit-tested)
@@ -98,13 +133,61 @@ def extract_variant_prices(gql_data: dict) -> List[float]:
     return prices
 
 
+def classify_order_book(
+    ask: float, variant_prices: Optional[List[float]]
+) -> Tuple[str, Optional[float], Optional[float]]:
+    """
+    Classify the GraphQL order book for a listing whose REST ask is `ask`.
+
+    Returns (status, next_lowest, pct_next):
+      - variant_prices is None      -> (NOT_CHECKED, None, None)   order book not fetched
+      - empty / no parseable prices -> (UNAVAILABLE, None, None)   cannot verify
+      - a price below the ask floor  -> (CHANGED, None, None)       data shifted mid-scan
+      - the ask floor disagrees      -> (CHANGED, None, None)       endpoints inconsistent
+      - two or more offers at the ask-> (COMPETING, ask, 0.0)       tie: no headroom
+      - a cheaper competing offer    -> (COMPETING, next, pct)
+      - only this listing at the ask -> (SOLE, None, None)          confirmed sole seller
+
+    The key correctness point: a tie at the ask means ZERO headroom (not the gap
+    to the next *distinct* price), and an unreadable book is UNAVAILABLE, never
+    silently treated as a sole seller.
+    """
+    if variant_prices is None:
+        return OB_NOT_CHECKED, None, None
+    if not variant_prices:
+        return OB_UNAVAILABLE, None, None
+
+    tol = _ask_match_tol(ask)
+    lo = min(variant_prices)
+
+    # The REST ask is defined as the least listing price, so the order-book
+    # floor should equal it. Any material disagreement means the data changed
+    # between the REST and GraphQL calls (or the endpoints are inconsistent).
+    if abs(lo - ask) > tol:
+        return OB_CHANGED, None, None
+
+    n_at_floor = sum(1 for p in variant_prices if abs(p - ask) <= tol)
+    higher = sorted(p for p in variant_prices if p > ask + tol)
+
+    if n_at_floor >= 2:
+        # Another seller is level with this listing at the floor.
+        return OB_COMPETING, ask, 0.0
+    if higher:
+        nxt = higher[0]
+        return OB_COMPETING, nxt, round((nxt - ask) / nxt * 100, 1)
+    return OB_SOLE, None, None
+
+
 def compute_discounts(
     rest_rec: Dict[str, Any],
     variant_prices: Optional[List[float]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
-    Compute pct_market, pct_last and (if variant prices given) pct_next
-    for one REST pricing record. Returns None when ask/market are unusable.
+    Compute pct_market, pct_last and the order-book classification for one REST
+    pricing record. Returns None when ask/market are unusable.
+
+    Pass variant_prices=None during the REST-only phase (order book not yet
+    fetched). Pass the list (possibly empty) once GraphQL has been consulted.
     """
     ask_raw = rest_rec.get("least_listing_price")
     mkt_raw = rest_rec.get("market_price")
@@ -131,13 +214,7 @@ def compute_discounts(
     except (TypeError, ValueError):
         pass
 
-    next_lowest = None
-    pct_next = None
-    if variant_prices:
-        higher = sorted(p for p in variant_prices if p > ask)
-        if higher:
-            next_lowest = higher[0]
-            pct_next = round((next_lowest - ask) / next_lowest * 100, 1)
+    ob_status, next_lowest, pct_next = classify_order_book(ask, variant_prices)
 
     return {
         "ask": ask,
@@ -145,13 +222,21 @@ def compute_discounts(
         "last": last,
         "pct_market": pct_market,
         "pct_last": pct_last,
+        "ob_status": ob_status,
         "next_lowest": next_lowest,
         "pct_next": pct_next,
     }
 
 
 def threshold_failures(disc: Dict[str, Any], config: ScanConfig) -> List[str]:
-    """Return human-readable reasons this record fails thresholds ([] = passes)."""
+    """
+    Return human-readable reasons this record fails thresholds ([] = passes).
+
+    Order-book handling (only once it has been checked):
+      - UNAVAILABLE / CHANGED -> fail: we will not alert on an unverified book.
+      - COMPETING             -> enforce the next-lowest discount threshold.
+      - SOLE / NOT_CHECKED    -> no next-price test.
+    """
     reasons: List[str] = []
     if disc["ask"] <= config.min_case_price:
         reasons.append(f"ask £{disc['ask']} <= floor £{config.min_case_price}")
@@ -159,8 +244,14 @@ def threshold_failures(disc: Dict[str, Any], config: ScanConfig) -> List[str]:
         reasons.append(f"mkt {disc['pct_market']}% < {config.min_pct_market}%")
     if disc["pct_last"] is not None and disc["pct_last"] < config.min_pct_last:
         reasons.append(f"last {disc['pct_last']}% < {config.min_pct_last}%")
-    if disc["pct_next"] is not None and disc["pct_next"] < config.min_pct_next:
+
+    ob_status = disc.get("ob_status", OB_NOT_CHECKED)
+    if ob_status in (OB_UNAVAILABLE, OB_CHANGED):
+        reasons.append(f"order book {ob_status}")
+    elif ob_status == OB_COMPETING and disc["pct_next"] is not None \
+            and disc["pct_next"] < config.min_pct_next:
         reasons.append(f"next {disc['pct_next']}% < {config.min_pct_next}%")
+
     return reasons
 
 
@@ -198,25 +289,11 @@ def build_bbx_url(entry: Dict[str, Any]) -> str:
 # Phase 2: batched REST pricing
 # --------------------------------------------------------------
 
-def fetch_rest_pricing(
-    skus: List[str],
-    *,
-    batch_size: int = REST_BATCH_SIZE,
-    progress: Optional[ProgressFn] = None,
-) -> Tuple[Dict[str, Dict[str, Any]], List[Dict[str, Any]]]:
-    """
-    Fetch REST pricing for a list of SKUs in batches.
-
-    Returns (results keyed by SKU, debug rows for batch-level errors).
-    """
-    results: Dict[str, Dict[str, Any]] = {}
-    debug: List[Dict[str, Any]] = []
-    total_batches = (len(skus) + batch_size - 1) // batch_size
-
-    for b in range(total_batches):
-        batch = skus[b * batch_size:(b + 1) * batch_size]
-        sku_list = ",".join(batch)
-
+def _fetch_rest_batch(sku_list: str) -> Dict[str, Any]:
+    """One REST pricing POST, with retry/backoff on any failure. Raises if all
+    attempts fail so the caller can record the whole batch as uncovered."""
+    last_exc: Optional[Exception] = None
+    for attempt in range(REST_MAX_RETRIES):
         try:
             resp = requests.post(
                 REST_URL,
@@ -229,9 +306,45 @@ def fetch_rest_pricing(
                 timeout=REST_TIMEOUT,
             )
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json()
+        except Exception as e:  # noqa: BLE001 - transport/HTTP/JSON all retriable
+            last_exc = e
+            if attempt < REST_MAX_RETRIES - 1:
+                time.sleep(REST_BACKOFF_BASE * (2 ** attempt))
+    assert last_exc is not None
+    raise last_exc
+
+
+def fetch_rest_pricing(
+    skus: List[str],
+    *,
+    batch_size: int = REST_BATCH_SIZE,
+    progress: Optional[ProgressFn] = None,
+) -> Tuple[Dict[str, Dict[str, Any]], List[Dict[str, Any]], List[str]]:
+    """
+    Fetch REST pricing for a list of SKUs in batches, retrying each batch.
+
+    Returns (results keyed by SKU, debug rows, failed_skus). `failed_skus`
+    are those in batches that never succeeded — coverage gaps, distinct from
+    SKUs that were queried successfully but simply returned no pricing.
+    """
+    results: Dict[str, Dict[str, Any]] = {}
+    debug: List[Dict[str, Any]] = []
+    failed_skus: List[str] = []
+    total_batches = (len(skus) + batch_size - 1) // batch_size
+
+    for b in range(total_batches):
+        batch = skus[b * batch_size:(b + 1) * batch_size]
+        sku_list = ",".join(batch)
+
+        try:
+            data = _fetch_rest_batch(sku_list)
         except Exception as e:
-            logging.error(f"REST batch {b + 1}/{total_batches} failed: {e}")
+            logging.error(
+                f"REST batch {b + 1}/{total_batches} failed after "
+                f"{REST_MAX_RETRIES} attempts: {e}"
+            )
+            failed_skus.extend(batch)
             for sku in batch:
                 debug.append({"sku": sku, "reason": f"batch REST error: {e}", "passed": False})
             if progress:
@@ -246,7 +359,7 @@ def fetch_rest_pricing(
         if progress:
             progress("rest", b + 1, total_batches)
 
-    return results, debug
+    return results, debug, failed_skus
 
 
 # --------------------------------------------------------------
@@ -284,7 +397,19 @@ def run_scan(
 
     # ---- Phase 2: REST pricing + preliminary thresholds ----
     skus = [sku for _, sku in prelim]
-    rest_results, outcome.debug_rest = fetch_rest_pricing(skus, progress=progress)
+    rest_results, outcome.debug_rest, failed_skus = fetch_rest_pricing(
+        skus, progress=progress
+    )
+
+    outcome.expected_skus = len(skus)
+    outcome.failed_skus = len(failed_skus)
+    outcome.queried_skus = len(skus) - len(failed_skus)
+    outcome.priced_skus = len(rest_results)
+    if outcome.coverage < 1.0:
+        logging.warning(
+            f"REST coverage {outcome.coverage:.1%} "
+            f"({outcome.failed_skus}/{outcome.expected_skus} SKUs in failed batches)."
+        )
 
     rest_candidates: List[Tuple[Dict[str, Any], str, Dict[str, Any]]] = []
     for entry, sku in prelim:
@@ -357,6 +482,7 @@ def run_scan(
 
         row.update(
             variant_prices=prices,
+            ob_status=disc["ob_status"],
             next_lowest=disc["next_lowest"],
             pct_next=disc["pct_next"],
         )

@@ -4,7 +4,14 @@
 import copy
 from datetime import datetime, timedelta, timezone
 
-from core.notification_state import filter_new_or_improved, _to_iso_z
+import pytest
+
+from core.notification_state import (
+    filter_new_or_improved,
+    load_notification_state,
+    save_notification_state,
+    _to_iso_z,
+)
 
 
 def _candidate(sku="SKU1", ask=100.0, **extra):
@@ -86,3 +93,42 @@ def test_caller_state_is_not_mutated():
     before = copy.deepcopy(state)
     filter_new_or_improved([_candidate(ask=100.0)], state, reminder_days=7)
     assert state == before
+
+
+# --------------------------------------------------------------
+# Local-file load/save error semantics
+# --------------------------------------------------------------
+
+def test_load_missing_file_starts_fresh(tmp_path):
+    assert load_notification_state(tmp_path / "does_not_exist.json") == {}
+
+
+def test_load_roundtrip(tmp_path):
+    path = tmp_path / "state.json"
+    state = {"SKU1": {"ask_last_notified": 100.0}}
+    save_notification_state(path, state)
+    assert load_notification_state(path) == state
+
+
+def test_load_corrupt_file_raises(tmp_path):
+    # A present-but-unreadable state file must NOT be silently discarded,
+    # or every open opportunity would re-alert.
+    path = tmp_path / "state.json"
+    path.write_text("{ this is not valid json", encoding="utf-8")
+    with pytest.raises(Exception):
+        load_notification_state(path)
+
+
+def test_load_non_object_raises(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_notification_state(path)
+
+
+def test_save_failure_raises(tmp_path):
+    # Parent path is a regular file, so mkdir/write must fail and propagate.
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x", encoding="utf-8")
+    with pytest.raises(Exception):
+        save_notification_state(blocker / "state.json", {"SKU1": {}})

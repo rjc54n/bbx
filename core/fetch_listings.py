@@ -315,13 +315,19 @@ def _fetch_sharded(
         )
 
     # Records with no value for this facet match none of the shards above.
-    covered = sum(counts.values())
-    if covered < nb_hits:
-        not_filters = filter_clauses + _build_not_filter(facet_field, list(counts))
-        _fetch_sharded(
-            algolia_app_id, algolia_api_key, not_filters, shard_dims[1:],
-            collected, index_name, hits_per_page,
-        )
+    #
+    # We ALWAYS query the complement, rather than skipping it when
+    # sum(counts) >= nb_hits. That sum-based shortcut is only valid for
+    # single-valued facets: for a multi-valued facet a record can contribute
+    # to several facet values, so the sum can meet or exceed nb_hits while
+    # some records still have no value at all (e.g. prices.price_per_case,
+    # whose counts sum to ~2x nb_hits on this index). The complement query
+    # costs one cheap count that returns zero when nothing is missing.
+    not_filters = filter_clauses + _build_not_filter(facet_field, list(counts))
+    _fetch_sharded(
+        algolia_app_id, algolia_api_key, not_filters, shard_dims[1:],
+        collected, index_name, hits_per_page,
+    )
 
 
 # ------------------------------------------------------------

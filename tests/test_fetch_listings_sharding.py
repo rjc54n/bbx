@@ -32,7 +32,10 @@ class FakeIndex:
             return not self._matches(record, clause[4:])
         field, _, quoted = clause.partition(":")
         value = quoted.strip("'").replace("\\'", "'")
-        return str(record.get(field)) == value
+        rv = record.get(field)
+        if isinstance(rv, list):  # multi-valued facet: membership test
+            return value in [str(x) for x in rv]
+        return str(rv) == value
 
     def _select(self, filter_clauses):
         return [
@@ -48,8 +51,11 @@ class FakeIndex:
             counts = {}
             for r in matched:
                 v = r.get(field)
-                if v is not None:
-                    counts[str(v)] = counts.get(str(v), 0) + 1
+                if v is None:
+                    continue
+                values = v if isinstance(v, list) else [v]
+                for vv in values:  # multi-valued facet double-counts, as Algolia does
+                    counts[str(vv)] = counts.get(str(vv), 0) + 1
             if counts:
                 facets[field] = counts
         return len(matched), facets
@@ -160,9 +166,36 @@ def test_known_count_skips_redundant_count_queries(use_fake_index):
     collected = _run(["base:'x'"], ["region"])
 
     assert len(collected) == 1200
-    # Only the root should have needed a count query; each region shard's
-    # size was known from the root's facet counts.
-    assert len(fake.count_calls) == 1
+    # Each region shard's size was known from the root's facet counts, so the
+    # shards themselves need no count query. Two counts total: the root, and
+    # the always-issued complement shard (which here returns zero) — that one
+    # cheap count is the price of being correct for multi-valued facets.
+    assert len(fake.count_calls) == 2
+
+
+def test_multivalued_facet_complement_still_queried(use_fake_index):
+    # Each record belongs to TWO bands, so facet counts sum to ~2x nb_hits.
+    # The old `sum(counts) < nb_hits` guard would read 2x >= nb_hits and skip
+    # the complement, silently dropping the band-less records. The complement
+    # must run regardless.
+    # Total must exceed PAGINATION_CAP so the root actually shards; each single
+    # band must stay under it so shards fetch without truncation. 20 bands with
+    # each record in 2 adjacent bands gives ~150 records/band.
+    NB = 20
+    banded = [
+        {"objectID": f"both-{i}", "band": [str(i % NB), str((i + 1) % NB)]}
+        for i in range(1500)
+    ]
+    bandless = [{"objectID": f"none-{i}"} for i in range(40)]
+    fake = FakeIndex(banded + bandless, cap=fl.PAGINATION_CAP)
+    use_fake_index(fake)
+
+    collected = _run(["base:'x'"], ["band"])
+
+    # 1500 banded (deduped across overlapping shards) + 40 band-less, none lost.
+    assert len(collected) == 1540
+    not_calls = [c for c in fake.fetch_calls if any(f.startswith("NOT ") for f in c)]
+    assert len(not_calls) == 1
 
 
 def test_dedupe_across_overlapping_shards(use_fake_index):

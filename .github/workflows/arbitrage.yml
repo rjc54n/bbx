@@ -8,8 +8,11 @@ name: BBX Arbitrage Scanner
 
 on:
   schedule:
-    - cron: "0 8-23 * * *"   # every hour, 08:00 to 23:00 UTC
-  workflow_dispatch:         # manual run option
+    # Hourly at :17 rather than :00. GitHub delays or drops runs scheduled on
+    # the hour (its heaviest load window); an off-peak minute is more reliable.
+    # Note: Actions cron is still best-effort, not a guaranteed-delivery SLA.
+    - cron: "17 8-23 * * *"   # every hour, 08:17 to 23:17 UTC
+  workflow_dispatch:          # manual run option
 
 # Never let two runs overlap (they would race on the S3 state object).
 concurrency:

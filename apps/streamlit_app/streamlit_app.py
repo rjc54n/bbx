@@ -141,6 +141,14 @@ if st.sidebar.button("Run Bargain Hunter"):
         f"{len(outcome.candidates)} final opportunities"
     )
 
+    # Warn if REST batches failed: results are drawn from only part of the book.
+    if outcome.coverage < 1.0:
+        st.warning(
+            f"Pricing coverage was {outcome.coverage:.0%} — "
+            f"{outcome.failed_skus} of {outcome.expected_skus} listings could not be "
+            f"priced (failed REST batches), so some opportunities may be missing."
+        )
+
     if show_debug:
         st.subheader("Phase 2 Debug (REST pricing)")
         st.dataframe(pd.DataFrame(outcome.debug_rest))

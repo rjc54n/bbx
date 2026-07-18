@@ -32,8 +32,14 @@ StateDict = Dict[str, Dict[str, Any]]
 # boto3 is required in CI but the local CLI can run without S3 configuration.
 try:
     import boto3  # type: ignore
+    from botocore.exceptions import ClientError  # type: ignore
 except ImportError:
     boto3 = None  # type: ignore
+    ClientError = Exception  # type: ignore
+
+# S3 error codes that mean "no state has been written yet" (a legitimate
+# first run), as opposed to a real read failure that must abort the job.
+_S3_MISSING_OBJECT_CODES = {"NoSuchKey", "404", "NoSuchObject"}
 
 
 def _now_utc() -> datetime:
@@ -81,64 +87,67 @@ def _get_s3_config():
 
 def _load_state_from_s3(bucket: str, key: str, region: str | None) -> StateDict:
     """
-    Load notification state from S3. Returns {} if the object is missing
-    or if any error occurs.
+    Load notification state from S3.
+
+    Returns {} only when the object does not yet exist (a legitimate first
+    run). Any other failure — missing boto3, permissions, network, corrupt
+    JSON — is raised so the job fails loudly rather than silently starting
+    from empty state and re-alerting every open opportunity.
     """
     if boto3 is None:
-        logging.error(
-            "boto3 is not available but S3_BUCKET/S3_STATE_KEY are set. "
-            "Falling back to empty state."
+        raise RuntimeError(
+            "boto3 is not available but S3_BUCKET/S3_STATE_KEY are set."
         )
-        return {}
 
+    client_kwargs = {}
+    if region:
+        client_kwargs["region_name"] = region
+    s3 = boto3.client("s3", **client_kwargs)  # type: ignore[arg-type]
+
+    logging.info(f"Loading notification state from s3://{bucket}/{key}")
     try:
-        client_kwargs = {}
-        if region:
-            client_kwargs["region_name"] = region
-        s3 = boto3.client("s3", **client_kwargs)  # type: ignore[arg-type]
-
-        logging.info(f"Loading notification state from s3://{bucket}/{key}")
         resp = s3.get_object(Bucket=bucket, Key=key)
-        body = resp["Body"].read().decode("utf-8")
-        data = json.loads(body)
-        if not isinstance(data, dict):
-            raise ValueError("State file in S3 must contain a JSON object at top level.")
-        return data  # type: ignore[return-value]
-    except Exception as e:
-        logging.info(
-            f"No existing or readable notification state in S3 "
-            f"(bucket={bucket}, key={key}): {e}. Starting fresh."
-        )
-        return {}
+    except ClientError as e:
+        code = str(e.response.get("Error", {}).get("Code", ""))
+        if code in _S3_MISSING_OBJECT_CODES:
+            logging.info(
+                f"No existing state object at s3://{bucket}/{key}; starting fresh."
+            )
+            return {}
+        raise
+
+    body = resp["Body"].read().decode("utf-8")
+    data = json.loads(body)  # corrupt JSON raises -> job failure
+    if not isinstance(data, dict):
+        raise ValueError("State object in S3 must be a JSON object at top level.")
+    return data  # type: ignore[return-value]
 
 
 def _save_state_to_s3(bucket: str, key: str, region: str | None, state: StateDict) -> None:
     """
-    Save notification state to S3. Errors are logged but not raised.
+    Save notification state to S3.
+
+    Raises on failure: a lost save means the same opportunities re-alert next
+    run, so the job should fail rather than pretend the write succeeded.
     """
     if boto3 is None:
-        logging.error(
-            "boto3 is not available but S3_BUCKET/S3_STATE_KEY are set. "
-            "Cannot save state to S3."
+        raise RuntimeError(
+            "boto3 is not available but S3_BUCKET/S3_STATE_KEY are set."
         )
-        return
 
-    try:
-        client_kwargs = {}
-        if region:
-            client_kwargs["region_name"] = region
-        s3 = boto3.client("s3", **client_kwargs)  # type: ignore[arg-type]
+    client_kwargs = {}
+    if region:
+        client_kwargs["region_name"] = region
+    s3 = boto3.client("s3", **client_kwargs)  # type: ignore[arg-type]
 
-        body = json.dumps(state, indent=2, sort_keys=True).encode("utf-8")
-        s3.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=body,
-            ContentType="application/json",
-        )
-        logging.info(f"Notification state saved to s3://{bucket}/{key}")
-    except Exception as e:
-        logging.error(f"Failed to save notification state to S3: {e}")
+    body = json.dumps(state, indent=2, sort_keys=True).encode("utf-8")
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=body,
+        ContentType="application/json",
+    )
+    logging.info(f"Notification state saved to s3://{bucket}/{key}")
 
 
 # --------------------------------------------------------------
@@ -161,38 +170,36 @@ def load_notification_state(path: Path) -> StateDict:
         logging.info(f"No existing notification state at {path}, starting fresh.")
         return {}
 
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            raise ValueError("State file must contain a JSON object at top level.")
-        return data  # type: ignore[return-value]
-    except Exception as e:
-        logging.warning(f"Failed to load notification state from {path}: {e}")
-        return {}
+    # A present-but-unreadable file is a real error: raise rather than silently
+    # discarding state (which would re-alert every open opportunity).
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("State file must contain a JSON object at top level.")
+    return data  # type: ignore[return-value]
 
 
 def save_notification_state(path: Path, state: StateDict) -> None:
     """
     Save notification state to S3 if configured, otherwise to a local JSON file.
 
-    Errors are logged but do not raise, to avoid breaking the arbitrage run.
+    Raises on failure. Callers must persist state ONLY after a notification has
+    actually been delivered, so a raised error here correctly fails the run
+    instead of leaving state and delivery out of sync.
     """
     bucket, key, region = _get_s3_config()
     if bucket and key:
         _save_state_to_s3(bucket, key, region, state)
         return
 
-    # Local JSON file mode
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-        with tmp_path.open("w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, sort_keys=True)
-        tmp_path.replace(path)
-        logging.info(f"Notification state saved to {path}")
-    except Exception as e:
-        logging.error(f"Failed to save notification state to {path}: {e}")
+    # Local JSON file mode. Errors propagate: a lost save means duplicate
+    # alerts next run, so the caller must know the write failed.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, sort_keys=True)
+    tmp_path.replace(path)
+    logging.info(f"Notification state saved to {path}")
 
 
 # --------------------------------------------------------------

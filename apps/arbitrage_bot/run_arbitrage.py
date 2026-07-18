@@ -62,6 +62,11 @@ PAYLOAD_FILE = ROOT_DIR / "data" / "payload.json"
 # Re-notification interval when ask is unchanged (in days)
 REMINDER_INTERVAL_DAYS = 7
 
+# A scheduled scan that priced less than this fraction of the discovered book
+# is treated as failed: acting on partial data risks missing new opportunities
+# (and, for a future full-book sweep, falsely marking listings gone).
+REQUIRED_COVERAGE = 0.95
+
 # Control whether we send "no new or improved opportunities" messages.
 SEND_EMPTY_ALERTS = False
 
@@ -152,6 +157,16 @@ def main():
     # 2) Run the shared scan pipeline
     outcome = run_scan(app_id, api_key, CONFIG, payload_path=PAYLOAD_FILE)
 
+    # 2a) Refuse to act on an incomplete scan. Raising here fails the job (and
+    #     fires the workflow's Slack failure alert) instead of silently sending
+    #     alerts derived from a fraction of the book.
+    if outcome.coverage < REQUIRED_COVERAGE:
+        raise RuntimeError(
+            f"Scan coverage {outcome.coverage:.1%} below required "
+            f"{REQUIRED_COVERAGE:.0%} ({outcome.failed_skus}/{outcome.expected_skus} "
+            f"SKUs in failed REST batches); not sending partial alerts."
+        )
+
     # 3) Apply deduplication rules
     notified, suppressed, new_state = filter_new_or_improved(
         outcome.candidates,
@@ -162,14 +177,28 @@ def main():
     # 4) Build Slack message
     msg = format_slack_message(notified, suppressed)
 
-    # 5) Send or print, depending on DRY_RUN and SEND_EMPTY_ALERTS
+    # 5) Dry run: report only. Never send, never persist — otherwise a dry run
+    #    would mark opportunities as notified and suppress the real alert.
     if DRY_RUN:
         print(msg)
-    elif notified or SEND_EMPTY_ALERTS:
-        send_slack_message(msg)
+        return
 
-    # 6) Persist updated notification state
-    save_notification_state(STATE_FILE, new_state)
+    # 6) Deliver, then persist state ONLY on a confirmed send. filter_new_or_improved
+    #    only changes state for candidates it puts in `notified`, so when there is
+    #    nothing to notify there is nothing new to persist. Persisting before Slack
+    #    confirms would mark these SKUs notified and suppress them for
+    #    REMINDER_INTERVAL_DAYS even though the alert never arrived.
+    if notified:
+        if not send_slack_message(msg):
+            raise RuntimeError(
+                "Slack rejected the alert; not persisting notification state so "
+                "these opportunities re-alert on the next run."
+            )
+        save_notification_state(STATE_FILE, new_state)
+    elif SEND_EMPTY_ALERTS:
+        # No opportunities and no state change; a delivery failure here is not
+        # data-corrupting, so it need not fail the job.
+        send_slack_message(msg)
 
 
 if __name__ == "__main__":
