@@ -253,6 +253,32 @@ call — and keep **SKU-level availability** for the full book. Broad liquidity 
 "days on market" claims are scoped to that subset, and the full-book claims are
 reduced to availability + observed-reference-price history as above.
 
+> **⚠ Updated by Phase 1A (2026-07-18) — the two paragraphs above are
+> superseded.** Validation against real responses
+> ([`PHASE1A-entity-model.md`](PHASE1A-entity-model.md)) found that the premise
+> "offer identity is only in GraphQL" is **wrong**:
+>
+> - A per-offer id exists in **both** endpoints — Algolia
+>   `purchase_options[].bbx_listing_id` ≡ GraphQL `variants[].product.listing_id`.
+>   So **offer identity is available full-book from the Algolia sweep**, with no
+>   GraphQL page-loads. The "politeness vs. offer-level tracking" tension above
+>   largely dissolves: we can have full-book offer identity *and* stay REST/Algolia-only.
+> - Consequently **seller-offer days-on-market and offer turnover move from "not
+>   supportable" to *provisionally* supportable** (full-book), pending 1B
+>   longitudinal proof that the id is durable across days and broad Algolia
+>   coverage — neither is yet established, so treat these as provisional.
+> - **Still unsupported** (unchanged): sold vs. withdrawn, and true transaction
+>   history — no settlement event is exposed.
+> - **GraphQL is not dropped:** it stays for *candidate* verification because it
+>   is the only *live* source of order-book depth (the second-lowest price the
+>   `pct_next` check needs; REST sees only the floor). Retiring it needs a
+>   concordance study — see the entity-model doc §5.
+> - The store also needs a **format** level: the priced line is
+>   `(parent_sku, format)`, not `parent_sku` (REST prices per format).
+>
+> The schema sketch below still stands, with those refinements folded in during
+> 1B.
+
 ---
 
 ## What Phase 1 is *not*
@@ -352,6 +378,10 @@ Two rules that follow from the entity discussion above:
     incomplete discovery must **not** count as a miss.
 - Offer-level rows exist only for the **candidate / watchlist subset** that gets
   GraphQL; the full book is SKU-level availability.
+  > **Superseded by Phase 1A:** offer-level rows can be produced **full-book**
+  > from Algolia `purchase_options[]` (`bbx_listing_id`), no GraphQL required.
+  > SKUs are keyed `(parent_sku, format)`. See the ⚠ note earlier in this doc and
+  > [`PHASE1A-entity-model.md`](PHASE1A-entity-model.md).
 
 ### Writers / readers / retention
 

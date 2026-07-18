@@ -1,6 +1,8 @@
 # Phase 1A — Entity model & API validation
 
-**Status:** validated against real API responses captured 2026-07-18.
+**Status:** initial validation complete (real API responses captured
+2026-07-18); **longitudinal validation pending** (see §4, §5). Enough to start a
+*provisional* Phase 1B schema that preserves the open uncertainties.
 **Scope:** decide *what* we store. No schema, no storage code — that is 1B.
 
 This document pins down the entities the scan store will track (product / SKU /
@@ -13,29 +15,34 @@ the "what the store does NOT support" list in [`PHASE1.md`](PHASE1.md).
 
 ## TL;DR (the findings that matter)
 
-1. **A stable, durable per-offer identifier exists.** Every individual seller
-   offer has a numeric id that appears in *both* endpoints:
+1. **A strong candidate per-offer identifier exists** (durability not yet proven
+   longitudinally). Every individual seller offer has a numeric id that appears
+   in *both* endpoints:
    - Algolia: `purchase_options[].bbx_listing_id` (and the top-level
      `bbx_listing_id` / `objectID`).
    - GraphQL: `variants[].product.listing_id`.
 
    They are the **same number**. In the multi-offer fixture the four offers are
-   `133111, 137028, 164943, 169009` in both endpoints. This directly answers the
-   make-or-break question: **yes**, we can track an individual offer across scans.
-   (Evidence and caveats in [§4](#4-the-make-or-break-stable-offer-identity).)
+   `133111, 137028, 164943, 169009` in both endpoints. What this *proves* is
+   same-scan cross-source equality and minute-scale continuity; treating the id
+   as durable across days / price changes / disappearance / relisting is a
+   high-confidence **assumption** still to be validated longitudinally in 1B.
+   (Evidence and its limits in [§4](#4-the-make-or-break-stable-offer-identity).)
 
-2. **The roadmap conflated four levels, and there really are four.** Product →
-   SKU → **format** → offer. The middle "format" split (case size × bottle
-   volume) was missing from the roadmap and is load-bearing: REST prices
-   *per format*, and one wine can have many. (See [§3](#3-the-entity-model).)
+2. **Three persisted entities, with format inside the SKU key.** Product → SKU
+   → offer, where the **format** (case size × bottle volume) is part of the SKU's
+   identity, not a fourth stored level. This was the roadmap's real gap: REST
+   prices *per format*, one wine has many, so the priced line is
+   `(parent_sku, format)` — not `parent_sku`. (See [§3](#3-the-entity-model).)
 
-3. **Offer-level data is available for the FULL BOOK from Algolia alone —
-   no GraphQL needed.** Each Algolia object already carries
-   `purchase_options[]`: the full set of live offers for that wine, each with
-   `bbx_listing_id` + exact price + format. This **revises** the roadmap premise
-   that offer identity requires a GraphQL page-load, and leaves the Phase-3
-   GraphQL call nearly redundant — the recommendation is to **minimise GraphQL**
-   (A/B it in 1B, then likely drop it) for politeness, latency, and simplicity.
+3. **Offer-level data appears available for the FULL BOOK from Algolia alone**
+   (broad coverage not yet proven — see caveats). Each Algolia object carries
+   `purchase_options[]`: the offer set for that wine, each with `bbx_listing_id`
+   + exact price + format. On the sampled wines this **revises** the roadmap
+   premise that offer identity requires a GraphQL page-load, and makes the
+   full-book GraphQL sweep unnecessary. Whether it also lets us *drop* GraphQL
+   from candidate verification is a separate, unproven question — the answer
+   needs a concordance study, not an assumption.
    (See [§5](#5-coverage-split-revised), esp. [§5.1](#51-is-the-graphql-call-still-pulling-its-weight)–[§5.2](#52-recommendation--minimise-graphql).)
 
 4. **Cross-endpoint eventual consistency is real and observable.** A freshly
@@ -82,6 +89,14 @@ Product            a wine (producer + cuvée + region), typically vintage-specif
   └─ SKU           product + vintage + FORMAT (case size × bottle volume) = the priced line
        └─ Offer    one seller's ask for that SKU  (bbx_listing_id / listing_id)
 ```
+
+**This is three persisted entities, not four.** Format is a component of the
+SKU's identity key, not a stored level of its own. A genuine four-level model
+would be *wine/cuvée → vintage product → format SKU → offer*, but there is **no
+dependable cross-vintage wine identifier** in the data (`parent_sku` already
+bakes in the vintage — see §3.1), so the top level cannot be stored without a
+separate identity strategy. We therefore keep three entities and treat format as
+part of the SKU.
 
 ### 3.1 Product
 
@@ -190,26 +205,36 @@ Evidence:
    endpoint missing from the other after propagation settled.
    (`algolia_listing_hit.json` `multi_offer` vs `gql_order_book_multi.json`.)
 
-2. **Ids are assigned once, at offer creation, and persist.** They are
-   monotonic integers: today's brand-new offers occupy `168201–169009`
-   (the whole "new to BBX, 1 day" window), while long-standing offers on the same
-   wines carry small ids (`668` is still live on `20158007342`). A monotonic
-   creation-stamped integer that survives from id 668 to 169009 is exactly the
-   durable handle we need: an offer keeps its id for its whole life, and a
-   *new* id is a genuinely new offer.
+2. **Ids *look* creation-stamped and long-lived — but this is inference, not
+   proof.** In `algolia_deep_book.json` a single wine (`20158007342`) carries
+   live offers spanning `listing_id` `668 .. 168993`: tiny (old) and large (new)
+   ids coexist in the *same* book at one instant. Brand-new offers observed that
+   day clustered near the top of the range (the freshly-created `169009`). That
+   is consistent with "ids are assigned once at creation and persist," which is
+   the durability we want — but a single-instant snapshot cannot *prove* an id
+   survives a price change, several days, disappearance, or a relisting. **1B
+   must confirm this longitudinally** before we rely on "a vanished id = a gone
+   offer" or "a new id = a genuinely new offer."
 
-3. **Ids disambiguate same-price offers.** Five offers at £500 on one wine share
-   nothing *but* their ids. Without `bbx_listing_id` these are indistinguishable;
-   with it, each has a trackable lifetime.
+3. **Ids disambiguate same-price offers.** In `algolia_deep_book.json` five
+   offers sit at £500 and four at £450, sharing nothing *but* their ids
+   (asserted in `test_same_price_offers_stay_separate`). Without `bbx_listing_id`
+   these collapse into one; with it, each is separately trackable.
 
-**What this unlocks that the roadmap thought we couldn't have:**
+**What this unlocks that the roadmap thought we couldn't have** (conditional on
+the durability assumption in point 2 holding up in 1B):
 
 - **Offer days-on-market** — first-seen → last-seen per `bbx_listing_id`. The
   roadmap listed this under "NOT supportable… needs stable seller-offer IDs".
-  We have the ids, so it *is* supportable (for whatever coverage we scan — see §5).
+  We now have the ids, so it *becomes* supportable — for whatever coverage we
+  scan (see §5) and once durability is confirmed longitudinally.
 - **True offer turnover** — the cheapest ask can hold at £250 while the *offer*
   behind it changes (`133111` → `164943`, both £250); tracking ids sees that
   churn that a price-only log misses.
+
+Until that longitudinal check exists, offer-lifetime analytics should be treated
+as **provisional** and each observation tagged with a trust/consistency status
+(see §5, §9), not published as authoritative.
 
 **What it still does NOT unlock (unchanged from the roadmap):**
 
@@ -232,18 +257,23 @@ The roadmap's split:
 > - Full book (~15k) → SKU-level *availability* only, REST-only daily sweep.
 > - Candidate subset → seller-offer detail via GraphQL.
 
-**Revision, from evidence: the full-book Algolia sweep already returns
-offer-level data for free.** Every Algolia object carries `purchase_options[]` —
-the complete live-offer set for that wine, each offer with `bbx_listing_id`,
-exact price, and format. We get this in the *same* discovery requests we already
-pay for; no extra call, and specifically **no GraphQL page-load**.
+**Revision, from evidence (sampled, not yet proven at index scale): the
+full-book Algolia sweep already returns offer-level data for free.** Every
+Algolia object we sampled carries `purchase_options[]` — the offer set for that
+wine (appearing complete against REST/GraphQL on those wines), each offer with
+`bbx_listing_id`, exact price, and format. We get this in the *same* discovery
+requests we already pay for; no extra call, and specifically **no GraphQL
+page-load**. Broad coverage — one object per `parent_sku` across the whole index,
+and `purchase_options[]` completeness — is a caveat below, not yet established.
 
-Consequences:
+Consequences (contingent on that coverage holding up):
 
 - **Full book → SKU availability *and* offer-level price/lifetime**, both from
   Algolia + REST. Offer identity is no longer gated behind GraphQL. We can run
   offer days-on-market across the whole book, politely.
-- **GraphQL's job shrinks to almost nothing** — see the redundancy analysis next.
+- **GraphQL's job shrinks to candidate verification only** — redundant for
+  full-book discovery/history, but still the sole live source of order-book depth
+  for the `pct_next` check. See the analysis next.
 
 Two honest caveats that keep this from being a free lunch:
 
@@ -279,47 +309,64 @@ format, `sale_by_case_only` — is already in Algolia `purchase_options[]`. Grap
 price, which is just price ÷ `case_size`). For BBX that is low value: an offer is
 typically one case.
 
-So GraphQL is **redundant for everything the pipeline currently uses it for**
-except one thing: it is the only source of full order-book **depth drawn from the
-transactional backend** rather than the Algolia search snapshot. That only matters
-for the `pct_next` "headroom to the next-lowest competing ask" test and the
-`OB_CHANGED` cross-check — and only *if* we don't trust Algolia's freshness at the
-moment of acting.
+So GraphQL is **redundant for offer discovery, identity, and history** — Algolia
+covers those. But it is **not** redundant for candidate verification, and an
+earlier draft of this doc got that wrong. Here is the correction:
 
-Two things weaken even that residual value:
+**REST validates only the floor, so it cannot cross-check the second-lowest
+price** — and the second-lowest price is exactly what the `pct_next` "headroom to
+the next competing ask" threshold depends on. Worked example (the bug that
+motivates keeping GraphQL):
 
-- **The freshness edge is unproven, and our one observation went the other way.**
-  GraphQL *lagged* Algolia on the new offer `169009` (§6). That was creation
-  propagation; the freshness risk we actually care about is offer *disappearance*
-  (the £680→£950 "gone" case), where we have no evidence GraphQL beats Algolia.
-  Both are cached; neither is instant.
-- **The `OB_CHANGED` cross-check doesn't need GraphQL specifically.** Its value is
-  comparing the REST floor to an *independent* depth source. Algolia is an
-  independent system too, so REST-vs-Algolia is still a real cross-check.
+```
+Candidate floor (REST least_listing_price):  £80   ✓ live
+Algolia purchase_options second offer:       £100  → implied headroom 20%
+A new £82 offer exists but hasn't reached the Algolia snapshot yet.
+REST still reports floor £80; Algolia still reports next £100.
+→ REST and Algolia AGREE, both look fine, and we alert "20% headroom"…
+   when the true headroom is ~2.4%.
+```
 
-### 5.2 Recommendation — minimise GraphQL
+REST + Algolia agreeing on the floor tells us nothing about a *stale second
+price*, because REST never sees the second price at all. Only GraphQL gives a
+**live** reading of order-book **depth** (the 2nd/3rd offers), which is what
+`pct_next` and the `OB_CHANGED` guard actually rely on. That is a real,
+non-redundant job.
 
-Politeness, latency, and simplicity all point the same way: **use GraphQL as
-little as possible.** Concretely:
+The genuinely open question is narrower: **how often does GraphQL's live depth
+actually differ from Algolia's snapshot depth enough to flip a candidate's
+verdict?** We don't know. Our one datapoint (§6) showed GraphQL *lagging* Algolia
+on a creation event — but the risk that bites is a stale Algolia *second price*,
+which we have not measured. Until we have, GraphQL stays.
 
-- **Full book:** offer identity / history / depth from Algolia + REST. **No
-  GraphQL.** (Never was the plan; now positively unnecessary.)
-- **Candidates:** treat the Phase-3 GraphQL call as **on probation, not load-bearing.**
-  The freshness re-check before alerting can be served by a live REST floor plus
-  Algolia depth. Before committing to that in 1B, run a cheap A/B over N
-  candidates comparing three depth pictures — REST floor, Algolia
-  `purchase_options`, GraphQL variants — and measure how often GraphQL disagrees
-  with Algolia by more than `_ask_match_tol`. If disagreement is rare, **drop the
-  GraphQL call entirely** and the pipeline simplifies to **Algolia + REST**: one
-  fewer endpoint, no per-candidate product-page GET + POST, and the politest
-  footprint of the three designs.
-- If the A/B shows GraphQL *does* catch disappearances Algolia misses, keep it
-  **only** for the final pre-action re-verify on the handful of wines a user is
-  about to act on — not for scanning.
+### 5.2 Recommendation — minimise GraphQL where proven, keep it where it earns its place
 
-The bar for keeping GraphQL is therefore explicit: it survives only if measured
-evidence shows its backend-sourced depth beats the Algolia snapshot on offer
-*disappearance* often enough to matter. Absent that, 1B should remove it.
+Politeness, latency, and simplicity all favour less GraphQL — but only where
+evidence shows it is safe. Split by scope:
+
+- **Full book: no GraphQL.** Offer identity / history from Algolia + REST.
+  (Never was the plan; now positively unnecessary — this part is settled.)
+- **Candidates: keep the Phase-3 GraphQL call for now.** It is the only live
+  source of order-book depth, which `pct_next` needs (see the worked example
+  above). Dropping it here would be a correctness regression, not a
+  simplification. Do **not** replace it with "REST floor + Algolia depth".
+- **Then run a concordance study** (not a quick A/B) before changing anything.
+  Over a **stratified sample across several days** — sole offers, tied floors,
+  deep books, multiple formats — capture REST, Algolia and GraphQL together per
+  candidate and measure:
+  - offer-id set equality (Algolia vs GraphQL);
+  - cheapest **and second-cheapest** price equality;
+  - candidate pass/fail disagreement (the decision-relevant metric);
+  - direction and duration of propagation lag, split by event type
+    (creation / price-change / disappearance).
+  Only if the study shows Algolia's depth matches GraphQL closely enough that
+  candidate verdicts don't flip may we retire GraphQL from candidate
+  verification — and even then, keep it for the final pre-action re-verify on the
+  handful of wines a user is about to act on.
+
+The bar is therefore explicit and **evidence-gated**: full-book GraphQL is gone
+today; candidate GraphQL stays until a concordance study proves the Algolia
+snapshot is a safe substitute for its live depth.
 
 ---
 
@@ -395,11 +442,11 @@ line. Proposed reconciliation (to fold into `PHASE1.md` when 1B lands):
 
 | `PHASE1.md` claim | Verdict after 1A | Why |
 |---|---|---|
-| "Seller-offer days-on-market — NOT supportable" | **Now supportable** | `bbx_listing_id` is a durable per-offer id (§4); available full-book via Algolia (§5) |
+| "Seller-offer days-on-market — NOT supportable" | **Provisionally supportable** | `bbx_listing_id` is a strong candidate per-offer id (§4), available full-book via Algolia (§5) — pending longitudinal durability + coverage validation |
 | "True liquidity / turnover — invisible" | **Partially supportable** | Offer *churn* (ids appearing/disappearing) is visible; actual *fills* are not |
 | "Sold vs. withdrawn — can't distinguish" | **Still unsupported** | No settlement event in anonymised P2P (§4) |
 | "Transaction history — lost between scans" | **Still unsupported** | `last_bbx_transaction` is one scalar, not a trade log |
-| "Offer identity needs GraphQL / candidate-only" | **Revised** | Offer identity is in Algolia discovery too; GraphQL is now near-redundant and a candidate for removal (§5.1–5.2) |
+| "Offer identity needs GraphQL / candidate-only" | **Revised** | Offer identity is in Algolia discovery too, so full-book GraphQL is dropped; GraphQL stays for candidate depth verification pending a concordance study (§5.1–5.2) |
 | SKU availability, observed reference-price changes, ask-change dedup | **Confirmed** | Directly from REST fields per scan |
 
 New unsupported/limitations surfaced by 1A (were not in `PHASE1.md`):
@@ -415,16 +462,60 @@ New unsupported/limitations surfaced by 1A (were not in `PHASE1.md`):
 
 ## 9. What 1B should carry forward (hand-off checklist)
 
-- Key the SKU entity on **`(parent_sku, format)`**; stop dropping REST
-  `entries[1:]`.
-- Key the offer entity on **`bbx_listing_id`**; treat it as durable; a new id =
-  new offer, a vanished id = offer gone (not sold).
-- Source offers full-book from Algolia `purchase_options[]`. **Minimise GraphQL**
-  (§5.1–5.2): A/B GraphQL depth vs Algolia depth over N candidates, and if
-  disagreement is rare, drop the Phase-3 call so the pipeline is Algolia + REST.
-  Keep GraphQL at most for a final pre-action re-verify, never for scanning.
-- Never emit offer/SKU `gone` from a single scan or a scan with endpoint
-  disagreement; require two consecutive misses **and** discovery completeness.
+Proceed with storage, but **preserve the open uncertainties in the model** — do
+not bake in claims 1A only made provisionally.
+
+**Entities & keys**
+
+- `products`: `parent_sku` + descriptive fields (§3.1).
+- `skus`: key on **`(parent_sku, format)`** (normalised `case_size`,
+  `bottle_volume`), plus a nullable child `sku` string. **Stop dropping REST
+  `entries[1:]`** — keep every format (§3.2).
+- `offers`: key on provider + **`bbx_listing_id`**, linked to a format SKU.
+  Treat the id as a *strong candidate* identifier, **not yet proven durable** —
+  keep the "new id = new offer / vanished id = gone offer" rule behind the
+  longitudinal check (§4). A vanished id is `gone`, never `sold`.
+- `source_observations`: one row per (source, scan, entity) with observed time,
+  the source's own `index_last_update`, raw identity, and a **trust/consistency
+  status**. Store the Algolia snapshot stamp **separately** from the scanner's
+  own observed-at time.
+- `current_state`: materialised latest state for fast reads.
+- `observation_events`: change history derived **only from trusted, complete
+  scans**.
+
+**Data-quality rules**
+
+- Store prices as **integer pence / fixed-decimal**, never float (the fixtures
+  show values like `41.666666666667` per bottle — round-trip through pence).
+- **Do not treat `qty_available` as live offer quantity yet.** The REST fixture
+  has positive `qty_available` for formats whose `least_listing_price` is `0`
+  (no live offer) — its semantics need separate validation (§3.2).
 - Cross-check `min(purchase_options price)` vs REST `least_listing_price` per
-  scan; mark untrusted on disagreement.
-- Keep the fixtures as regression anchors for the parse paths above.
+  scan; mark the SKU untrusted on disagreement (mirrors `OB_CHANGED`).
+
+**Disappearance / `gone`**
+
+- Require **discovery completeness** (the still-open `fetch_listings` prerequisite)
+  **and** two consecutive Algolia misses. Record `gone`, not `sold`. A GraphQL
+  disagreement alone must **not** advance the missing counter.
+
+**GraphQL**
+
+- **No full-book GraphQL.** Keep the candidate-verification GraphQL call (it is
+  the only live source of order-book *depth* for `pct_next` — §5.1). Retire it
+  from candidate verification **only** after the concordance study (§5.2) shows
+  the Algolia snapshot doesn't flip candidate verdicts.
+
+**Validation still owed (why this is "initial, not complete")**
+
+- Longitudinal offer-id durability across days / price-changes / disappearance /
+  relisting (§4).
+- Broad Algolia coverage: one-object-per-`parent_sku` at index scale,
+  `purchase_options[]` completeness, offer-id global uniqueness, deep-book
+  pagination behaviour when `is_more_variant_available` is `true` (§5, §6).
+- The GraphQL-vs-Algolia depth concordance study (§5.2).
+
+**Regression anchors**
+
+- The contract tests in `tests/test_fixtures_contract.py` lock the parse
+  invariants above; extend them as the 1B parsers land.

@@ -1,0 +1,734 @@
+{
+  "parent_sku": "20158007342",
+  "name": "2015 Château Pontet-Canet, Pauillac, Bordeaux",
+  "product_url": "/products-20158007342-2015-chateau-pontet-canet-pauillac-bordeaux",
+  "family_type": "Wines",
+  "main_image": "20158007342",
+  "maturity": "Ready - at best",
+  "maturity_sort_order": 30,
+  "colour": "Red",
+  "country": "France",
+  "region": "Bordeaux",
+  "subregion": "Médoc",
+  "grape_varieties": [
+    "Cabernet Franc",
+    "Cabernet Sauvignon",
+    "Merlot",
+    "Petit Verdot"
+  ],
+  "vintage": 2015,
+  "sweetness": "Dry",
+  "producer": "Château Pontet-Canet",
+  "category_ids": [
+    "Trading Goods > Wine > Still",
+    "Trading Goods > Wine",
+    "Trading Goods",
+    "Wine Regional Hierarchy > France > Bordeaux > Médoc > Pauillac",
+    "Wine Regional Hierarchy > France > Bordeaux > Médoc",
+    "Wine Regional Hierarchy > France > Bordeaux",
+    "Wine Regional Hierarchy > France",
+    "Wine Regional Hierarchy",
+    "Digital Trading > All wines to lay down > Manual > Bordeaux Grands Crus to lay down",
+    "Digital Trading > All wines to lay down > Manual",
+    "Digital Trading > All wines to lay down",
+    "Digital Trading"
+  ],
+  "category_uids": [
+    "NzkwMA==",
+    "NzkwMQ==",
+    "NzkwMg==",
+    "ODE0Mg==",
+    "ODE0Mw==",
+    "MTA2MTE=",
+    "MTA2MTY=",
+    "MTA2MTg=",
+    "MjI2Mjk=",
+    "MjI4NjI=",
+    "MjI5MTk=",
+    "MjI3NDg="
+  ],
+  "sku": "2015-06-00750-00-8007342",
+  "alcohol_percentage": [
+    "13.5"
+  ],
+  "purchase_mode": "In Bond",
+  "en_primeur": "Not En Primeur",
+  "stock_origin": "BBX",
+  "brand": null,
+  "prices": {
+    "price_per_case_exact": 470,
+    "price_per_case": "£200-£499.99"
+  },
+  "case_size": 6,
+  "main_ingredients": null,
+  "bottle_volume": "75 cl",
+  "bottle_order_unit": "Bottle",
+  "bbx_listing_id": "668",
+  "accessory_type": null,
+  "bbx_categories": [],
+  "bbx_listing_date": "2024-05-08",
+  "new_wines": [],
+  "new_to_bbx": [],
+  "hybris_bbx_listing_id": "5940386",
+  "come_in_stock_in": null,
+  "spirit_type": null,
+  "spirit_age": null,
+  "own_selection": false,
+  "critic_scores": [
+    {
+      "nickname": "Jancis Robinson MW",
+      "score": "17/20"
+    },
+    {
+      "nickname": "Lisa Perrotti-Brown MW",
+      "score": "96+/100"
+    },
+    {
+      "nickname": "Steven Spurrier",
+      "score": "96/100"
+    },
+    {
+      "nickname": "James Suckling",
+      "score": "97-98/100"
+    }
+  ],
+  "roundel_code": "",
+  "labels": [],
+  "is_a_gift_card": null,
+  "index_last_update": "18-07-2026 12pm",
+  "ga_category_uid": "MTA2MTg=",
+  "ga_category_path": "region-w-fr22005005-pauillac",
+  "purchase_options": [
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "668",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 470,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "5940386",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "45064",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 565,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "7133674",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "108341",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 445,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "7418182",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "118483",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 500,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "7458089",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "120435",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 900,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "7461764",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "120538",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 550,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "7462790",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "121213",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 488,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "7476315",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-12-00375-00-8007342",
+      "bbx_listing_id": "122558",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 12,
+      "sale_by_case_only": false,
+      "bottle_volume": "37.5 cl",
+      "bottle_order_unit": "Half Bottle",
+      "prices": {
+        "price_per_case_exact": 420,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "7482612",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "124410",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 450,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "7491287",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "127050",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 500,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "7499923",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "133324",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 450,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "134423",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 450,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "136912",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 455,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "137937",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 450,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-01-8007342",
+      "bbx_listing_id": "149838",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 435,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "150222",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 430,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "150334",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 395,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "151138",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 500,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "151867",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 400,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "153704",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 400,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "154941",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 425,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "156320",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 390,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "158032",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 500,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-01-8007342",
+      "bbx_listing_id": "158902",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 380,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "159490",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 410,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "163012",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 390,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "165740",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 375,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [],
+      "labels": []
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "168251",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 500,
+        "price_per_case": "£500-£999.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [
+        "3 Days",
+        "7 Days"
+      ],
+      "labels": [
+        {
+          "sort_order": "7",
+          "label": "New To BBX",
+          "code": "new_to_bbx"
+        }
+      ]
+    },
+    {
+      "sku": "2015-06-00750-00-8007342",
+      "bbx_listing_id": "168319",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 427.5,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [
+        "3 Days",
+        "7 Days"
+      ],
+      "labels": [
+        {
+          "sort_order": "7",
+          "label": "New To BBX",
+          "code": "new_to_bbx"
+        }
+      ]
+    },
+    {
+      "sku": "2015-06-00750-01-8007342",
+      "bbx_listing_id": "168993",
+      "stock_origin": "BBX",
+      "purchase_mode": "In Bond",
+      "en_primeur": "Not En Primeur",
+      "case_size": 6,
+      "sale_by_case_only": false,
+      "bottle_volume": "75 cl",
+      "bottle_order_unit": "Bottle",
+      "prices": {
+        "price_per_case_exact": 440,
+        "price_per_case": "£200-£499.99"
+      },
+      "hybris_bbx_listing_id": "",
+      "bbx_categories": [],
+      "new_wines": [],
+      "new_to_bbx": [
+        "1 Day",
+        "2 Days",
+        "3 Days",
+        "7 Days"
+      ],
+      "labels": [
+        {
+          "sort_order": "7",
+          "label": "New To BBX",
+          "code": "new_to_bbx"
+        }
+      ]
+    }
+  ],
+  "objectID": "668",
+  "_note": "Real Algolia prod_product object for parent_sku 20158007342, captured 2026-07-18T14:58:48.513739+00:00. _highlightResult removed. 30 live offers spanning formats and prices; used to evidence listing_id durability at a point in time (ids 668..168993 coexisting) and same-price offer disambiguation."
+}

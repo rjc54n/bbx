@@ -128,12 +128,26 @@ Implemented in `core/notification_state.py`:
   coverage floor that fails the run rather than alerting on partial data; sharding
   complement always queried (safe for multi-valued facets); hourly cron moved off
   `:00`.
-- **Phase 1A (planned)** — entity model: define product / SKU / seller-offer;
-  decide offer-level identity for the candidate subset vs SKU-level availability
-  for the full book; validate against captured API responses. **Includes**
-  hardening the GraphQL order-book parse so a partially-parseable book is treated
-  as unavailable end-to-end (the pipeline already does this via
-  `order_book_readable`; 1A extends it as the entity model is formalised).
+- **Phase 1A (initial validation done)** — entity model validated against
+  captured real API responses (fixtures under `tests/fixtures/`, contract tests
+  in `tests/test_fixtures_contract.py`). Findings, in full, in
+  [`docs/PHASE1A-entity-model.md`](docs/PHASE1A-entity-model.md):
+  - **Three entities** — product → SKU → offer, where **format** (case size ×
+    bottle volume) is part of the SKU key. REST prices *per format*, so the
+    priced line is `(parent_sku, format)`, not `parent_sku`.
+  - **Offer identity exists in both endpoints** — Algolia
+    `purchase_options[].bbx_listing_id` ≡ GraphQL `variants[].product.listing_id`
+    — a *strong candidate* durable offer id (longitudinal durability still to be
+    proven in 1B).
+  - **Offer-level data is available full-book from Algolia** (not GraphQL-only as
+    earlier assumed): each object's `purchase_options[]` lists every live offer.
+    So **full-book scans need no GraphQL**; GraphQL is retained only for
+    candidate depth verification (it is the sole *live* source of the
+    second-lowest price the `pct_next` check needs), pending a concordance study.
+  - Longitudinal validation (id durability, broad Algolia coverage, the GraphQL
+    concordance study) remains **open** — hence "initial validation", not "done".
+  - Still includes the GraphQL order-book parse hardening (partial parse →
+    unavailable end-to-end, already done via `order_book_readable`).
 - **Phase 1B (planned)** — persistent scan store: an append-only **changelog**
   (`observation_events`) plus `scan_runs` metadata (so "unchanged" is
   distinguishable from "not observed"), `current_state`, and `products`. Backend:

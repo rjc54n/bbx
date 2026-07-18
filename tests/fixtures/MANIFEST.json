@@ -1,0 +1,57 @@
+{
+  "_about": "Provenance for the committed Phase 1A fixtures. All captured 2026-07-18 in one session against the live BBX endpoints via scripts/capture_phase1a_fixtures.py-equivalent calls. Times are UTC; those marked approx were reconstructed from capture-session file mtimes (per-response stamping was not in place at capture — the capture script now records exact stamps on re-run). Prices are pounds; no redactions beyond removing Algolia _highlightResult (search-highlight metadata). No tokens/cookies/account-ids are present in any response body.",
+  "algolia_index_snapshot_note": "Algolia objects carry their own index_last_update stamp; observed values were '18-07-2026 1pm' (multi/sole hits) and '18-07-2026 12pm' (deep book) — i.e. a periodically-reindexed snapshot up to ~2-3h behind capture time, and stamps differ per object. Store this separately from the scanner's own observed-at time.",
+  "fixtures": [
+    {
+      "fixture": "algolia_listing_hit.json",
+      "endpoint": "algolia prod_product",
+      "query": "stock_origin:'BBX' AND parent_sku in ['20171135668','20158024224'] (discovered via new_to_bbx:'1 Day' sweep, then confirmed by direct parent_sku query)",
+      "captured_utc_approx": "2026-07-18T14:02Z",
+      "capture_order": 1,
+      "index_last_update": "18-07-2026 1pm",
+      "notes": "multi_offer=20171135668 (4 offers), sole_offer=20158024224 (1 offer)."
+    },
+    {
+      "fixture": "rest_pricing.json",
+      "endpoint": "getBiddableCprStock",
+      "query": "product_codes=20138117265,20158007342,20158024224,20171130940,20171135668,20201335042",
+      "captured_utc_approx": "2026-07-18T14:04Z",
+      "capture_order": 2,
+      "notes": "One entry per format per SKU; 20158007342 has 7 formats."
+    },
+    {
+      "fixture": "gql_order_book_multi_lagging.json",
+      "endpoint": "customProductDetail",
+      "query": "sku=20171135668",
+      "captured_utc_approx": "2026-07-18T14:04Z",
+      "capture_order": 3,
+      "notes": "3 variants. Captured BEFORE the settled version below. The newly-created offer 169009 (£240) was already present in REST (least_listing_price=240) and Algolia but had not yet propagated to GraphQL. This ordering is the basis of the eventual-consistency finding."
+    },
+    {
+      "fixture": "gql_order_book_sole.json",
+      "endpoint": "customProductDetail",
+      "query": "sku=20158024224",
+      "captured_utc_approx": "2026-07-18T14:04Z",
+      "capture_order": 4,
+      "notes": "1 variant, listing_id 169005."
+    },
+    {
+      "fixture": "gql_order_book_multi.json",
+      "endpoint": "customProductDetail",
+      "query": "sku=20171135668",
+      "captured_utc_approx": "2026-07-18T14:08Z",
+      "capture_order": 5,
+      "seconds_after_lagging_capture_approx": 240,
+      "notes": "4 variants (settled). ~4 min after the lagging capture; offer 169009 now present. listing_id set {133111,137028,164943,169009} exactly matches Algolia purchase_options."
+    },
+    {
+      "fixture": "algolia_deep_book.json",
+      "endpoint": "algolia prod_product",
+      "query": "stock_origin:'BBX' AND parent_sku:'20158007342'",
+      "captured_utc": "2026-07-18T14:58:48Z",
+      "capture_order": 6,
+      "index_last_update": "18-07-2026 12pm",
+      "notes": "30 offers; listing_id range 668..168993; prices shared by >1 offer: {500:5, 450:4, 400:2, 390:2}."
+    }
+  ]
+}
