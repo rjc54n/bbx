@@ -6,12 +6,17 @@
 --   - Views are ordinary (security definer, the Postgres default) since the
 --     store is single-owner with no per-user rows yet. Revisit with
 --     `security_invoker = true` once per-user rows (watchlists) exist.
---   - candidate_view exposes pct_market/pct_last computed from stored sku
---     prices. It deliberately does NOT compute pct_next: that requires the
---     live GraphQL order-book check the existing scan pipeline performs,
---     which stored data does not replace (see core/pipeline.py
---     classify_order_book). signal_type flags this as a stored estimate so
---     the UI doesn't present it as live-verified.
+--   - candidate_view exposes pct_market/pct_last/pct_next computed from
+--     stored sku/offer prices (offers.match_confidence = 'inferred' only,
+--     since 'unmatched' offers didn't resolve to a format_code). These are
+--     all as-of-last-sweep estimates, not the live GraphQL order-book check
+--     the existing scan pipeline performs (see core/pipeline.py
+--     classify_order_book) -- stored offers can be stale or coverage-gapped,
+--     so a NULL pct_next means "no competing offer found in store", never a
+--     claim of sole-seller status. signal_type flags all three as stored
+--     estimates; the live GraphQL check remains a separate, user-initiated
+--     "poll latest pricing" action on the per-wine detail page, not
+--     something the browse view computes for every row.
 
 -- ---------------------------------------------------------------------------
 -- Search indexes
@@ -30,6 +35,11 @@ CREATE INDEX IF NOT EXISTS idx_products_vintage ON products(vintage);
 
 CREATE INDEX IF NOT EXISTS idx_skus_gone_since ON skus(gone_since);
 CREATE INDEX IF NOT EXISTS idx_offers_gone_since ON offers(gone_since);
+
+-- Backs the candidate_view LATERAL join computing pct_next/next_lowest_price_p
+-- per sku against the matching offers -- without it that join is an unindexed
+-- scan of ~32k offers per sku.
+CREATE INDEX IF NOT EXISTS idx_offers_parent_sku_format ON offers(parent_sku, format_code);
 
 -- ---------------------------------------------------------------------------
 -- candidate_view: one row per (parent_sku, format_code), with the discount
@@ -67,12 +77,39 @@ SELECT
             1
         )
     END AS pct_last,
+    CASE
+        WHEN ob.floor_count >= 2 THEN s.least_listing_price_p
+        ELSE ob.next_higher_p
+    END AS next_lowest_price_p,
+    CASE
+        WHEN ob.floor_count >= 2 THEN 0.0
+        WHEN ob.next_higher_p IS NOT NULL THEN ROUND(
+            ((ob.next_higher_p - s.least_listing_price_p)::NUMERIC / ob.next_higher_p) * 100,
+            1
+        )
+    END AS pct_next,
     'stored_estimate'::TEXT AS signal_type,
     (s.gone_since IS NULL) AS is_active,
     s.first_seen_at,
     s.last_seen_at
 FROM skus s
 JOIN products p ON p.parent_sku = s.parent_sku
+LEFT JOIN LATERAL (
+    SELECT
+        MIN(o.price_per_case_p) FILTER (
+            WHERE o.price_per_case_p > s.least_listing_price_p
+                + GREATEST(0.005 * s.least_listing_price_p, 1)
+        ) AS next_higher_p,
+        COUNT(*) FILTER (
+            WHERE ABS(o.price_per_case_p - s.least_listing_price_p)
+                <= GREATEST(0.005 * s.least_listing_price_p, 1)
+        ) AS floor_count
+    FROM offers o
+    WHERE o.parent_sku = s.parent_sku
+      AND o.format_code = s.format_code
+      AND o.match_confidence = 'inferred'
+      AND o.gone_since IS NULL
+) ob ON TRUE
 WHERE s.least_listing_price_p IS NOT NULL
   AND s.least_listing_price_p > 0
   AND s.market_price_p IS NOT NULL
