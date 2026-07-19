@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       _migrations: {
@@ -459,6 +484,76 @@ export type Database = {
           },
         ]
       }
+      catalogue_view: {
+        Row: {
+          ask: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          first_seen_at: string | null
+          format_code: string | null
+          highest_bid_p: number | null
+          last_seen_at: string | null
+          last_transaction_p: number | null
+          market_price_p: number | null
+          name: string | null
+          next_lowest_price_p: number | null
+          parent_sku: string | null
+          price_vs_last_pct: number | null
+          price_vs_market_pct: number | null
+          price_vs_next_pct: number | null
+          producer: string | null
+          product_url: string | null
+          qty_available: number | null
+          region: string | null
+          signal_type: string | null
+          source_agreement: string | null
+          subregion: string | null
+          vintage: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
+      }
+      facet_ranges_view: {
+        Row: {
+          ask_max: number | null
+          ask_min: number | null
+          bottle_volume_ml_max: number | null
+          bottle_volume_ml_min: number | null
+          case_size_max: number | null
+          case_size_min: number | null
+          first_seen_at_max: string | null
+          first_seen_at_min: string | null
+          last_seen_at_max: string | null
+          last_seen_at_min: string | null
+          vintage_max: number | null
+          vintage_min: number | null
+        }
+        Relationships: []
+      }
+      facet_values_view: {
+        Row: {
+          facet: string | null
+          n: number | null
+          value: string | null
+        }
+        Relationships: []
+      }
       price_history_view: {
         Row: {
           entity_key: string | null
@@ -567,6 +662,27 @@ export type Database = {
         }
         Relationships: []
       }
+      recent_price_change_view: {
+        Row: {
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          field_name: string | null
+          format_code: string | null
+          name: string | null
+          new_value_raw: string | null
+          observed_at: string | null
+          old_value_raw: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_url: string | null
+          region: string | null
+          subregion: string | null
+          vintage: number | null
+        }
+        Relationships: []
+      }
       scan_health_view: {
         Row: {
           algolia_complete: boolean | null
@@ -623,6 +739,13 @@ export type Database = {
       }
     }
     Functions: {
+      search_producers: {
+        Args: { q: string }
+        Returns: {
+          n: number
+          producer: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
@@ -753,6 +876,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
