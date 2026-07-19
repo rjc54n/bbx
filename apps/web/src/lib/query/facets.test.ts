@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_FILTERS } from "./registry";
-import { ENUM_FACET_FIELDS, groupFacetValues, shapeFacetRanges } from "./facets";
+import { ENUM_FACET_FIELDS, groupFacetValues, shapeFacetRanges, sortFormatOptions } from "./facets";
 
 describe("ENUM_FACET_FIELDS", () => {
   it("matches exactly the enum-kind fields in CATALOGUE_FILTERS", () => {
@@ -26,6 +26,15 @@ describe("groupFacetValues", () => {
     expect(grouped.colour).toEqual([{ value: "Red", n: 500 }]);
   });
 
+  it("sorts Vintage newest first", () => {
+    const grouped = groupFacetValues([
+      { facet: "vintage", value: "1998", n: 4 },
+      { facet: "vintage", value: "2022", n: 12 },
+      { facet: "vintage", value: "2010", n: 8 },
+    ]);
+    expect(grouped.vintage?.map(({ value }) => value)).toEqual(["2022", "2010", "1998"]);
+  });
+
   it("omits a field entirely when no rows exist for it, rather than an empty array", () => {
     const grouped = groupFacetValues([{ facet: "region", value: "Bordeaux", n: 1 }]);
     expect(grouped.colour).toBeUndefined();
@@ -43,6 +52,19 @@ describe("groupFacetValues", () => {
   it("drops rows whose facet isn't a known enum filter field (defends against SQL/registry drift)", () => {
     const grouped = groupFacetValues([{ facet: "not_a_real_facet", value: "x", n: 1 }]);
     expect(grouped).toEqual({});
+  });
+});
+
+describe("sortFormatOptions", () => {
+  it("keeps format codes paired with their display dimensions and sorts by count desc", () => {
+    const options = sortFormatOptions([
+      { format_code: "12-00750", case_size: 12, bottle_volume_ml: 750, n: 100 },
+      { format_code: "06-00750", case_size: 6, bottle_volume_ml: 750, n: 12230 },
+    ]);
+    expect(options).toEqual([
+      { format_code: "06-00750", case_size: 6, bottle_volume_ml: 750, n: 12230 },
+      { format_code: "12-00750", case_size: 12, bottle_volume_ml: 750, n: 100 },
+    ]);
   });
 });
 

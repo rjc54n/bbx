@@ -23,7 +23,8 @@ describe("serialize/parse round-trip", () => {
       mode: "value-research",
       filters: [
         { field: "region", kind: "enum", value: ["Bordeaux", "Burgundy"] },
-        { field: "vintage", kind: "range", min: 2015, max: 2020 },
+        { field: "vintage", kind: "enum", value: ["2015", "2020"] },
+        { field: "format_code", kind: "enum", value: ["06-00750", "12-00750"] },
         { field: "price_vs_market_pct", kind: "range", max: -10 },
         { field: "first_seen_at", kind: "date", min: "2026-01-01" },
         { field: "search", kind: "text", value: "Lafite" },
@@ -34,6 +35,18 @@ describe("serialize/parse round-trip", () => {
     };
     const back = parse(serialize(state));
     expect(normalise(back)).toEqual(normalise(state));
+  });
+
+  it("round-trips a listed-days shortcut as a relative, shareable filter", () => {
+    const state: QueryState = {
+      mode: "explore",
+      filters: [{ field: "first_seen_at", kind: "date", days: 14 }],
+      sort: { field: "last_seen_at", dir: "desc" },
+      page: 0,
+    };
+    const params = serialize(state);
+    expect(params.get("first_seen_at_days")).toBe("14");
+    expect(parse(params)).toEqual(state);
   });
 
   it("omits page from the URL at page 0 but still round-trips to 0", () => {
@@ -80,16 +93,16 @@ describe("mode-aware defaults (parse is mode-first)", () => {
 describe("codec robustness", () => {
   it("drops invalid params instead of throwing", () => {
     expect(() =>
-      parse(new URLSearchParams("mode=explore&vintage_min=notanumber&last_seen_at_min=notadate&bogus=xyz")),
+      parse(new URLSearchParams("mode=explore&ask_min=notanumber&first_seen_at_min=notadate&bogus=xyz")),
     ).not.toThrow();
-    const state = parse(new URLSearchParams("mode=explore&vintage_min=notanumber&last_seen_at_min=notadate"));
+    const state = parse(new URLSearchParams("mode=explore&ask_min=notanumber&first_seen_at_min=notadate"));
     expect(state.filters).toEqual([]);
   });
 
   it("swaps a reversed numeric range instead of dropping it", () => {
-    const state = parse(new URLSearchParams("mode=explore&vintage_min=2020&vintage_max=2010"));
-    const vintage = state.filters.find((f) => f.field === "vintage");
-    expect(vintage).toMatchObject({ min: 2010, max: 2020 });
+    const state = parse(new URLSearchParams("mode=explore&ask_min=2020&ask_max=2010"));
+    const ask = state.filters.find((f) => f.field === "ask");
+    expect(ask).toMatchObject({ min: 2010, max: 2020 });
   });
 
   it("drops an invalid ISO date but keeps the valid bound", () => {
@@ -97,6 +110,16 @@ describe("codec robustness", () => {
     const filter = state.filters.find((f) => f.field === "first_seen_at");
     expect(filter).toMatchObject({ min: "2026-01-01" });
     expect((filter as { max?: string })?.max).toBeUndefined();
+  });
+
+  it("continues to parse a legacy absolute listed-period URL", () => {
+    const state = parse(new URLSearchParams("mode=explore&first_seen_at_min=2026-01-01&first_seen_at_max=2026-01-31"));
+    expect(state.filters).toContainEqual({
+      field: "first_seen_at",
+      kind: "date",
+      min: "2026-01-01",
+      max: "2026-01-31",
+    });
   });
 
   it("dedupes and sorts enum values deterministically regardless of input order", () => {
@@ -115,10 +138,20 @@ describe("codec robustness", () => {
     expect(serialize(a).toString()).toBe(serialize(b).toString());
   });
 
+  it("preserves an exact facet value with a trailing non-breaking space", () => {
+    const state: QueryState = {
+      mode: "explore",
+      filters: [{ field: "region", kind: "enum", value: ["Rhône "] }],
+      sort: { field: "last_seen_at", dir: "desc" },
+      page: 0,
+    };
+    expect(parse(serialize(state))).toEqual(state);
+  });
+
   it("keeps exactly one filter per field on serialize -- last entry wins, deterministically", () => {
     const filters: CatalogueFilter[] = [
-      { field: "vintage", kind: "range", min: 2000, max: 2010 },
-      { field: "vintage", kind: "range", min: 2015, max: 2020 },
+      { field: "ask", kind: "range", min: 2000, max: 2010 },
+      { field: "ask", kind: "range", min: 2015, max: 2020 },
     ];
     const state: QueryState = {
       mode: "explore",
@@ -127,7 +160,7 @@ describe("codec robustness", () => {
       page: 0,
     };
     const params = serialize(state);
-    expect(params.get("vintage_min")).toBe("2015");
-    expect(params.get("vintage_max")).toBe("2020");
+    expect(params.get("ask_min")).toBe("2015");
+    expect(params.get("ask_max")).toBe("2020");
   });
 });

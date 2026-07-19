@@ -1,11 +1,11 @@
 import { supabase } from "@/lib/supabase";
 import { CATALOGUE_FILTERS, type CatalogueFilterField } from "./registry";
 import type { FacetRangesRow, FacetValueRow } from "./rows";
+import type { Database } from "@/lib/database.types";
 
-// The enum-kind filters facet_values_view groups counts for (region,
-// subregion, country, colour, case_size, bottle_volume_ml as of Phase A).
-// Derived from the registry rather than hardcoded so a new enum filter can't
-// silently go un-faceted without a type/test failure pointing at the gap.
+// facet_values_view provides the generic enum facets. Format is deliberately
+// separate: format_options_view preserves each stored format_code with its
+// matching case and bottle measurements.
 export type EnumFacetField = {
   [F in CatalogueFilterField]: (typeof CATALOGUE_FILTERS)[F]["kind"] extends "enum" ? F : never;
 }[CatalogueFilterField];
@@ -35,6 +35,9 @@ export function groupFacetValues(rows: Pick<FacetValueRow, "facet" | "value" | "
     if (!isEnumFacetField(row.facet)) continue;
     (result[row.facet] ??= []).push({ value: row.value, n: row.n });
   }
+  // Vintage is a chronological choice, not an alphabetic facet. The source
+  // view supplies it as text so it can share the common facet shape.
+  result.vintage?.sort((a, b) => Number(b.value) - Number(a.value));
   return result;
 }
 
@@ -42,6 +45,18 @@ export async function fetchFacetValues(): Promise<FacetValues> {
   const { data, error } = await supabase.from("facet_values_view").select("*");
   if (error) throw error;
   return groupFacetValues(data ?? []);
+}
+
+export type FormatOption = Database["public"]["Views"]["format_options_view"]["Row"];
+
+export function sortFormatOptions(options: FormatOption[]): FormatOption[] {
+  return [...options].sort((a, b) => (b.n ?? 0) - (a.n ?? 0));
+}
+
+export async function fetchFormatOptions(): Promise<FormatOption[]> {
+  const { data, error } = await supabase.from("format_options_view").select("*");
+  if (error) throw error;
+  return sortFormatOptions(data ?? []);
 }
 
 export interface FacetRange<T> {

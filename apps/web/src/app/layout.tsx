@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BBX Bargains",
-  description: "Candidate wine arbitrage opportunities on the BBX exchange",
+  title: "Explore BBX",
+  description: "Browse the active BBX wine catalogue and research value against market, last-transaction and next-offer references.",
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="h-full flex flex-col overflow-hidden">{children}</body>
     </html>
   );
 }

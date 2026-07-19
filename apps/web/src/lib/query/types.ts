@@ -5,6 +5,7 @@ import {
   type FilterKind,
   type PriceChangeSortField,
 } from "./registry";
+import type { ListedDays } from "./freshness";
 
 export type SortDir = "asc" | "desc";
 
@@ -28,12 +29,13 @@ export interface RangeFilter {
   max?: number;
 }
 
-export interface DateFilter {
+export type DateFilter = {
   field: FieldsOfKind<"date">;
   kind: "date";
-  min?: string;
-  max?: string;
-}
+} & (
+  | { days: ListedDays; min?: never; max?: never }
+  | { days?: undefined; min?: string; max?: string }
+);
 
 export interface TextFilter {
   field: FieldsOfKind<"text">;

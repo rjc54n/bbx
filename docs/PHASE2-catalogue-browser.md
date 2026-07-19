@@ -72,11 +72,13 @@ pattern (`REVOKE ALL … FROM PUBLIC, anon, authenticated` then targeted
    - Reuse candidate_view's `LATERAL` next-offer computation over `offers`
      (`match_confidence = 'inferred'`, active), backed by the existing
      `idx_offers_parent_sku_format`.
-2. **`facet_values_view`** — long format, one view for all enum facets:
+2. **`facet_values_view`** — long format, one view for the generic enum facets:
    `UNION ALL` of `SELECT 'region' AS facet, region AS value, count(*) AS n
-   FROM catalogue_view GROUP BY region` for region, subregion, country, colour,
-   case_size, bottle_volume_ml. Global counts. Powers dropdowns without loading
-   products into the browser.
+   FROM catalogue_view GROUP BY region` for region, subregion, country, colour
+   and vintage. Global counts. Powers dropdowns without loading products into
+   the browser. Add a separate `format_options_view` with `format_code`,
+   `case_size`, `bottle_volume_ml` and count, so multi-select Format uses exact
+   stored codes rather than combining independent measurements.
 3. **`facet_ranges_view`** — single row: min/max for vintage, ask, case_size,
    bottle_volume_ml, first_seen_at, last_seen_at.
 4. **`search_producers(q text)` RPC** — trigram-backed (existing
@@ -122,7 +124,8 @@ active filters). Ship global counts first; note the gap in code.
   from sort state. Build filter clauses from `QueryState`: `gte`/`lte` for ranges
   (including the signed pct columns), `eq`/`in` for enums,
   `.or(name.ilike.%q%,producer.ilike.%q%)` for text.
-- Facets from `facet_values_view` / `facet_ranges_view`; producer via
+- Generic facets from `facet_values_view`, exact Format choices from
+  `format_options_view`, numeric bounds from `facet_ranges_view`; producer via
   `search_producers`.
 - **Debounce** text search. Range inputs commit on change/blur — **no request
   per keystroke**.

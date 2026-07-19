@@ -38,7 +38,7 @@ export const STARTING_POINTS: StartingPoint[] = [
     mode: "value-research",
     label: "Value research",
     description:
-      "Compare ask against market, last-transaction and next-offer references. No fixed discount threshold.",
+      "Value signals: priced below reference against market, last-transaction and next-offer. No fixed discount threshold.",
     initialState: {
       mode: "value-research",
       filters: [],

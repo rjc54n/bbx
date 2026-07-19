@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { recentListedRange } from "./freshness";
 import type { CatalogueQueryState, PriceChangeQueryState } from "./types";
 import type { CatalogueRow, PriceChangeRow } from "./rows";
 
@@ -47,6 +48,10 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
         if (filter.max !== undefined) query = query.lte(filter.field, filter.max);
         break;
       case "date":
+        if (filter.days !== undefined) {
+          query = query.gte(filter.field, recentListedRange(filter.days).min);
+          break;
+        }
         if (filter.min !== undefined) query = query.gte(filter.field, filter.min);
         if (filter.max !== undefined) query = query.lte(filter.field, filter.max);
         break;

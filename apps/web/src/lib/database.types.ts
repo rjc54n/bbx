@@ -554,6 +554,15 @@ export type Database = {
         }
         Relationships: []
       }
+      format_options_view: {
+        Row: {
+          bottle_volume_ml: number | null
+          case_size: number | null
+          format_code: string | null
+          n: number | null
+        }
+        Relationships: []
+      }
       price_history_view: {
         Row: {
           entity_key: string | null

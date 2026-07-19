@@ -7,6 +7,7 @@ import {
   type PriceChangeSortField,
 } from "./registry";
 import { STARTING_POINTS, startingPointFor } from "./startingPoints";
+import { isListedDays } from "./freshness";
 import type { CatalogueFilter, QueryMode, QueryState, SortDir } from "./types";
 
 // Bump when the param scheme changes in a way parse() can't stay
@@ -76,7 +77,11 @@ function parseCatalogueFilters(params: URLSearchParams): CatalogueFilter[] {
       case "enum": {
         const raw = params.get(field);
         if (raw === null) break;
-        const value = [...new Set(raw.split(",").map((v) => v.trim()).filter(Boolean))].sort();
+        // Facet values are database values, not free-form input. Preserve them
+        // exactly so an otherwise invisible trailing character (for example a
+        // non-breaking space in a legacy region name) still round-trips to the
+        // same value used by the catalogue query.
+        const value = [...new Set(raw.split(",").filter(Boolean))].sort();
         if (value.length > 0) {
           filters.push({ field, kind: "enum", value } as CatalogueFilter);
         }
@@ -88,6 +93,12 @@ function parseCatalogueFilters(params: URLSearchParams): CatalogueFilter[] {
         break;
       }
       case "date": {
+        const daysRaw = params.get(`${field}_days`);
+        const days = daysRaw === null ? undefined : Number(daysRaw);
+        if (days !== undefined && isListedDays(days)) {
+          filters.push({ field, kind: "date", days } as CatalogueFilter);
+          break;
+        }
         const minRaw = params.get(`${field}_min`);
         const maxRaw = params.get(`${field}_max`);
         const min = minRaw && isValidIsoDate(minRaw) ? minRaw : undefined;
@@ -145,6 +156,10 @@ export function serialize(state: QueryState): URLSearchParams {
         break;
       }
       case "date": {
+        if (filter.days !== undefined) {
+          params.set(`${filter.field}_days`, String(filter.days));
+          break;
+        }
         if (filter.min && isValidIsoDate(filter.min)) params.set(`${filter.field}_min`, filter.min);
         if (filter.max && isValidIsoDate(filter.max)) params.set(`${filter.field}_max`, filter.max);
         break;
