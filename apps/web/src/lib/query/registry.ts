@@ -1,9 +1,15 @@
 // Machine-readable filter/metric metadata. This drives the filter UI (Phase D)
 // and is the seam a later chatbot interface reads to propose/explain the same
 // filters the UI uses -- see docs/PHASE2-catalogue-browser.md Phase B.
+//
+// CATALOGUE_FILTERS/CATALOGUE_METRICS/PRICE_CHANGE_METRICS are declared
+// `as const satisfies Record<...>` so their keys and each entry's `kind`
+// stay literal types -- types.ts derives CatalogueFilterField, the
+// field<->kind mapping, and the sortable-field unions straight from these
+// objects instead of redeclaring the field list by hand.
 
 export type FilterGroup = "Wine" | "Format" | "Price" | "Freshness";
-export type FilterKind = "enum" | "range" | "text" | "date" | "bool";
+export type FilterKind = "enum" | "range" | "text" | "date" | "typeahead";
 
 export interface FilterMeta {
   field: string;
@@ -16,6 +22,8 @@ export interface FilterMeta {
   /** True when the underlying value is a stored estimate, not a live/observed fact. */
   estimate: boolean;
   explanation: string;
+  /** For kind: "typeahead" -- the RPC that backs the async lookup. */
+  rpc?: string;
 }
 
 export interface MetricMeta {
@@ -29,8 +37,14 @@ export interface MetricMeta {
 }
 
 // Filterable fields over catalogue_view (explore / value-research / recent-listings
-// modes). price-changes mode reads recent_price_change_view and has no filters yet.
-export const FILTERS: Record<string, FilterMeta> = {
+// modes). price-changes mode reads recent_price_change_view and has no filters
+// of its own yet.
+//
+// "search" and "producer" are both text-shaped but resolve differently:
+// search is a partial ilike across name+producer with no backing RPC; producer
+// is an exact match, chosen from the search_producers typeahead (Phase A) --
+// hence its own "typeahead" kind rather than reusing "text".
+export const CATALOGUE_FILTERS = {
   search: {
     field: "search",
     label: "Search",
@@ -43,9 +57,10 @@ export const FILTERS: Record<string, FilterMeta> = {
     field: "producer",
     label: "Producer",
     group: "Wine",
-    kind: "text",
+    kind: "typeahead",
+    rpc: "search_producers",
     estimate: false,
-    explanation: "Exact producer, selected via producer typeahead (search_producers).",
+    explanation: "Exact producer, chosen from the producer typeahead.",
   },
   region: {
     field: "region",
@@ -158,21 +173,24 @@ export const FILTERS: Record<string, FilterMeta> = {
     estimate: false,
     explanation: "When this SKU was last observed (most recent scan).",
   },
-};
+} as const satisfies Record<string, FilterMeta>;
 
-// Display columns, superset of FILTERS -- includes fields shown in tables that
-// aren't independently filterable.
-export const METRICS: Record<string, MetricMeta> = {
+export type CatalogueFilterField = keyof typeof CATALOGUE_FILTERS;
+
+// Display columns for catalogue_view (explore / value-research / recent-listings),
+// superset of CATALOGUE_FILTERS -- includes columns shown in the table that
+// aren't independently filterable. Also the set of valid catalogue sort fields.
+export const CATALOGUE_METRICS = {
   name: { field: "name", label: "Wine", estimate: false, explanation: "Wine name." },
-  vintage: FILTERS.vintage,
-  country: FILTERS.country,
-  region: FILTERS.region,
-  subregion: FILTERS.subregion,
-  colour: FILTERS.colour,
-  producer: FILTERS.producer,
-  case_size: FILTERS.case_size,
-  bottle_volume_ml: FILTERS.bottle_volume_ml,
-  ask: FILTERS.ask,
+  vintage: CATALOGUE_FILTERS.vintage,
+  country: CATALOGUE_FILTERS.country,
+  region: CATALOGUE_FILTERS.region,
+  subregion: CATALOGUE_FILTERS.subregion,
+  colour: CATALOGUE_FILTERS.colour,
+  producer: CATALOGUE_FILTERS.producer,
+  case_size: CATALOGUE_FILTERS.case_size,
+  bottle_volume_ml: CATALOGUE_FILTERS.bottle_volume_ml,
+  ask: CATALOGUE_FILTERS.ask,
   market_price_p: {
     field: "market_price_p",
     label: "Market",
@@ -214,12 +232,27 @@ export const METRICS: Record<string, MetricMeta> = {
     estimate: false,
     explanation: "Whether stored and live-scanned prices agreed, as of the last check.",
   },
-  first_seen_at: FILTERS.first_seen_at,
-  last_seen_at: FILTERS.last_seen_at,
-  price_vs_market_pct: FILTERS.price_vs_market_pct,
-  price_vs_last_pct: FILTERS.price_vs_last_pct,
-  price_vs_next_pct: FILTERS.price_vs_next_pct,
-  // recent_price_change_view fields (price-changes mode only).
+  first_seen_at: CATALOGUE_FILTERS.first_seen_at,
+  last_seen_at: CATALOGUE_FILTERS.last_seen_at,
+  price_vs_market_pct: CATALOGUE_FILTERS.price_vs_market_pct,
+  price_vs_last_pct: CATALOGUE_FILTERS.price_vs_last_pct,
+  price_vs_next_pct: CATALOGUE_FILTERS.price_vs_next_pct,
+} as const satisfies Record<string, MetricMeta>;
+
+export type CatalogueMetricField = keyof typeof CATALOGUE_METRICS;
+
+// Display columns for recent_price_change_view (price-changes mode). No
+// filters of its own in v1 -- see docs/PHASE2-catalogue-browser.md Phase A.
+export const PRICE_CHANGE_METRICS = {
+  name: CATALOGUE_METRICS.name,
+  vintage: CATALOGUE_FILTERS.vintage,
+  country: CATALOGUE_FILTERS.country,
+  region: CATALOGUE_FILTERS.region,
+  subregion: CATALOGUE_FILTERS.subregion,
+  colour: CATALOGUE_FILTERS.colour,
+  producer: CATALOGUE_FILTERS.producer,
+  case_size: CATALOGUE_FILTERS.case_size,
+  bottle_volume_ml: CATALOGUE_FILTERS.bottle_volume_ml,
   field_name: {
     field: "field_name",
     label: "Field changed",
@@ -244,4 +277,10 @@ export const METRICS: Record<string, MetricMeta> = {
     estimate: false,
     explanation: "When the change was observed.",
   },
-};
+} as const satisfies Record<string, MetricMeta>;
+
+export type PriceChangeMetricField = keyof typeof PRICE_CHANGE_METRICS;
+
+// price-changes mode has exactly one meaningful sort dimension in v1.
+export const PRICE_CHANGE_SORT_FIELDS = ["observed_at"] as const;
+export type PriceChangeSortField = (typeof PRICE_CHANGE_SORT_FIELDS)[number];
