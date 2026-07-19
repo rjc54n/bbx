@@ -1,11 +1,11 @@
 import type { CatalogueFilterField } from "./registry";
-import type { QueryMode, QueryState } from "./types";
+import type { CatalogueMode, CatalogueQueryState, PriceChangeQueryState, QueryMode, QueryState } from "./types";
 
-export interface StartingPoint {
-  mode: QueryMode;
+export interface StartingPoint<S extends QueryState = QueryState> {
+  mode: S["mode"];
   label: string;
   description: string;
-  initialState: QueryState;
+  initialState: S;
   /**
    * Filter fields this entry point wants surfaced/expanded in the UI by
    * default -- not applied filters, just which controls to put in front of
@@ -73,6 +73,19 @@ export const STARTING_POINTS: StartingPoint[] = [
   },
 ];
 
+// Overloaded so a caller with a literal mode (the common case: startingPointFor("explore"))
+// gets back a StartingPoint narrowed to that mode's own state shape, instead
+// of the full QueryState union -- e.g. .initialState.sort.field is typed as
+// PriceChangeSortField, not CatalogueMetricField | PriceChangeSortField. The
+// two specific overloads must come before the general QueryMode fallback:
+// overload resolution picks the first match, and a literal like "explore" is
+// assignable to the general QueryMode too, so the specific ones need first
+// refusal. A non-literal `mode: QueryMode` variable (e.g. from url.ts's
+// parse(), where the mode came off a URL param at runtime) falls through to
+// the general overload.
+export function startingPointFor(mode: CatalogueMode): StartingPoint<CatalogueQueryState>;
+export function startingPointFor(mode: "price-changes"): StartingPoint<PriceChangeQueryState>;
+export function startingPointFor(mode: QueryMode): StartingPoint;
 export function startingPointFor(mode: QueryMode): StartingPoint {
   return STARTING_POINTS.find((sp) => sp.mode === mode) ?? STARTING_POINTS[0];
 }
