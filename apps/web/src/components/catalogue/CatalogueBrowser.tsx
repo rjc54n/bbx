@@ -17,7 +17,7 @@ import type { CatalogueRow, PriceChangeRow } from "@/lib/query/rows";
 import { startingPointFor } from "@/lib/query/startingPoints";
 import type { CatalogueFilter, QueryState } from "@/lib/query/types";
 import { parse, serialize } from "@/lib/query/url";
-import { CATALOGUE_COLUMNS, PRICE_CHANGE_COLUMNS } from "./columns";
+import { CATALOGUE_COLUMNS, PRICE_CHANGE_COLUMNS, withFormatAdjustedColumns } from "./columns";
 import { DataHonestyHeader } from "./DataHonestyHeader";
 import { DataTable } from "./DataTable";
 import { FilterChips } from "./FilterChips";
@@ -46,6 +46,12 @@ export function CatalogueBrowser() {
     },
     [router, pathname],
   );
+
+  // Off by default: the format premium correction agrees with the raw guide
+  // on every 750ml row (the large majority), so it doesn't earn a permanent
+  // place next to Market / vs Market. A view preference, not query state --
+  // doesn't affect which rows are returned, just which columns are shown.
+  const [showFormatAdjusted, setShowFormatAdjusted] = useState(false);
 
   const [facetValues, setFacetValues] = useState<FacetValues>({});
   const [facetRanges, setFacetRanges] = useState<FacetRanges | null>(null);
@@ -153,6 +159,11 @@ export function CatalogueBrowser() {
     pushQuery({ ...queryState, filters, page: 0 });
   }
 
+  const visibleCatalogueColumns = useMemo(
+    () => withFormatAdjustedColumns(CATALOGUE_COLUMNS, showFormatAdjusted),
+    [showFormatAdjusted],
+  );
+
   const isPriceChanges = queryState.mode === "price-changes";
   const totalCount = isPriceChanges ? priceChangeResult.count : catalogueResult.count;
   const resultsWord = queryState.mode === "value-research" ? "value signals" : "results";
@@ -184,14 +195,27 @@ export function CatalogueBrowser() {
         <span className="tabular-nums">
           {loading ? "Loading…" : `${totalCount.toLocaleString()} ${resultsWord}`}
         </span>
-        {!isPriceChanges && (
-          <FilterChips
-            filters={queryState.filters}
-            formatOptions={formatOptions}
-            onRemove={handleRemoveFilter}
-            onReset={handleReset}
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {!isPriceChanges && (
+            <label className="flex items-center gap-1.5 whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showFormatAdjusted}
+                onChange={(e) => setShowFormatAdjusted(e.target.checked)}
+                className="h-3.5 w-3.5 accent-accent"
+              />
+              Show format-adjusted values
+            </label>
+          )}
+          {!isPriceChanges && (
+            <FilterChips
+              filters={queryState.filters}
+              formatOptions={formatOptions}
+              onRemove={handleRemoveFilter}
+              onReset={handleReset}
+            />
+          )}
+        </div>
       </div>
 
       {error && (
@@ -212,7 +236,7 @@ export function CatalogueBrowser() {
         />
       ) : (
         <DataTable
-          columns={CATALOGUE_COLUMNS}
+          columns={visibleCatalogueColumns}
           rows={catalogueResult.rows}
           rowKey={rowKey}
           sort={queryState.sort}

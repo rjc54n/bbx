@@ -13,6 +13,20 @@ export interface Column<Row, SortField extends string> {
   render: (row: Row) => ReactNode;
 }
 
+// The format premium correction agrees with the raw guide on the vast
+// majority of rows (anything at the 750ml reference format), so these two
+// columns are hidden by default -- see the "Show format-adjusted values"
+// toggle in CatalogueBrowser -- rather than earning permanent space next to
+// Market / vs Market.
+export const FORMAT_ADJUSTED_COLUMN_IDS = new Set(["adjusted_guide_p", "price_vs_adjusted_guide_pct"]);
+
+export function withFormatAdjustedColumns<Row, SortField extends string>(
+  columns: Column<Row, SortField>[],
+  show: boolean,
+): Column<Row, SortField>[] {
+  return show ? columns : columns.filter((column) => !FORMAT_ADJUSTED_COLUMN_IDS.has(column.id));
+}
+
 function WineCell({
   name,
   vintage,
