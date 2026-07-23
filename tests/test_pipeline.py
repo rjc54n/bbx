@@ -297,9 +297,50 @@ def test_fetch_rest_pricing_success(monkeypatch):
         return _Resp(_priced(skus))
 
     monkeypatch.setattr(pipeline.requests, "post", fake_post)
+    monkeypatch.setattr(pipeline.time, "sleep", lambda *_: None)
     results, debug, failed = fetch_rest_pricing([str(i) for i in range(30)])
     assert len(results) == 30
     assert failed == []
+
+
+def test_rest_batch_size_fits_a_single_request_up_to_the_measured_cap(monkeypatch):
+    """REST_BATCH_SIZE was raised 24 -> 96 (measured cap ~98/request, 2026-07-23)
+    so a book-sized SKU list costs a quarter of the requests it used to."""
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        skus = json[0]["product_codes"].split(",")
+        calls.append(skus)
+        return _Resp(_priced(skus))
+
+    monkeypatch.setattr(pipeline.requests, "post", fake_post)
+    monkeypatch.setattr(pipeline.time, "sleep", lambda *_: None)
+    skus = [str(i) for i in range(pipeline.REST_BATCH_SIZE)]
+    results, debug, failed = fetch_rest_pricing(skus)
+
+    assert len(calls) == 1                  # exactly one request for a full batch
+    assert len(calls[0]) == pipeline.REST_BATCH_SIZE
+    assert len(results) == pipeline.REST_BATCH_SIZE
+    assert failed == []
+
+
+def test_fetch_rest_pricing_sleeps_a_jittered_interval_after_every_request(monkeypatch):
+    """Politeness applies on the happy path too, not just before a retry --
+    mirrors fetch_listings.py's REQUEST_JITTER, which sleeps after every
+    Algolia request regardless of outcome."""
+    sleeps = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        skus = json[0]["product_codes"].split(",")
+        return _Resp(_priced(skus))
+
+    monkeypatch.setattr(pipeline.requests, "post", fake_post)
+    monkeypatch.setattr(pipeline.time, "sleep", lambda s: sleeps.append(s))
+
+    fetch_rest_pricing([str(i) for i in range(10)])
+
+    assert len(sleeps) == 1                 # one request -> one jitter sleep, no retry backoff
+    assert pipeline.REST_JITTER[0] <= sleeps[0] <= pipeline.REST_JITTER[1]
 
 
 def test_fetch_rest_pricing_retries_then_reports_failed_skus(monkeypatch):
@@ -375,6 +416,7 @@ def test_fetch_rest_pricing_full_keeps_all_entries(monkeypatch):
         return _Resp(_priced_multi_format(skus))
 
     monkeypatch.setattr(pipeline.requests, "post", fake_post)
+    monkeypatch.setattr(pipeline.time, "sleep", lambda *_: None)
     results, failed = fetch_rest_pricing_full(["SKU1", "SKU2"])
     assert failed == []
     assert len(results) == 2

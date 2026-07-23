@@ -73,13 +73,18 @@ Add `price_per_bottle_p` and `price_per_litre_p` as sortable metrics.
 
 ---
 
-## Step 4 — REST batch size (Phase 4, prerequisite)
+## Step 4 — REST batch size (Phase 4, prerequisite) — done 2026-07-23
 
 **File:** `core/pipeline.py`.
 
 `REST_BATCH_SIZE = 24` → `96`. Measured cap is ~98; 96 leaves headroom.
 Add a short comment recording the measurement. Add a sleep between REST
 batches — the Algolia path has jittered politeness and the REST path has none.
+
+Landed as `REST_JITTER = (0.2, 0.5)` inside `_fetch_rest_batch`, in a
+`finally` so it fires on every attempt (success or failure) rather than only
+before a retry — mirrors `fetch_listings.py`'s `REQUEST_JITTER`, which sleeps
+after every Algolia request regardless of outcome.
 
 **Test:** existing `fetch_rest_pricing` tests must pass unchanged; add one
 asserting batch chunking at the new size.
@@ -139,17 +144,41 @@ contract in `core/sweep.py` — do not weaken it.
 ## Step 7 — Unlisted SKUs as first-class (Phase 4)
 
 **Files:** `supabase/migrations/<timestamp>_biddable_universe.sql`,
-`core/models.py`.
+`core/models.py`, `apps/web/src/lib/query/registry.ts`,
+`apps/web/src/components/catalogue/CatalogueBrowser.tsx`.
 
-The store already retains SKUs with no listing (`least_listing_price_p` is
-NULL), and `catalogue_view` does not filter them out. What is missing is the
-distinction being *visible*:
+Not a new entity. "Available to bid" already fits the existing
+products → skus → offers model (Phase 1A): a never-listed wine is a
+`products` row, a `skus` row with `least_listing_price_p = NULL` but
+`market_price_p` / `highest_bid_p` populated (REST prices unlisted SKUs
+today, unchanged by Phase 4), and zero matching `offers` rows. Phase 4
+widens *discovery* (shard `prod_biddable` in addition to `prod_product`) so
+these rows get created for wines with no listing anywhere, not just
+unlisted formats of an already-listed wine (as of 2026-07-23 the store
+already carries 9,592 such rows out of 27,142 active SKUs across 15,483
+products — this is the same shape at 35x smaller scale).
+
+The gap Phase 4 actually needs to close is that `catalogue_view` has no ask
+filter, so "Explore catalogue" already silently mixes listed and unlisted
+SKUs — invisible today because unlisted is a minority (9,592/27,142); not
+invisible once the `prod_biddable` ingest makes it the large majority.
 
 - Add `is_listed` (derived: `ask IS NOT NULL AND ask > 0`) to `catalogue_view`.
-- Add a `biddable` browse mode: `is_listed = false AND market_price_p > 0`,
-  sorted by bid headroom.
+- Surface it as a **checkbox filter** ("Show unlisted wines" or equivalent),
+  not a separate mode/tab and not a new `STARTING_POINTS` entry — same
+  widget as the format-adjusted-values toggle shipped this session, but a
+  different category underneath: this one changes which *rows* come back,
+  so it must be a real `CATALOGUE_FILTERS` entry, applied via
+  `.eq("is_listed", ...)` in `fetchCatalogue`, and round-tripped through
+  `url.ts` like every other filter — a shared link has to reproduce the same
+  rows in a fresh session. The format-adjusted toggle is deliberately
+  component-local state precisely because it *doesn't* affect rows; don't
+  reuse that pattern here.
+- Default value (`is_listed: true` vs. unfiltered) is a product call, not an
+  engineering one — worth deciding explicitly before this ships rather than
+  defaulting by accident.
 - `price_vs_*` metrics must render as "no ask" rather than NULL-as-zero for
-  these rows.
+  unlisted rows.
 
 ---
 

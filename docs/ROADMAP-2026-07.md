@@ -38,9 +38,15 @@ All measured on 23 July 2026. See `docs/EVIDENCE-2026-07.md` for method.
 
    The guide assumes +0.0% for all of them.
 3. **The biddable universe is 52,430 products** in a separate Algolia index
-   (`prod_biddable`), against roughly 15,000 live listings — about 94% of it is
-   unlisted. REST returns full pricing for unlisted wines, so the minimum-bid
-   floor is computable across the whole book.
+   (`prod_biddable`), against the **27,142 active SKU rows (15,483 distinct
+   wines) currently tracked** — the store's existing scope, confirmed live
+   2026-07-23 — so `prod_biddable` is roughly the current book's scale again
+   in wines we don't yet track at all. REST returns full pricing for unlisted
+   wines, so the minimum-bid floor is computable across the whole book.
+   Already, **9,592 of today's 27,142 tracked SKU rows have no ask** —
+   unlisted formats of wines that do have some listing. "Available to bid" is
+   not a new database entity: it's this same shape (products → skus with no
+   offer), just far more of it once discovery widens.
 4. **Algolia can do almost everything** — discovery, metadata, listing prices
    (`bbx_listings[].price_per_case_exact`), per-record change detection
    (`index_last_update`), and entity resolution (~78% of historic offer names
@@ -74,7 +80,8 @@ room exactly where the asset is most under-priced.
 
 ### Phase 4 — The biddable universe
 
-Grows the addressable catalogue from ~3,000 listed products to 52,430.
+Grows the addressable catalogue from the 15,483 wines currently tracked to
+52,430.
 
 - Ingest `prod_biddable` with sharded discovery (region → vintage → colour).
 - Raise `REST_BATCH_SIZE` 24 → 96. Fewer requests for the same data.
@@ -82,7 +89,15 @@ Grows the addressable catalogue from ~3,000 listed products to 52,430.
   then a daily delta driven by Algolia's `index_last_update` (~19 calls) plus a
   1/30th background rotation (~18 calls). Roughly 40 REST calls a day at steady
   state against 535 for a naive daily sweep.
-- Model unlisted-but-biddable SKUs as first-class: `is_listed` flag, no offer.
+- Model unlisted-but-biddable SKUs as first-class: an `is_listed` flag on the
+  existing `skus`/`catalogue_view` shape, not a new entity (see box above).
+- Split "Explore catalogue" from "live listings" via a **checkbox filter**
+  (`is_listed`), not a separate mode or tab — the same widget as the
+  format-adjusted-values toggle, but wired as a real filter (URL-serialized,
+  affects returned rows) rather than component-local display state, since
+  unlike that toggle this one changes which wines appear at all. Needed
+  because the unlisted share jumps from today's minority (9,592/27,142) to
+  the large majority the moment `prod_biddable` lands.
 
 **Unlocks:** the part of the market with no competing seller and therefore no
 competing price anchor. This is where the guide being wrong actually pays.

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,10 +37,13 @@ REST_HEADERS = {
     "user-agent": "Mozilla/5.0",
 }
 
-REST_BATCH_SIZE = 24
+REST_BATCH_SIZE = 96       # measured cap is ~98 product codes/request (2026-07-23); leaves headroom
 REST_TIMEOUT = 10
 REST_MAX_RETRIES = 3       # attempts per batch before giving up on it
 REST_BACKOFF_BASE = 1.5    # seconds; doubles each retry
+REST_JITTER = (0.2, 0.5)   # seconds slept after every request, success or failure -- unlike
+                           # REST_BACKOFF_BASE (which only spaces out retries), this is baseline
+                           # politeness on every call, mirroring fetch_listings.py's REQUEST_JITTER
 
 # Order-book classification (from the GraphQL variant listings for a SKU).
 #   NOT_CHECKED : the order book has not been fetched yet (REST-only phase).
@@ -335,6 +339,10 @@ def _fetch_rest_batch(sku_list: str) -> Dict[str, Any]:
             last_exc = e
             if attempt < REST_MAX_RETRIES - 1:
                 time.sleep(REST_BACKOFF_BASE * (2 ** attempt))
+        finally:
+            # Every attempt is a real request against BBR's endpoint, so this
+            # sleeps on the happy path too, not just before a retry.
+            time.sleep(random.uniform(*REST_JITTER))
     assert last_exc is not None
     raise last_exc
 
