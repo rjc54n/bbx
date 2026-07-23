@@ -147,6 +147,16 @@ export const CATALOGUE_FILTERS = {
     explanation:
       "Ask vs the next-cheapest competing offer found in store. Stored estimate as of last scan, not a live order-book check. Negative means ask is cheaper.",
   },
+  price_vs_adjusted_guide_pct: {
+    field: "price_vs_adjusted_guide_pct",
+    label: "Price vs adjusted guide",
+    group: "Price",
+    kind: "range",
+    units: "%",
+    estimate: true,
+    explanation:
+      "Ask vs the BBX guide price after a format premium correction (half/magnum +3.1%, double magnum +17.8%, imperial/methuselah +10.9%, salmanazar +14.3%). Modelled from BBR release-offer pricing, not observed on BBX -- the guide itself is volume-linear and assumes +0.0% for every large or small format. Negative means ask is cheaper than the corrected guide.",
+  },
   first_seen_at: {
     field: "first_seen_at",
     label: "First seen",
@@ -203,6 +213,29 @@ export const CATALOGUE_METRICS = {
     explanation:
       "Next-cheapest competing offer found in store. Stored estimate as of last scan, not a live order-book check.",
   },
+  price_per_bottle_p: {
+    field: "price_per_bottle_p",
+    label: "Per bottle",
+    units: "pence",
+    estimate: false,
+    explanation: "Ask, normalised to a single 75cl-equivalent bottle share of the case price.",
+  },
+  price_per_litre_p: {
+    field: "price_per_litre_p",
+    label: "Per litre",
+    units: "pence",
+    estimate: false,
+    explanation: "Ask, normalised to price per litre -- comparable across case sizes and bottle volumes.",
+  },
+  adjusted_guide_p: {
+    field: "adjusted_guide_p",
+    label: "Adj. guide",
+    units: "pence",
+    estimate: true,
+    explanation:
+      "BBX guide price after the format premium correction. Modelled from BBR release-offer pricing, not observed on BBX -- see price_vs_adjusted_guide_pct.",
+  },
+  price_vs_adjusted_guide_pct: CATALOGUE_FILTERS.price_vs_adjusted_guide_pct,
   qty_available: {
     field: "qty_available",
     label: "Qty",

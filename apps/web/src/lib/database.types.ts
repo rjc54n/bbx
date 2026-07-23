@@ -486,6 +486,7 @@ export type Database = {
       }
       catalogue_view: {
         Row: {
+          adjusted_guide_p: number | null
           ask: number | null
           bottle_volume_ml: number | null
           case_size: number | null
@@ -500,6 +501,9 @@ export type Database = {
           name: string | null
           next_lowest_price_p: number | null
           parent_sku: string | null
+          price_per_bottle_p: number | null
+          price_per_litre_p: number | null
+          price_vs_adjusted_guide_pct: number | null
           price_vs_last_pct: number | null
           price_vs_market_pct: number | null
           price_vs_next_pct: number | null

@@ -44,10 +44,23 @@ describe("registry self-consistency", () => {
     }
   });
 
-  it("price_vs_next_pct and next-offer fields are flagged as stored estimates; nothing else is", () => {
+  it("only the next-offer and format-adjusted-guide fields are flagged non-observed; nothing else is", () => {
+    // `estimate` covers two distinct non-observed categories, disambiguated in
+    // each entry's `explanation`, not by a second flag: price_vs_next_pct /
+    // next_lowest_price_p are stored estimates (stale-as-of-last-scan);
+    // adjusted_guide_p / price_vs_adjusted_guide_pct are a modelled correction
+    // (BBR release-offer premiums applied to the guide, not observed on BBX
+    // at all). Both are real non-observed categories; everything else here is
+    // either a live-scan fact or a deterministic derivation of one (e.g.
+    // price_per_bottle_p / price_per_litre_p are direct arithmetic on `ask`).
+    const nonObserved = new Set([
+      "price_vs_next_pct",
+      "next_lowest_price_p",
+      "adjusted_guide_p",
+      "price_vs_adjusted_guide_pct",
+    ]);
     for (const [key, meta] of Object.entries(CATALOGUE_METRICS)) {
-      const shouldBeEstimate = key === "price_vs_next_pct" || key === "next_lowest_price_p";
-      expect(meta.estimate, key).toBe(shouldBeEstimate);
+      expect(meta.estimate, key).toBe(nonObserved.has(key));
     }
   });
 

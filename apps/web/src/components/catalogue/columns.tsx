@@ -74,6 +74,20 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     render: (row) => <span className="font-medium">{formatPence(row.ask)}</span>,
   },
   {
+    id: "price_per_bottle_p",
+    label: "Per bottle",
+    align: "right",
+    sortField: "price_per_bottle_p",
+    render: (row) => formatPence(row.price_per_bottle_p),
+  },
+  {
+    id: "price_per_litre_p",
+    label: "Per litre",
+    align: "right",
+    sortField: "price_per_litre_p",
+    render: (row) => formatPence(row.price_per_litre_p),
+  },
+  {
     id: "market_price_p",
     label: "Market",
     align: "right",
@@ -86,6 +100,20 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     align: "right",
     sortField: "price_vs_market_pct",
     render: (row) => <SignedPct value={row.price_vs_market_pct} />,
+  },
+  {
+    id: "adjusted_guide_p",
+    label: "Adj. guide",
+    align: "right",
+    sortField: "adjusted_guide_p",
+    render: (row) => formatPence(row.adjusted_guide_p),
+  },
+  {
+    id: "price_vs_adjusted_guide_pct",
+    label: "vs Adj. guide",
+    align: "right",
+    sortField: "price_vs_adjusted_guide_pct",
+    render: (row) => <SignedPct value={row.price_vs_adjusted_guide_pct} estimate />,
   },
   {
     id: "price_vs_last_pct",
