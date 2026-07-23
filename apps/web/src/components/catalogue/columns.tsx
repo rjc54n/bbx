@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
+import { bbrProductUrl, wineSearcherUrl } from "@/lib/listingLinks";
 import type { CatalogueMetricField, PriceChangeSortField } from "@/lib/query/registry";
 import type { CatalogueRow, PriceChangeRow } from "@/lib/query/rows";
 import { SignedPct } from "./SignedPct";
@@ -14,17 +15,33 @@ export interface Column<Row, SortField extends string> {
 
 function WineCell({
   name,
+  vintage,
   producer,
+  productUrl,
 }: {
   name: string | null;
+  vintage: number | null;
   producer: string | null;
+  productUrl: string | null;
 }) {
+  const bbrUrl = bbrProductUrl(productUrl);
+  const wineSearcher = wineSearcherUrl(name, vintage);
+
   return (
     <div className="max-w-xs">
       <div className="font-medium text-ink">
-        {name ?? "–"}
+        {bbrUrl ? (
+          <a href={bbrUrl} target="_blank" rel="noreferrer" className="hover:text-accent hover:underline">
+            {name ?? "–"}
+          </a>
+        ) : name ?? "–"}
       </div>
       <div className="text-xs text-ink-muted">{producer ?? "–"}</div>
+      {wineSearcher && (
+        <a href={wineSearcher} target="_blank" rel="noreferrer" className="mt-0.5 inline-block text-xs text-accent hover:underline">
+          Wine-Searcher ↗
+        </a>
+      )}
     </div>
   );
 }
@@ -52,7 +69,7 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     id: "wine",
     label: "Wine",
     align: "left",
-    render: (row) => <WineCell name={row.name} producer={row.producer} />,
+    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} />,
   },
   {
     id: "region",
@@ -157,7 +174,7 @@ export const PRICE_CHANGE_COLUMNS: Column<PriceChangeRow, PriceChangeSortField>[
     id: "wine",
     label: "Wine",
     align: "left",
-    render: (row) => <WineCell name={row.name} producer={row.producer} />,
+    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} />,
   },
   {
     id: "region",

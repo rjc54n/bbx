@@ -14,24 +14,29 @@ interface SearchBarProps {
 export function SearchBar({ value, onCommit }: SearchBarProps) {
   const [text, setText] = useState(value);
   const debounced = useDebouncedValue(text, 300);
+  const [syncingExternalValue, setSyncingExternalValue] = useState(false);
+  const [previousValue, setPreviousValue] = useState(value);
 
-  // Render-phase resync when the committed value changes externally (chip
-  // removal, Reset, Back/Forward) -- see FilterStrip's RangeControl for the
-  // same pattern.
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
+  // A chip removal, Reset or Back/Forward changes the committed URL value
+  // while the debounced local input still holds the old term. Resynchronise
+  // during render so React completes it before effects run, and mark the
+  // transition so that old term cannot immediately be committed back.
+  if (value !== previousValue) {
+    setPreviousValue(value);
+    setSyncingExternalValue(true);
     setText(value);
   }
+  if (syncingExternalValue && debounced === value) setSyncingExternalValue(false);
 
   useEffect(() => {
+    if (syncingExternalValue) return;
     if (debounced !== value) onCommit(debounced);
     // onCommit intentionally omitted: it's a fresh closure each render from
     // the parent, and the debounced!==value guard already makes an extra run
     // harmless -- adding it would just fire this effect on every parent
     // render without changing behaviour.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, value]);
+  }, [debounced, syncingExternalValue, value]);
 
   return (
     <input
@@ -39,7 +44,10 @@ export function SearchBar({ value, onCommit }: SearchBarProps) {
       className="w-full max-w-md rounded border border-border bg-background px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       placeholder="Search wine name or producer"
       value={text}
-      onChange={(e) => setText(e.target.value)}
+      onChange={(e) => {
+        setSyncingExternalValue(false);
+        setText(e.target.value);
+      }}
       aria-label="Search wine name or producer"
     />
   );
