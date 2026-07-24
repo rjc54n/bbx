@@ -1,10 +1,8 @@
 -- Phase 4 Step 6: wave-pricing auditability columns on scan_runs.
 --
--- Not yet populated by a live sweep -- core.sweep.select_biddable_rest_pricing
--- and core.store.update_run_wave_pricing exist and are tested, but
--- run_daily_sweep does not call them yet (see core/sweep.py's Step 6
--- comment block). Landing the columns now means wiring them in later is a
--- small addition, not a schema change bundled with a bigger behavioural one.
+-- Populated by run_daily_sweep on every run since 2026-07-24 (Option A:
+-- discovery swapped to fetch_biddable_universe, REST pricing tiered) -- see
+-- core/sweep.py and core/store.py.update_run_wave_pricing.
 --
 -- wave_delta_enabled: whether index_last_update-driven delta selection
 --   affected pricing this run, or only rotation did (see the "flag" in

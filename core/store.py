@@ -183,7 +183,12 @@ _PRODUCT_TRACKED_FIELDS = ["name", "vintage", "region", "subregion", "colour",
 _SKU_PRICE_FIELDS = ["least_listing_price_p", "market_price_p",
                       "last_transaction_p", "highest_bid_p"]
 
-_SKU_TRACKED_FIELDS = _SKU_PRICE_FIELDS + ["qty_available"]
+# is_listed is a plain field_changed (not a price field) -- tracking it
+# gives a visible "listed"/"delisted" event in observation_events for every
+# transition, including the ones core.sweep._reconcile_listing_state
+# synthesises for SKUs that lost their listing without being REST-repriced
+# this run.
+_SKU_TRACKED_FIELDS = _SKU_PRICE_FIELDS + ["qty_available", "is_listed"]
 
 
 def diff_products(
@@ -397,7 +402,7 @@ def commit_sweep(
              sku.bottle_volume_ml, sku.least_listing_price_p,
              sku.market_price_p, sku.last_transaction_p,
              sku.highest_bid_p, sku.qty_available, sku.source_agreement,
-             run_id, now, run_id, now, 0, None)
+             sku.is_listed, run_id, now, run_id, now, 0, None)
             for sku in skus
         ]
         if sku_rows:
@@ -410,6 +415,7 @@ def commit_sweep(
                 "highest_bid_p=excluded.highest_bid_p, "
                 "qty_available=excluded.qty_available, "
                 "source_agreement=excluded.source_agreement, "
+                "is_listed=excluded.is_listed, "
                 "last_seen_run_id=excluded.last_seen_run_id, "
                 "last_seen_at=excluded.last_seen_at, "
                 "consecutive_misses=0, gone_since=NULL"
@@ -419,7 +425,7 @@ def commit_sweep(
                     cur,
                     "INSERT INTO skus (parent_sku, format_code, case_size, bottle_volume_ml, "
                     "least_listing_price_p, market_price_p, last_transaction_p, highest_bid_p, "
-                    "qty_available, source_agreement, first_seen_run_id, first_seen_at, "
+                    "qty_available, source_agreement, is_listed, first_seen_run_id, first_seen_at, "
                     "last_seen_run_id, last_seen_at, consecutive_misses, gone_since) VALUES %s "
                     + sku_conflict,
                     sku_rows, page_size=1000,
@@ -428,9 +434,9 @@ def commit_sweep(
                 cur.executemany(
                     f"INSERT INTO skus (parent_sku, format_code, case_size, bottle_volume_ml, "
                     f"least_listing_price_p, market_price_p, last_transaction_p, highest_bid_p, "
-                    f"qty_available, source_agreement, first_seen_run_id, first_seen_at, "
+                    f"qty_available, source_agreement, is_listed, first_seen_run_id, first_seen_at, "
                     f"last_seen_run_id, last_seen_at, consecutive_misses, gone_since) "
-                    f"VALUES ({placeholders(16)}) " + sku_conflict,
+                    f"VALUES ({placeholders(17)}) " + sku_conflict,
                     sku_rows,
                 )
 

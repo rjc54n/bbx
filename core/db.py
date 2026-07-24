@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS skus (
     highest_bid_p           INTEGER,
     qty_available           INTEGER,
     source_agreement        TEXT DEFAULT 'unchecked',
+    is_listed               INTEGER NOT NULL DEFAULT 0,
     first_seen_run_id       TEXT REFERENCES scan_runs(id),
     first_seen_at           TEXT NOT NULL,
     last_seen_run_id        TEXT REFERENCES scan_runs(id),

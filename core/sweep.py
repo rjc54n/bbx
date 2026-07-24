@@ -20,6 +20,7 @@ from core.models import (
     Offer,
     Product,
     Sku,
+    bottle_volume_to_ml,
     format_code_from,
     _now_utc,
 )
@@ -48,14 +49,11 @@ REST_COVERAGE_THRESHOLD = 0.80
 # ---------------------------------------------------------------------------
 # Phase 4 Step 6: wave-pricing selection for the biddable universe.
 #
-# NOT YET WIRED into run_daily_sweep below -- this is the selection
-# mechanism and its auditability plumbing (see update_run_wave_pricing in
-# core/store.py), built and tested per docs/PHASE3-4-IMPLEMENTATION.md
-# Step 6, but not yet called from a live sweep. Wiring it in means deciding
-# whether run_daily_sweep's discovery source switches to the full biddable
-# universe (prod_biddable) now, or a separate parallel sweep is added --
-# a bigger call than Step 6 itself, deliberately left for a follow-up
-# decision rather than made silently here.
+# Wired into run_daily_sweep below (Option A: discovery source swapped to
+# fetch_biddable_universe, REST pricing tiered by _is_listed_hit). See
+# update_run_wave_pricing in core/store.py for the persisted auditability,
+# and docs/PHASE3-4-IMPLEMENTATION.md Step 6 for the full design and the
+# Option A/B trade-off this was decided against.
 #
 # index_last_update is UNVERIFIED as a price-change signal (it may move
 # only on catalogue metadata, not on bid/price changes -- see the Step 6
@@ -102,6 +100,36 @@ def _parse_run_finished_at(raw: Optional[str]) -> Optional[datetime]:
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
+
+
+def _index_last_update_flagged(
+    hits: List[Dict[str, Any]],
+    last_run_finished_at: Optional[datetime],
+) -> Set[str]:
+    """parent_skus whose index_last_update is newer than last_run_finished_at.
+
+    Unlike select_biddable_rest_pricing, this makes no rotation/tiering
+    decision -- it just answers "did Algolia's timestamp move since we last
+    looked", so it's reusable over the LISTED tier too (external review,
+    2026-07-24): select_biddable_rest_pricing is only ever called on
+    unlisted_hits, so shadow-mode's delta_changed/shadow_only counts have no
+    ground truth to check themselves against -- the listed tier is always
+    fully REST-priced and diffed, so it's the one place we actually know
+    whether a price changed. See run_daily_sweep's use of this for the
+    listed tier, and docs/PHASE3-4-IMPLEMENTATION.md Step 6 for the query
+    this is meant to feed once a week or so of data has accumulated.
+    """
+    if last_run_finished_at is None:
+        return set()
+    flagged: Set[str] = set()
+    for hit in hits:
+        psku = hit.get("parent_sku")
+        if not psku:
+            continue
+        changed_at = parse_index_last_update(hit.get("index_last_update"))
+        if changed_at is not None and changed_at > last_run_finished_at:
+            flagged.add(str(psku))
+    return flagged
 
 
 # How many days a full rotation of the book takes at the rotation-slice
@@ -266,6 +294,88 @@ def _extract_offers(
     return offers
 
 
+def _derive_listed_format_codes(hit: Dict[str, Any]) -> Set[str]:
+    """Format codes with a live listing for this hit's parent_sku, derived
+    the same way Offer.from_purchase_option infers a format code. Empty for
+    an unlisted product (bbx_listings/purchase_options empty) and for any
+    individual listing whose case_size/bottle_volume can't be parsed."""
+    codes: Set[str] = set()
+    for opt in _hit_listing_options(hit):
+        cs = opt.get("case_size")
+        bv_str = opt.get("bottle_volume", "")
+        bv_ml = bottle_volume_to_ml(bv_str) if bv_str else None
+        if cs is not None and bv_ml is not None:
+            codes.add(format_code_from(cs, bv_ml))
+    return codes
+
+
+def _reconcile_listing_state(
+    hits: List[Dict[str, Any]],
+    current_skus: Dict[str, Dict[str, Any]],
+    fresh_skus: Dict[str, Sku],
+) -> None:
+    """
+    Listing presence is derived from Algolia discovery -- which runs in full
+    every sweep, independent of REST wave-pricing tiering -- and persisted
+    on every sku row as is_listed. Never inferred from least_listing_price_p
+    being non-null: under wave pricing, a wine that loses its last listing
+    is not necessarily REST-repriced the same day (it may not be selected by
+    rotation/delta), so its stale ask would otherwise sit there looking like
+    a live listing for up to ROTATION_BUCKETS days.
+
+    Mutates fresh_skus in place:
+      - every SKU that DID get fresh REST data this run has its is_listed
+        set directly from this run's own discovery data;
+      - every SKU that DIDN'T (a wave-pricing skip) still gets its
+        is_listed reconciled against this run's discovery, and if it just
+        lost its listing, least_listing_price_p is cleared immediately even
+        though REST wasn't re-queried -- the ask itself, not just a flag
+        about it, must not go stale.
+    """
+    listed_codes_by_psku: Dict[str, Set[str]] = {
+        str(h["parent_sku"]): _derive_listed_format_codes(h)
+        for h in hits if h.get("parent_sku")
+    }
+
+    for sku in fresh_skus.values():
+        listed_codes = listed_codes_by_psku.get(sku.parent_sku)
+        if listed_codes is not None:
+            sku.is_listed = sku.format_code in listed_codes
+
+    for key, cur in current_skus.items():
+        if key in fresh_skus:
+            continue  # already handled above with this run's fresh REST data
+        psku = cur.get("parent_sku")
+        listed_codes = listed_codes_by_psku.get(psku)
+        if listed_codes is None:
+            continue  # parent_sku not discovered this run -- disappearance
+                       # logic handles that case, not this reconciliation
+        is_listed_now = cur.get("format_code") in listed_codes
+        was_listed = bool(cur.get("is_listed"))
+        if is_listed_now == was_listed:
+            continue  # no change
+
+        least_listing_price_p = cur.get("least_listing_price_p")
+        source_agreement = cur.get("source_agreement", "unchecked")
+        if not is_listed_now:
+            least_listing_price_p = None
+            source_agreement = "unchecked"
+
+        fresh_skus[key] = Sku(
+            parent_sku=psku,
+            format_code=cur.get("format_code"),
+            case_size=cur.get("case_size"),
+            bottle_volume_ml=cur.get("bottle_volume_ml"),
+            least_listing_price_p=least_listing_price_p,
+            market_price_p=cur.get("market_price_p"),
+            last_transaction_p=cur.get("last_transaction_p"),
+            highest_bid_p=cur.get("highest_bid_p"),
+            qty_available=cur.get("qty_available"),
+            source_agreement=source_agreement,
+            is_listed=is_listed_now,
+        )
+
+
 def _compute_source_agreement(
     skus: Dict[str, Sku],
     offers: Dict[str, Offer],
@@ -376,6 +486,7 @@ def run_daily_sweep(
         # --- Phase 2: REST pricing (tiered: listed always, unlisted wave-priced) ---
         all_parent_skus: Set[str] = set()
         listed_parent_skus: Set[str] = set()
+        listed_hits: List[Dict[str, Any]] = []
         unlisted_hits: List[Dict[str, Any]] = []
         for hit in hits:
             psku = hit.get("parent_sku")
@@ -385,6 +496,7 @@ def run_daily_sweep(
             all_parent_skus.add(psku)
             if _is_listed_hit(hit):
                 listed_parent_skus.add(psku)
+                listed_hits.append(hit)
             else:
                 unlisted_hits.append(hit)
 
@@ -397,6 +509,19 @@ def run_daily_sweep(
             run_date=run_date,
             delta_enabled=delta_enabled,
         )
+        # Shadow-mode validation ground truth: the listed tier is always
+        # fully REST-priced and diffed, so (unlike the unlisted tier, which
+        # mostly isn't checked this run) we actually know whether each
+        # flagged parent_sku's price changed. Persisted below as
+        # observation_events once `now` exists; see docs/PHASE3-4-
+        # IMPLEMENTATION.md Step 6 for the query this feeds.
+        listed_flagged = _index_last_update_flagged(listed_hits, last_run_finished_at)
+        log.info(
+            "index_last_update validation: %d/%d listed parent_skus flagged "
+            "as changed since last run (ground truth available via this "
+            "run's price_changed events).",
+            len(listed_flagged), len(listed_parent_skus),
+        )
         log.info(
             "Wave pricing: %d unlisted parent_skus discovered, %d selected "
             "(rotation=%d, delta_changed=%d, shadow_only=%d, delta_enabled=%s)",
@@ -405,7 +530,26 @@ def run_daily_sweep(
             len(wave_plan.shadow_only), delta_enabled,
         )
 
-        parent_skus_to_price = sorted(listed_parent_skus | set(wave_plan.to_price))
+        # No prior completed run for this scope means no wave-pricing
+        # baseline exists yet: treat this as the roadmap's one-time full
+        # backfill and price every discovered parent_sku, not just what
+        # wave pricing would select. Without this, the very first run
+        # would price only the listed tier plus a 1/ROTATION_BUCKETS slice
+        # of the unlisted universe, leaving the rest with no skus row at
+        # all -- and therefore absent from catalogue_view entirely (an
+        # INNER JOIN against skus), not just unpriced.
+        is_first_run_for_scope = last_run_finished_at is None
+        if is_first_run_for_scope:
+            parent_skus_to_price = sorted(all_parent_skus)
+            log.info(
+                "No prior completed run for this scope -- one-time full "
+                "backfill: pricing all %d discovered parent_skus (wave "
+                "selection alone would have priced %d).",
+                len(all_parent_skus), len(listed_parent_skus | set(wave_plan.to_price)),
+            )
+        else:
+            parent_skus_to_price = sorted(listed_parent_skus | set(wave_plan.to_price))
+
         rest_data, failed_skus = fetch_rest_pricing_full(
             parent_skus_to_price, progress=progress
         )
@@ -474,6 +618,14 @@ def run_daily_sweep(
             len(current_products), len(current_skus), len(current_offers),
         )
 
+        # Reconcile listing state against THIS run's Algolia discovery for
+        # every currently-known SKU, not just the ones REST re-priced --
+        # discovery runs in full every day regardless of wave-pricing
+        # tiering, so listing presence/loss is always current even when the
+        # ask itself isn't. May add entries to fresh_skus (clearing a stale
+        # ask the moment a wine loses its last listing).
+        _reconcile_listing_state(hits, current_skus, fresh_skus)
+
         # An empty store means every entity is new. Diffing would emit an
         # "appeared" event per entity — ~75k rows on the first full-book
         # population, doubling an already-heavy write. Seed state instead
@@ -504,6 +656,18 @@ def run_daily_sweep(
             seen_offers, offer_events = diff_offers(fresh_offers, current_offers, run_id, now)
             all_events = prod_events + sku_events + offer_events
             log.info("Diff complete: %d events", len(all_events))
+
+        # Per-SKU index_last_update validation data (see Phase 2 above):
+        # positives only, to keep volume down -- the denominator (how many
+        # listed parent_skus were checked this run) is reconstructable from
+        # skus.last_seen_run_id/is_listed, not duplicated here as events.
+        all_events.extend(
+            ObservationEvent(
+                scan_run_id=run_id, entity_type="product", entity_key=psku,
+                event_type="index_last_update_flagged", observed_at=now,
+            )
+            for psku in sorted(listed_flagged)
+        )
 
         # --- Phase 5: Atomic commit ---
         final_status = _determine_final_status(algolia_complete, rest_coverage)

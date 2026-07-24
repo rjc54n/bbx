@@ -786,8 +786,94 @@ def _find_sku_not_in_bucket(bucket, limit=2000, exclude=frozenset()):
 
 
 class TestRunDailySweepWavePricing:
-    def test_listed_wine_priced_regardless_of_rotation_bucket(self, conn, monkeypatch):
+    def test_listing_lost_clears_stale_ask_even_outside_rotation_bucket(self, conn, monkeypatch):
+        # External review, 2026-07-24: a wine that loses its last live
+        # listing becomes wave-priced, and if it isn't selected by rotation/
+        # delta that day, a naive implementation would leave its old ask
+        # sitting in the DB looking like a live listing for up to
+        # ROTATION_BUCKETS days. is_listed must come from THIS run's Algolia
+        # discovery (always current) and the stale ask must be cleared
+        # immediately, regardless of whether REST was re-queried this run.
+        run_date1 = "2026-07-18"
+        sku = "TRANSITION1"
+        _patch_fetchers_strict(monkeypatch, [_hit(sku)], _rest_entries(sku))  # listed, default shape
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
+
+        skus = load_current_skus(conn)
+        assert skus[f"{sku}|06-00750"]["least_listing_price_p"] == 25000
+        assert bool(skus[f"{sku}|06-00750"]["is_listed"]) is True
+
+        # Day 2: the listing is gone, and (checked explicitly) this SKU's
+        # rotation bucket does NOT match today's -- wave pricing alone would
+        # never touch it.
+        run_date2 = "2026-07-19"
+        bucket2 = rotation_bucket_for_date(run_date2)
+        assert _sku_rotation_bucket(sku) != bucket2, "test SKU unexpectedly in today's rotation bucket"
+
+        # rest_entries WOULD price it if requested -- proves any change is
+        # from listing-state reconciliation, not REST re-pricing.
+        _patch_fetchers_strict(monkeypatch, [_hit(sku, bbx_listings=[])], _rest_entries(sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date2)
+
+        skus = load_current_skus(conn)
+        row = skus[f"{sku}|06-00750"]
+        assert row["least_listing_price_p"] is None, "stale ask must be cleared, not left from day 1"
+        assert bool(row["is_listed"]) is False
+
+    def test_relisting_restores_is_listed(self, conn, monkeypatch):
+        # The reverse transition, for symmetry: listed -> unlisted (ask
+        # cleared, day 2, outside the rotation bucket) -> relisted (day 3).
+        # Relisting makes the SKU listed-tier again, so it's unconditionally
+        # REST-repriced regardless of rotation -- this confirms is_listed
+        # and the ask both correctly come back, not just that the SKU
+        # happens to still exist from day 1.
+        sku = "TRANSITION2"
+        run_date1 = "2026-07-18"
+        _patch_fetchers_strict(monkeypatch, [_hit(sku)], _rest_entries(sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
+        assert bool(load_current_skus(conn)[f"{sku}|06-00750"]["is_listed"]) is True
+
+        run_date2 = "2026-07-19"
+        bucket2 = rotation_bucket_for_date(run_date2)
+        assert _sku_rotation_bucket(sku) != bucket2, "test SKU unexpectedly in bucket on day 2"
+        _patch_fetchers_strict(monkeypatch, [_hit(sku, bbx_listings=[])], _rest_entries(sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date2)
+        assert bool(load_current_skus(conn)[f"{sku}|06-00750"]["is_listed"]) is False
+
+        run_date3 = "2026-07-20"
+        bucket3 = rotation_bucket_for_date(run_date3)
+        assert _sku_rotation_bucket(sku) != bucket3, "test SKU unexpectedly in bucket on day 3"
+        _patch_fetchers_strict(monkeypatch, [_hit(sku)], _rest_entries(sku))  # relisted
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date3)
+
+        row = load_current_skus(conn)[f"{sku}|06-00750"]
+        assert bool(row["is_listed"]) is True
+        assert row["least_listing_price_p"] == 25000
+
+    def test_first_ever_run_backfills_the_whole_book_not_just_wave_selection(self, conn, monkeypatch):
+        # No prior completed run for this scope -- every discovered unlisted
+        # wine must be priced, not just the ~1/ROTATION_BUCKETS a normal
+        # wave-selection day would pick.
         run_date = "2026-07-18"
+        bucket = rotation_bucket_for_date(run_date)
+        would_be_excluded = [_find_sku_not_in_bucket(bucket, exclude={f"UNLISTED{i}" for i in range(5)})]
+        hits = [_hit(sku, bbx_listings=[]) for sku in would_be_excluded]
+        rest = {sku: _rest_entries(sku)[sku] for sku in would_be_excluded}
+        _patch_fetchers_strict(monkeypatch, hits, rest)
+
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
+
+        skus = load_current_skus(conn)
+        for sku in would_be_excluded:
+            assert f"{sku}|06-00750" in skus, f"{sku} should have been backfilled on the first run"
+
+    def test_listed_wine_priced_regardless_of_rotation_bucket(self, conn, monkeypatch):
+        # Anchor run first so this isn't confounded by first-run backfill,
+        # which would price everything regardless of tiering anyway.
+        _patch_fetchers_strict(monkeypatch, [_hit("ANCHOR4")], _rest_entries("ANCHOR4"))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+        run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         excluded_sku = _find_sku_not_in_bucket(bucket)  # would be skipped if unlisted
 
@@ -798,7 +884,14 @@ class TestRunDailySweepWavePricing:
         assert f"{excluded_sku}|06-00750" in skus
 
     def test_unlisted_wine_outside_rotation_bucket_is_not_priced(self, conn, monkeypatch):
-        run_date = "2026-07-18"
+        # An anchor run first: the very first run for a scope is a one-time
+        # full backfill (see test_first_ever_run_backfills...) and would
+        # price this SKU regardless of rotation, masking what this test
+        # actually wants to check -- rotation exclusion on a NON-first run.
+        _patch_fetchers_strict(monkeypatch, [_hit("ANCHOR3")], _rest_entries("ANCHOR3"))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+        run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         excluded_sku = _find_sku_not_in_bucket(bucket)
 
@@ -817,7 +910,13 @@ class TestRunDailySweepWavePricing:
         assert excluded_sku in products
 
     def test_unlisted_wine_inside_rotation_bucket_is_priced(self, conn, monkeypatch):
-        run_date = "2026-07-18"
+        # Anchor run first -- see test_listed_wine_priced_regardless_of_
+        # rotation_bucket for why (avoids first-run backfill masking what's
+        # actually being tested).
+        _patch_fetchers_strict(monkeypatch, [_hit("ANCHOR5")], _rest_entries("ANCHOR5"))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+        run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         included_sku = _find_sku_in_bucket(bucket)
 
@@ -852,7 +951,13 @@ class TestRunDailySweepWavePricing:
             assert skus[f"{sku}|06-00750"]["gone_since"] is None
 
     def test_rest_skus_expected_counts_only_attempted_not_discovered(self, conn, monkeypatch):
-        run_date = "2026-07-18"
+        # Anchor run first -- on the first-ever run everything is backfilled
+        # (see test_first_ever_run_backfills...), which would make
+        # rest_skus_expected 3, not the 2 this test wants to check.
+        _patch_fetchers(monkeypatch, [_hit("ANCHOR6")], _rest_entries("ANCHOR6"))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+        run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         listed_sku = _find_sku_not_in_bucket(bucket)
         included_unlisted = _find_sku_in_bucket(bucket)
@@ -893,6 +998,40 @@ class TestRunDailySweepWavePricing:
         assert row["wave_delta_enabled"] == 0
         assert row["wave_rotation_count"] == 1  # only `included`
         assert row["wave_priced_count"] == 1
+
+    def test_index_last_update_flagged_persisted_for_listed_tier(self, conn, monkeypatch):
+        # External review, 2026-07-24: shadow-mode counts over the unlisted
+        # tier alone can't validate index_last_update, because there's no
+        # ground truth there most days. The listed tier IS always fully
+        # REST-priced and diffed, so persisting per-SKU flags for it is what
+        # makes a later precision/recall query against price_changed events
+        # possible.
+        anchor_sku = "FLAGCHECK"
+        _patch_fetchers(monkeypatch, [_hit(anchor_sku, index_last_update="1-1-2020 1am")], _rest_entries(anchor_sku))
+        run1 = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+        # No baseline on the first run -- nothing should be flagged yet.
+        events1 = [dict(e) for e in conn.execute(
+            "SELECT * FROM observation_events WHERE scan_run_id=? AND event_type='index_last_update_flagged'",
+            (run1,),
+        ).fetchall()]
+        assert events1 == []
+
+        # Day 2: same listed wine, but its index_last_update is now safely
+        # in the future relative to day 1's finished_at -- must be flagged.
+        _patch_fetchers(
+            monkeypatch,
+            [_hit(anchor_sku, index_last_update="1-1-2030 1am")],
+            _rest_entries(anchor_sku),
+        )
+        run2 = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
+
+        events2 = [dict(e) for e in conn.execute(
+            "SELECT * FROM observation_events WHERE scan_run_id=? AND event_type='index_last_update_flagged'",
+            (run2,),
+        ).fetchall()]
+        assert len(events2) == 1
+        assert events2[0]["entity_type"] == "product"
+        assert events2[0]["entity_key"] == anchor_sku
 
     def test_delta_enabled_prices_an_unlisted_sku_outside_the_rotation_bucket(self, conn, monkeypatch):
         # Day 1: establish a completed run so there's a finished_at baseline

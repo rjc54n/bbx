@@ -87,25 +87,43 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
   maturity; live-verified 2026-07-23 that three dimensions alone truncated
   several Burgundy vintage/colour leaf shards).
 - Raise `REST_BATCH_SIZE` 24 → 96. Fewer requests for the same data.
-- **Wave pricing**, not brute force: one-time full backfill (~535 REST calls),
-  then a daily delta driven by Algolia's `index_last_update` (~19 calls) plus a
-  1/30th background rotation (~18 calls). Roughly 40 REST calls a day at steady
-  state against 535 for a naive daily sweep. Built, tested, and **wired into
-  `run_daily_sweep`** 2026-07-24 (`select_biddable_rest_pricing`; discovery
-  swapped from `prod_product` to `prod_biddable`, REST pricing tiered by
-  listed/unlisted). Delta selection stays off by default
+- **Wave pricing**, not brute force, for the *unlisted* tier only: a daily
+  delta driven by Algolia's `index_last_update` (~19 calls) plus a 1/30th
+  rotation (~18 calls) — call this the **incremental wave cost**, ~40/day.
+  The **listed tier is always fully priced regardless**, which an earlier
+  pass of this doc conflated with the total: at today's book size
+  (~15,483 listed parent_skus) that's ~161 more calls/day on its own, every
+  day, forever — so **total steady-state cost is ~180–200 calls/day, not
+  ~40.** The very first run for a scope automatically backfills the entire
+  discovered book (external review, 2026-07-24, caught that this wasn't
+  actually implemented despite being claimed) — pricing everything once,
+  not just what wave selection would have picked. Built, tested, and
+  **wired into `run_daily_sweep`** 2026-07-24 (`select_biddable_rest_pricing`;
+  discovery swapped from `prod_product` to `prod_biddable`, REST pricing
+  tiered by listed/unlisted). Delta selection stays off by default
   (`WAVE_PRICING_DELTA_ENABLED`) pending the week-long verification the plan
-  calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. Not yet run in
-  production; the first real run is a manual `workflow_dispatch` trigger.
-- Model unlisted-but-biddable SKUs as first-class: an `is_listed` flag on the
-  existing `skus`/`catalogue_view` shape, not a new entity (see box above).
+  calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. **All estimates
+  above are unmeasured** — the first real run (manual `workflow_dispatch`)
+  should be used to record actual listed-parent count, REST batch count,
+  duration, failures and any rate-limit (429) responses before treating
+  this budget or the 90-minute timeout as proven.
+- Model unlisted-but-biddable SKUs as first-class: `skus.is_listed`, a real
+  stored column (not a new entity) — **built 2026-07-24**, derived from
+  Algolia discovery every run independent of REST tiering, specifically
+  because the obvious alternative (`ask IS NOT NULL`) goes stale for up to
+  30 days under wave pricing (external review caught this before Step 7 was
+  built on top of it). `catalogue_view`/Step 7 must read this column, not
+  derive listing state from price fields.
 - Split "Explore catalogue" from "live listings" via a **checkbox filter**
   (`is_listed`), not a separate mode or tab — the same widget as the
   format-adjusted-values toggle, but wired as a real filter (URL-serialized,
   affects returned rows) rather than component-local display state, since
-  unlike that toggle this one changes which wines appear at all. Needed
-  because the unlisted share jumps from today's minority (9,592/27,142) to
-  the large majority the moment `prod_biddable` lands.
+  unlike that toggle this one changes which wines appear at all. Defaults to
+  **live listings only** until price freshness and listing state have both
+  been trustworthy in production for a while — not to "everything", which
+  would surface stale/unpriced wave-pricing rows by default. Needed because
+  the unlisted share jumps from today's minority (9,592/27,142) to the large
+  majority the moment `prod_biddable` lands.
 
 **Unlocks:** the part of the market with no competing seller and therefore no
 competing price anchor. This is where the guide being wrong actually pays.

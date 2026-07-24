@@ -169,7 +169,7 @@ class TestDiffSkus:
     def test_price_change(self):
         cur = {"SKU1|06-00750": {"least_listing_price_p": 25000, "market_price_p": 30000,
                                   "last_transaction_p": None, "highest_bid_p": None,
-                                  "qty_available": None}}
+                                  "qty_available": None, "is_listed": False}}
         fresh = {"SKU1|06-00750": _sku(price_p=20000)}
         _, events = diff_skus(fresh, cur, "run1", NOW)
         assert len(events) == 1

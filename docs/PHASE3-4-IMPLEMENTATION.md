@@ -262,13 +262,123 @@ counters. Only a complete discovery sweep may do that. This is already the
 contract in `core/sweep.py` — do not weaken it (see Option A above for
 exactly where this bites once wired in).
 
+### External review follow-up (2026-07-24), before the first production run
+
+Four real gaps caught by review, all fixed and tested (243/243 passing) —
+**Files added:** `core/models.py` (`Sku.is_listed`),
+`supabase/migrations/20260724143735_skus_is_listed.sql`.
+
+1. **The first run didn't actually backfill, despite the roadmap (and my own
+   summary) claiming it did.** With no prior completed run,
+   `last_run_finished_at=None`, so `select_biddable_rest_pricing`'s delta
+   stays empty and only the 1/`ROTATION_BUCKETS` rotation slice gets priced
+   — leaving ~29/30 of the unlisted universe with **no `skus` row at all**
+   on day one, and therefore **absent from `catalogue_view` entirely** (an
+   `INNER JOIN` against `skus`), not just unpriced. Fixed:
+   `run_daily_sweep` now detects `last_run_finished_at is None` and prices
+   every discovered `parent_sku` on that run, bypassing wave selection
+   entirely for it. Confirmed deliberate and implemented, not just
+   documented, per the review's explicit ask.
+
+2. **Stale ask across the listed→unlisted transition.** A wine that loses
+   its last live listing becomes wave-priced; if it isn't selected by
+   rotation/delta that day, its `least_listing_price_p` would otherwise sit
+   at its old value, and `is_listed = ask IS NOT NULL` (the design Step 7
+   was going to use) would read it as still listed — false data, for up to
+   `ROTATION_BUCKETS` days. Fixed with **both** of the review's suggested
+   approaches, not just one: `skus.is_listed` is now a real stored column
+   (migration above), derived from **this run's Algolia discovery** — which
+   runs in full every day regardless of REST tiering — via
+   `_derive_listed_format_codes`/`_reconcile_listing_state` in
+   `core/sweep.py`; **and** `least_listing_price_p` is cleared to `NULL`
+   the moment a SKU's listing disappears, even on a run that doesn't
+   REST-reprice it. `is_listed` added to `_SKU_TRACKED_FIELDS` so the
+   transition itself is a visible `field_changed` event.
+
+3. **Integration test for the transition**, exactly as asked:
+   `test_listing_lost_clears_stale_ask_even_outside_rotation_bucket` —
+   listed day 1, unlisted **and explicitly outside the rotation bucket**
+   day 2 (checked via `_sku_rotation_bucket` directly, not assumed), asserts
+   `least_listing_price_p IS NULL` and `is_listed = false` after day 2, using
+   `_patch_fetchers_strict` so a stale pass (REST mock returning data
+   regardless of what was requested) can't hide a real regression.
+   `test_relisting_restores_is_listed` covers the reverse transition for
+   symmetry.
+
+4. **Shadow mode didn't validate anything.** `select_biddable_rest_pricing`
+   is only ever called on `unlisted_hits`, so the persisted
+   `delta_changed`/`shadow_only` counts had no ground truth to check
+   themselves against — most of the unlisted tier isn't REST-priced on a
+   given day, so "flagged" can't be compared to "actually changed" there.
+   The **listed** tier *is* always fully priced and diffed, so it's the one
+   place real price-change ground truth already exists. Fixed: a new
+   `_index_last_update_flagged(hits, last_run_finished_at)` helper (reusable
+   over any hit list, unlike `select_biddable_rest_pricing` which also makes
+   a rotation/tiering decision) is run over the **listed** tier every run,
+   and a `product`-level `index_last_update_flagged` `ObservationEvent` is
+   persisted per positively-flagged `parent_sku` (positives only, to keep
+   volume down — the denominator is reconstructable from
+   `skus.last_seen_run_id`/`is_listed` rather than duplicated as events).
+
+   **This is data collection, not yet a verdict** — "define a threshold"
+   needs real accumulated data that doesn't exist until this has run for a
+   while. Once it has, the query is:
+   ```sql
+   -- Per listed parent_sku per day: was it flagged, and did ANY price or
+   -- bid field actually change that day? least_listing_price_p (ask),
+   -- highest_bid_p, market_price_p and last_transaction_p are all tracked
+   -- as price_changed events already (core/store.py _SKU_PRICE_FIELDS) --
+   -- join against the existing events, don't just check ask.
+   SELECT
+       f.entity_key AS parent_sku,
+       f.observed_at::date AS flagged_date,
+       EXISTS (
+           SELECT 1 FROM price_history_view p
+           WHERE p.parent_sku = f.entity_key
+             AND p.field_name IN ('least_listing_price_p', 'highest_bid_p',
+                                   'market_price_p', 'last_transaction_p')
+             AND p.observed_at::date = f.observed_at::date
+       ) AS price_or_bid_actually_changed
+   FROM observation_events f
+   WHERE f.event_type = 'index_last_update_flagged'
+   ORDER BY f.observed_at DESC;
+   ```
+   True-positive rate (flagged AND changed) vs. false-positive rate
+   (flagged, didn't change) from this over at least a week is the actual
+   evidence `WAVE_PRICING_DELTA_ENABLED` should be flipped on. False
+   negatives (changed without being flagged) need a second query against
+   *all* listed `price_changed` events, not just flagged ones — not yet
+   written, since there's no data to run it against yet either.
+
+5. **The ~40-REST-calls/day figure excluded the always-priced listed tier**
+   — corrected in docs/ROADMAP-2026-07.md Phase 4 to ~180–200/day
+   steady-state (listed tier ~161/day at today's book size, plus the ~40
+   wave-pricing incremental cost). All of these numbers are still
+   estimates, not measurements — the manual first run should report actual
+   listed-parent count, REST batch count, duration, failures, and any 429
+   responses before the budget or the 90-minute timeout is treated as
+   proven.
+
+6. **Stale "not yet wired" comments** in `core/sweep.py`'s module docstring
+   and the wave-pricing migration's header corrected to reflect Option A is
+   actually wired in.
+
+7. **Verified the migration was actually live** before any of this: queried
+   `information_schema.columns` on the linked Supabase project directly
+   (not assumed from the earlier `supabase db query` output) — confirmed
+   present.
+
 ---
 
 ## Step 7 — Unlisted SKUs as first-class (Phase 4)
 
-**Files:** `supabase/migrations/<timestamp>_biddable_universe.sql`,
-`core/models.py`, `apps/web/src/lib/query/registry.ts`,
-`apps/web/src/components/catalogue/CatalogueBrowser.tsx`.
+**Files:** `supabase/migrations/<timestamp>_catalogue_view_is_listed.sql`
+(expose the already-existing `skus.is_listed` — see below),
+`apps/web/src/lib/query/registry.ts`, `apps/web/src/lib/query/types.ts`,
+`apps/web/src/lib/query/url.ts`, `apps/web/src/lib/query/fetchCatalogue.ts`,
+`apps/web/src/components/catalogue/CatalogueBrowser.tsx`. `core/models.py`'s
+`Sku.is_listed` is done already (Step 6 follow-up, 2026-07-24) — not this
+step's work.
 
 Not a new entity. "Available to bid" already fits the existing
 products → skus → offers model (Phase 1A): a never-listed wine is a
@@ -286,20 +396,37 @@ filter, so "Explore catalogue" already silently mixes listed and unlisted
 SKUs — invisible today because unlisted is a minority (9,592/27,142); not
 invisible once the `prod_biddable` ingest makes it the large majority.
 
-- Add `is_listed` (derived: `ask IS NOT NULL AND ask > 0`) to `catalogue_view`.
+**`skus.is_listed` already exists** — built 2026-07-24 (external review, see
+Step 6's follow-up), stored and reconciled against Algolia discovery every
+run, independent of REST tiering. Step 7's job is to **expose the existing
+column**, not derive one:
+
+- Add `is_listed` to `catalogue_view` as a **passthrough of `skus.is_listed`**
+  — **do not** compute it as `ask IS NOT NULL AND ask > 0`. That derivation
+  is exactly the bug the Step 6 follow-up fixed: under wave pricing a wine
+  can lose its listing without being REST-repriced the same day, and while
+  `core/sweep.py` now clears the stale ask in that case too, `is_listed` is
+  the direct, load-bearing fact — computing it a second, different way in
+  SQL reintroduces two sources of truth for the same question.
 - Surface it as a **checkbox filter** ("Show unlisted wines" or equivalent),
   not a separate mode/tab and not a new `STARTING_POINTS` entry — same
   widget as the format-adjusted-values toggle shipped this session, but a
   different category underneath: this one changes which *rows* come back,
   so it must be a real `CATALOGUE_FILTERS` entry, applied via
-  `.eq("is_listed", ...)` in `fetchCatalogue`, and round-tripped through
-  `url.ts` like every other filter — a shared link has to reproduce the same
-  rows in a fresh session. The format-adjusted toggle is deliberately
+  `.eq("is_listed", ...)` in `fetchCatalogue`, and **round-tripped through
+  `url.ts` like every other filter** — a shared link has to reproduce the
+  same rows in a fresh session; a local-only toggle here would silently
+  break that guarantee. The format-adjusted toggle is deliberately
   component-local state precisely because it *doesn't* affect rows; don't
   reuse that pattern here.
-- Default value (`is_listed: true` vs. unfiltered) is a product call, not an
-  engineering one — worth deciding explicitly before this ships rather than
-  defaulting by accident.
+- **Default to live listings only** (`is_listed: true`), not unfiltered —
+  decided by external review, not left as an open product call: default to
+  everything and a fresh visitor's first impression of "Explore catalogue"
+  is mostly stale-priced, never-checked-today rows once `prod_biddable`
+  makes unlisted the large majority. Revisit only once price freshness and
+  listing-state accuracy have been trustworthy in production for a while
+  (see Step 6's shadow-mode validation — the same "prove it before you rely
+  on it" bar applies to relaxing this default).
 - `price_vs_*` metrics must render as "no ask" rather than NULL-as-zero for
   unlisted rows.
 

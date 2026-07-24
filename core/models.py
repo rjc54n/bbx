@@ -87,6 +87,13 @@ class Sku:
     highest_bid_p: Optional[int] = None
     qty_available: Optional[int] = None
     source_agreement: str = "unchecked"
+    # Whether Algolia discovery (which runs in full every sweep, independent
+    # of REST wave-pricing tiering -- see core/sweep.py's
+    # _reconcile_listing_state) saw a live listing for this exact format this
+    # run. Listing presence, NOT a derived fact -- never infer "listed" from
+    # least_listing_price_p being non-null, which can go stale for up to
+    # ROTATION_BUCKETS days after a wine's last listing actually disappears.
+    is_listed: bool = False
 
     @classmethod
     def from_rest_entry(cls, parent_sku: str, entry: Dict[str, Any]) -> Sku:
