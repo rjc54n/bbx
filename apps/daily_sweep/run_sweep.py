@@ -32,12 +32,21 @@ def main():
         log.error("ALGOLIA_APP_ID and ALGOLIA_API_KEY must be set")
         sys.exit(1)
 
+    # UNVERIFIED (see docs/PHASE3-4-IMPLEMENTATION.md Step 6): defaults to
+    # False so index_last_update-driven delta selection is computed and
+    # logged (shadow mode) but doesn't yet affect which unlisted parent_skus
+    # get REST-priced. Flip only once index_last_update has been compared
+    # against real observed price changes on the listed book for at least a
+    # week.
+    delta_enabled = os.environ.get("WAVE_PRICING_DELTA_ENABLED", "").strip().lower() == "true"
+
     with get_connection() as conn:
         try:
             run_id = run_daily_sweep(
                 conn,
                 algolia_app_id=algolia_app_id,
                 algolia_api_key=algolia_api_key,
+                delta_enabled=delta_enabled,
             )
             if run_id is None:
                 log.info("No work to do — completed run already exists for today.")

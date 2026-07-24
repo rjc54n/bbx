@@ -142,10 +142,11 @@ maturity), plus `fetch_biddable_universe`-level tests (FetchResult shape,
 
 ---
 
-## Step 6 — Change-driven wave pricing (Phase 4) — mechanism done 2026-07-24, not yet wired in
+## Step 6 — Change-driven wave pricing (Phase 4) — done 2026-07-24 (mechanism + wiring, Option A)
 
 **Files:** `core/sweep.py`, `core/store.py`, `core/db.py` (SQLite schema),
-`supabase/migrations/20260724122841_wave_pricing_columns.sql` (Postgres).
+`supabase/migrations/20260724122841_wave_pricing_columns.sql` (Postgres),
+`apps/daily_sweep/run_sweep.py`, `.github/workflows/daily_sweep.yml`.
 
 `index_last_update` is a facetable per-record string stamp
 (`"23-07-2026 1pm"`). It is **not lexically sortable** — parse it (done:
@@ -153,8 +154,8 @@ maturity), plus `fetch_biddable_universe`-level tests (FetchResult shape,
 and both am/PM case; verified against every real format observed this
 session including the 12am/12pm edge cases).
 
-**Built, deliberately as a standalone, tested mechanism — not yet called
-from `run_daily_sweep`:**
+**The selection mechanism, built as standalone, independently-tested
+functions:**
 - `rotation_bucket_for_date(run_date)` / `_sku_rotation_bucket(parent_sku)`
   — deterministic day → bucket and SKU → bucket assignment (`ROTATION_BUCKETS
   = 30`), using SHA-256 rather than Python's built-in `hash()` (salted per
@@ -176,47 +177,85 @@ from `run_daily_sweep`:**
   New columns added to both the SQLite bootstrap schema (`core/db.py`) and
   the production Postgres store (new migration, applied to the linked
   Supabase project and dry-run-verified first).
-- 33 new tests: timestamp parsing (all real-observed formats plus midnight/
-  noon edge cases), bucket determinism/cycling/distribution, and the full
-  `select_biddable_rest_pricing` decision matrix (flag on/off, no-baseline
-  first run, missing/malformed timestamps, hits missing `parent_sku`).
-  230/230 passing; the 24 existing `run_daily_sweep` integration tests are
-  untouched and still pass unmodified.
+**Wired in via Option A** (discovery source swapped, not a parallel sweep —
+see the two options this was chosen between, below): `run_daily_sweep` now
+calls `fetch_biddable_universe()` (prod_biddable) instead of `fetch_listings()`
+(prod_product). REST pricing tiers on `_is_listed_hit(hit)` (does this hit
+carry a live listing): listed parent_skus are always fully priced, exactly
+as before Phase 4; unlisted parent_skus go through
+`select_biddable_rest_pricing`.
 
-**Deliberately NOT done yet, and this is a scope boundary, not an
-oversight:** none of this is called from `run_daily_sweep`. Wiring it in
-means deciding how the *listed* book (currently `prod_product`-discovered,
-fully REST-priced every day — the "independent evidence" this step's own
-verification needs) relates to the *biddable* universe
-(`prod_biddable`-discovered, wave-priced) once they're the same sweep:
+**A real, live-discovered compatibility bug, found and fixed before this
+went anywhere near production:** `prod_product` is a **per-listing** index
+(`objectID == bbx_listing_id`; multiple hits can share a `parent_sku`, one
+per listing, each denormalising the full sibling-offer list under
+`purchase_options[]`). `prod_biddable` is **per-product**
+(`objectID == parent_sku`; exactly one hit per wine), with live listings
+under `bbx_listings[]` instead. `_extract_offers` read only
+`purchase_options`, so swapping the discovery source would have silently
+returned **zero offers for the entire biddable universe** — not an error,
+just quietly empty. Verified live (2026-07-24) that the inner shape
+(`case_size`, `bottle_volume`, `bbx_listing_id`, `prices.price_per_case_exact`)
+is identical either way; fixed by having `_extract_offers` read
+`purchase_options` **or** `bbx_listings`, whichever is present, so both
+discovery sources keep working through the same extraction code (`fetch_listings`
+is still used elsewhere, e.g. the hourly arbitrage bot).
 
-- **Option A — swap the discovery source.** `run_daily_sweep` moves from
-  `fetch_listings()` (prod_product) to `fetch_biddable_universe()`
-  (prod_biddable, a confirmed superset — listed wines appear in it too, with
-  `bbx_listings[]` populated). REST-pricing then tiers: parent_skus with a
-  live listing are *always* fully priced (unchanged quality/freshness from
-  today); the rest go through `select_biddable_rest_pricing`. This also
-  fixes a real correctness wrinkle: SKU-level `gone_since` tracking is
-  currently driven by REST coverage (`_extract_skus` only comes from REST
-  data), so a wave-priced SKU that isn't repriced this run must be exempted
-  from miss-counting the same way `rest_failed_skus` already is today — this
-  needs the SAME widening, just for "not attempted" alongside "attempted and
-  failed." Product- and offer-level presence tracking stay Algolia-driven
-  and are unaffected either way.
+**The coverage-rule exemption, widened correctly, not weakened:**
+`commit_sweep`'s `rest_failed_skus` parameter (and `process_disappearances`'/
+`_apply_disappearances`') is renamed to **`rest_unchecked_skus`** and now
+carries genuinely-failed REST batches **union** wave-pricing-skipped
+parent_skus — either way, a SKU wasn't confidently checked this run, so
+silence must not count as evidence of absence. This is a pure rename plus a
+wider input set at the one call site in `run_daily_sweep`; it does **not**
+touch `update_run_rest`'s own `rest_failed_skus` (the real, narrower,
+web-app-visible `scan_runs` column — still means exactly "REST batches that
+genuinely failed", unwidened).
+
+**`rest_skus_expected` now means "attempted", not "discovered":** with
+wave pricing most of the biddable universe is *intentionally* not
+REST-priced on a given day, so `rest_skus_expected` is `len(parent_skus_to_price)`
+(listed ∪ wave-selected unlisted) rather than every discovered `parent_sku` —
+otherwise `rest_coverage` would read as ~0.1% on a normal day and
+`_determine_final_status` would mark every run `"partial"`, which skips
+disappearance-tracking for the **entire** book, not just the wave-skipped
+part. How much of the whole biddable universe was actually touched is a
+separate, already-captured metric (`wave_priced_count` vs. total unlisted
+hits), not conflated with REST-attempt coverage.
+
+**Chosen between two options, not picked silently:**
+- **Option A (chosen)** — swap the discovery source, as above.
 - **Option B — a separate, parallel sweep.** A new `scope='biddable'` run
   (the schema already supports multiple scan scopes via
   `UNIQUE (scope, run_date) WHERE status='completed'`) alongside the
-  existing `full_book` sweep, untouched. Simpler to reason about in
-  isolation, but two independently-complete discovery sweeps writing
-  `gone_since` to the *same* shared `products`/`skus`/`offers` rows risks the
-  two scopes disagreeing about the same row's presence.
+  existing `full_book` sweep, untouched. Simpler in isolation, but two
+  independently-complete discovery sweeps writing `gone_since` to the same
+  shared `products`/`skus`/`offers` rows risks the two scopes disagreeing
+  about the same row's presence. Not used.
 
-I did not pick between these silently — it's a bigger, production-behaviour-
-changing call than Step 6 itself specifies, and the doc's own caution
-("verify for at least a week before the delta path becomes primary") only
-makes sense if the live sweep isn't already depending on it. Building the
-mechanism as a dormant, fully-tested module now means whichever option gets
-picked later is a small wiring change, not a large one.
+- `apps/daily_sweep/run_sweep.py` reads `WAVE_PRICING_DELTA_ENABLED` (default
+  unset/false) and threads it through as `delta_enabled`.
+  `.github/workflows/daily_sweep.yml` exposes it as a repository variable
+  (`vars.WAVE_PRICING_DELTA_ENABLED`), and its timeout was raised
+  45 → 90 minutes — a live single-region (Burgundy, ~28k records)
+  discovery-only test took ~4.5 minutes; the full multi-region sweep is
+  untested end-to-end, so this is a conservative estimate to watch on the
+  first real runs, not a measured figure.
+- 41 new/changed tests across `core/sweep.py`'s and `core/store.py`'s test
+  suites: the 33 from the mechanism, plus new `run_daily_sweep`-level
+  integration tests proving the actual wiring (listed-always-priced,
+  unlisted-outside-rotation-skipped, unlisted-inside-rotation-priced,
+  skip-never-counts-as-a-miss across multiple consecutive skip days,
+  `rest_skus_expected` counting only attempted SKUs, wave-pricing stats
+  persisted to `scan_runs`, `delta_enabled` reaching an otherwise-excluded
+  SKU only when true) plus real extraction functions run against live
+  `prod_biddable` data (100 real hits: 7 listed → 7 offers, 100 products, no
+  loss). One test-authoring bug caught along the way: a naive REST mock that
+  ignores its `skus` argument entirely (fine when every hit is listed, which
+  is all the pre-existing 24 tests needed) produces both false passes and
+  false failures for tests that specifically assert a SKU was or wasn't
+  priced — fixed with a second, argument-aware mock (`_patch_fetchers_strict`)
+  used wherever that distinction is the point of the test. 239/239 passing.
 
 **Coverage rule:** a delta-only run may never advance missing-SKU or `gone`
 counters. Only a complete discovery sweep may do that. This is already the

@@ -1,8 +1,10 @@
 # .github/workflows/daily_sweep.yml
 # ----------------------------------------------------------------
-# Daily full-book sweep: fetches the entire BBX listing book via
-# Algolia + REST, diffs against the persistent scan store, and
-# records state transitions (appeared, price changed, disappeared).
+# Daily full-book sweep: fetches the entire biddable universe
+# (prod_biddable, Phase 4 -- ~52k wines, not just BBX-listed ones)
+# via Algolia, tiers REST pricing (listed always, unlisted via wave
+# pricing), diffs against the persistent scan store, and records
+# state transitions (appeared, price changed, disappeared).
 # ----------------------------------------------------------------
 
 name: BBX Daily Sweep
@@ -19,13 +21,25 @@ concurrency:
 jobs:
   sweep:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Discovery now covers the full ~52k-wine biddable universe rather than
+    # the ~15k-wine listed book. A live single-region (Burgundy, ~28k
+    # records) discovery-only test took ~4.5 minutes on 2026-07-24; the full
+    # multi-region sweep is untested end-to-end, so this is a conservative
+    # estimate, not a measured figure -- watch the actual duration on the
+    # first few runs and adjust.
+    timeout-minutes: 90
 
     env:
       ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
       ALGOLIA_API_KEY: ${{ secrets.ALGOLIA_API_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      # UNVERIFIED (docs/PHASE3-4-IMPLEMENTATION.md Step 6): defaults to
+      # false/unset so delta selection runs in shadow mode only. Set the
+      # repository variable WAVE_PRICING_DELTA_ENABLED to "true" only after
+      # index_last_update has been compared against real observed price
+      # changes on the listed book for at least a week.
+      WAVE_PRICING_DELTA_ENABLED: ${{ vars.WAVE_PRICING_DELTA_ENABLED }}
 
     steps:
       - name: Checkout repo

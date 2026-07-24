@@ -240,12 +240,15 @@ class TestDisappearances:
         )
         assert len(events) == 0
 
-    def test_sku_skipped_if_rest_failed(self):
+    def test_sku_skipped_if_rest_unchecked(self):
+        # Covers both reasons a SKU can be "unchecked": a genuinely failed
+        # REST batch, or (Phase 4 wave pricing) simply not selected this run.
+        # Either way, silence isn't evidence of absence.
         cur = {"SKU1|06-00750": {"parent_sku": "SKU1", "consecutive_misses": 1,
                                   "gone_since": None}}
         events = process_disappearances(
             "sku", set(), cur, "run1", NOW,
-            algolia_complete=True, rest_failed_skus={"SKU1"},
+            algolia_complete=True, rest_unchecked_skus={"SKU1"},
         )
         assert len(events) == 0
 
@@ -254,7 +257,7 @@ class TestDisappearances:
                                   "gone_since": None}}
         events = process_disappearances(
             "sku", set(), cur, "run1", NOW,
-            algolia_complete=True, rest_failed_skus={"OTHER"},
+            algolia_complete=True, rest_unchecked_skus={"OTHER"},
         )
         assert len(events) == 1
         assert events[0].event_type == "disappeared"
@@ -287,7 +290,7 @@ class TestCommitSweep:
             seen_product_keys={"SKU1"}, seen_sku_keys={"SKU1|06-00750"},
             seen_offer_keys={"100"},
             current_products={}, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now=NOW,
         )
 
@@ -318,7 +321,7 @@ class TestCommitSweep:
             seen_product_keys={"SKU1"}, seen_sku_keys=set(),
             seen_offer_keys=set(),
             current_products={}, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now=NOW,
         )
         commit_sweep(conn, run_id, **kwargs)
@@ -340,7 +343,7 @@ class TestCommitSweep:
             seen_product_keys={"SKU1"}, seen_sku_keys=set(),
             seen_offer_keys=set(),
             current_products={}, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now=NOW,
         )
 
@@ -353,7 +356,7 @@ class TestCommitSweep:
             seen_product_keys=set(), seen_sku_keys=set(),
             seen_offer_keys=set(),
             current_products=cur_prods, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now=NOW2,
         )
         prods = load_current_products(conn)
@@ -369,7 +372,7 @@ class TestCommitSweep:
             seen_product_keys=set(), seen_sku_keys=set(),
             seen_offer_keys=set(),
             current_products=cur_prods, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now="2026-07-20T02:00:00Z",
         )
         prods = load_current_products(conn)
@@ -395,7 +398,7 @@ class TestCommitSweep:
             ],
             seen_product_keys={"SKU1"}, seen_sku_keys=set(), seen_offer_keys=set(),
             current_products={}, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now=NOW,
         )
         # Manually mark as gone
@@ -412,7 +415,7 @@ class TestCommitSweep:
             products=[prod], skus=[], offers=[], events=reapp_events,
             seen_product_keys={"SKU1"}, seen_sku_keys=set(), seen_offer_keys=set(),
             current_products=cur_prods, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now=NOW2,
         )
         prods = load_current_products(conn)
@@ -430,7 +433,7 @@ class TestCommitSweep:
             ],
             seen_product_keys={"SKU1"}, seen_sku_keys=set(), seen_offer_keys=set(),
             current_products={}, current_skus={}, current_offers={},
-            algolia_complete=True, rest_failed_skus=set(),
+            algolia_complete=True, rest_unchecked_skus=set(),
             final_status="completed", now=NOW,
         )
 
@@ -442,7 +445,7 @@ class TestCommitSweep:
             products=[], skus=[], offers=[], events=[],
             seen_product_keys=set(), seen_sku_keys=set(), seen_offer_keys=set(),
             current_products=cur_prods, current_skus={}, current_offers={},
-            algolia_complete=False, rest_failed_skus=set(),
+            algolia_complete=False, rest_unchecked_skus=set(),
             final_status="partial", now=NOW2,
         )
         prods = load_current_products(conn)

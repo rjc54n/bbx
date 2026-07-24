@@ -49,6 +49,25 @@ def start_run(conn, *, scope: str, run_date: str) -> Optional[str]:
     return run_id
 
 
+def get_last_completed_run_finished_at(conn, *, scope: str) -> Optional[str]:
+    """Most recent completed run's finished_at for this scope, or None if
+    there isn't one yet (e.g. the very first run). Phase 4 wave pricing uses
+    this as the baseline for index_last_update delta selection -- with no
+    baseline, nothing can be judged "changed since last time"."""
+    p = placeholder()
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT finished_at FROM scan_runs WHERE scope = {p} AND status = 'completed' "
+        f"ORDER BY finished_at DESC LIMIT 1",
+        (scope,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    if row is None:
+        return None
+    return dict(row)["finished_at"]
+
+
 def update_run_discovery(
     conn, run_id: str, *,
     algolia_complete: bool,
@@ -271,8 +290,15 @@ def process_disappearances(
     now: str,
     *,
     algolia_complete: bool,
-    rest_failed_skus: Set[str] = frozenset(),
+    rest_unchecked_skus: Set[str] = frozenset(),
 ) -> List[ObservationEvent]:
+    """
+    rest_unchecked_skus: parent_skus this run couldn't confidently verify as
+    present or absent -- either a REST batch genuinely failed, or (Phase 4
+    wave pricing) the SKU simply wasn't selected for REST-pricing this run.
+    Either way, silence is not evidence of absence, so these are exempted
+    from miss-counting the same way -- not just "failed" ones.
+    """
     events = []
     if not algolia_complete:
         return events
@@ -285,7 +311,7 @@ def process_disappearances(
 
         if entity_type == "sku":
             psku = cur["parent_sku"]
-            if psku in rest_failed_skus:
+            if psku in rest_unchecked_skus:
                 continue
 
         misses = cur.get("consecutive_misses", 0) + 1
@@ -316,7 +342,7 @@ def commit_sweep(
     current_skus: Dict[str, Dict[str, Any]],
     current_offers: Dict[str, Dict[str, Any]],
     algolia_complete: bool,
-    rest_failed_skus: Set[str],
+    rest_unchecked_skus: Set[str],
     final_status: str,
     now: str,
 ) -> None:
@@ -449,13 +475,13 @@ def commit_sweep(
             log.info("Applying disappearance checks")
             _apply_disappearances(cur, "product", seen_product_keys,
                                   current_products, run_id, now,
-                                  algolia_complete, rest_failed_skus, events)
+                                  algolia_complete, rest_unchecked_skus, events)
             _apply_disappearances(cur, "sku", seen_sku_keys,
                                   current_skus, run_id, now,
-                                  algolia_complete, rest_failed_skus, events)
+                                  algolia_complete, rest_unchecked_skus, events)
             _apply_disappearances(cur, "offer", seen_offer_keys,
                                   current_offers, run_id, now,
-                                  algolia_complete, rest_failed_skus, events)
+                                  algolia_complete, rest_unchecked_skus, events)
 
         # --- insert events (batched) ---
         event_rows = [
@@ -503,7 +529,7 @@ def commit_sweep(
 
 def _apply_disappearances(
     cur, entity_type, seen_keys, current, run_id, now,
-    algolia_complete, rest_failed_skus, events,
+    algolia_complete, rest_unchecked_skus, events,
 ):
     if not algolia_complete:
         return
@@ -518,7 +544,7 @@ def _apply_disappearances(
             continue
 
         if entity_type == "sku":
-            if rec["parent_sku"] in rest_failed_skus:
+            if rec["parent_sku"] in rest_unchecked_skus:
                 continue
 
         misses = rec.get("consecutive_misses", 0) + 1

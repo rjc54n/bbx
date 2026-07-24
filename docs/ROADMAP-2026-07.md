@@ -90,11 +90,13 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
 - **Wave pricing**, not brute force: one-time full backfill (~535 REST calls),
   then a daily delta driven by Algolia's `index_last_update` (~19 calls) plus a
   1/30th background rotation (~18 calls). Roughly 40 REST calls a day at steady
-  state against 535 for a naive daily sweep. Selection mechanism built and
-  tested 2026-07-24 (`select_biddable_rest_pricing`); not yet wired into the
-  live sweep — that requires deciding whether the daily sweep's discovery
-  source switches to `prod_biddable` now or runs as a separate parallel scan
-  (docs/PHASE3-4-IMPLEMENTATION.md Step 6).
+  state against 535 for a naive daily sweep. Built, tested, and **wired into
+  `run_daily_sweep`** 2026-07-24 (`select_biddable_rest_pricing`; discovery
+  swapped from `prod_product` to `prod_biddable`, REST pricing tiered by
+  listed/unlisted). Delta selection stays off by default
+  (`WAVE_PRICING_DELTA_ENABLED`) pending the week-long verification the plan
+  calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. Not yet run in
+  production; the first real run is a manual `workflow_dispatch` trigger.
 - Model unlisted-but-biddable SKUs as first-class: an `is_listed` flag on the
   existing `skus`/`catalogue_view` shape, not a new entity (see box above).
 - Split "Explore catalogue" from "live listings" via a **checkbox filter**

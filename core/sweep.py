@@ -14,7 +14,7 @@ from datetime import date, timezone, datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from core.db import bootstrap_schema
-from core.fetch_listings import FetchResult, fetch_listings
+from core.fetch_listings import FetchResult, fetch_biddable_universe
 from core.models import (
     ObservationEvent,
     Offer,
@@ -29,6 +29,7 @@ from core.store import (
     diff_offers,
     diff_products,
     diff_skus,
+    get_last_completed_run_finished_at,
     load_current_offers,
     load_current_products,
     load_current_skus,
@@ -36,6 +37,7 @@ from core.store import (
     start_run,
     update_run_discovery,
     update_run_rest,
+    update_run_wave_pricing,
 )
 
 log = logging.getLogger(__name__)
@@ -84,6 +86,22 @@ def parse_index_last_update(raw: Optional[str]) -> Optional[datetime]:
         return datetime.strptime(raw.strip().upper(), _INDEX_LAST_UPDATE_FORMAT)
     except ValueError:
         return None
+
+
+def _parse_run_finished_at(raw: Optional[str]) -> Optional[datetime]:
+    """Parse scan_runs.finished_at (an ISO8601 string from _now_utc(), always
+    UTC-aware) into a naive datetime comparable with parse_index_last_update's
+    output. index_last_update carries no timezone info at all, so this is
+    necessarily an approximate comparison (off by up to an hour around BST
+    transitions) -- acceptable for delta selection, which only needs
+    "roughly since last time", not a hard audit boundary.
+    """
+    if not raw:
+        return None
+    dt = datetime.fromisoformat(raw)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 # How many days a full rotation of the book takes at the rotation-slice
@@ -208,6 +226,26 @@ def _extract_skus(
     return skus
 
 
+# prod_product (fetch_listings) is a per-LISTING index -- objectID is the
+# bbx_listing_id, and each record denormalises the full sibling-offer list
+# for its parent_sku under purchase_options[]. prod_biddable
+# (fetch_biddable_universe) is per-PRODUCT -- objectID is the parent_sku,
+# and live listings for that product live under bbx_listings[] instead.
+# Confirmed live 2026-07-24: the inner shape (case_size, bottle_volume,
+# bbx_listing_id, prices.price_per_case_exact) is identical either way, only
+# the array's key differs.
+def _hit_listing_options(hit: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return hit.get("purchase_options") or hit.get("bbx_listings") or []
+
+
+def _is_listed_hit(hit: Dict[str, Any]) -> bool:
+    """True if this Algolia hit carries at least one live BBX listing --
+    the tiering test for Phase 4 wave pricing (see run_daily_sweep):
+    listed parent_skus are always REST-priced in full; unlisted ones go
+    through select_biddable_rest_pricing."""
+    return bool(_hit_listing_options(hit))
+
+
 def _extract_offers(
     hits: List[Dict[str, Any]],
     known_format_codes: Dict[str, Set[str]],
@@ -218,7 +256,7 @@ def _extract_offers(
         if not psku:
             continue
         psku = str(psku)
-        for opt in hit.get("purchase_options") or []:
+        for opt in _hit_listing_options(hit):
             if "bbx_listing_id" not in opt:
                 continue
             codes = known_format_codes.get(psku)
@@ -279,10 +317,20 @@ def run_daily_sweep(
     algolia_app_id: str,
     algolia_api_key: str,
     run_date: Optional[str] = None,
+    delta_enabled: bool = False,
     progress: Optional[Callable] = None,
 ) -> Optional[str]:
     """
-    Run one full-book sweep and persist results.
+    Run one full-book sweep over the biddable universe and persist results.
+
+    Phase 4: discovery covers prod_biddable's full ~52k-wine universe, not
+    just the BBX-listed subset. REST pricing is tiered to stay within
+    politeness budget: parent_skus with a live listing are always fully
+    priced (unchanged behaviour/quality from before Phase 4); everything
+    else goes through select_biddable_rest_pricing's wave pricing (a
+    rotating slice, plus index_last_update-driven deltas once
+    delta_enabled=True -- see docs/PHASE3-4-IMPLEMENTATION.md Step 6 for why
+    that defaults to False).
 
     Returns the run_id on success, or None if a completed run already exists
     for today. Raises on fatal errors (the caller should catch and set
@@ -301,10 +349,8 @@ def run_daily_sweep(
     log.info("Started sweep run %s for %s", run_id, run_date)
 
     try:
-        # --- Phase 1: Algolia discovery ---
-        fetch_result = fetch_listings(
-            algolia_app_id, algolia_api_key, days_label=None
-        )
+        # --- Phase 1: Algolia discovery (biddable universe) ---
+        fetch_result = fetch_biddable_universe(algolia_app_id, algolia_api_key)
         hits = fetch_result.hits
         algolia_complete = fetch_result.discovery_complete
 
@@ -327,16 +373,51 @@ def run_daily_sweep(
             fetch_result.collected_count, fetch_result.total_index_hits, algolia_complete,
         )
 
-        # --- Phase 2: REST pricing (full) ---
-        parent_skus = list({
-            str(h["parent_sku"]) for h in hits if h.get("parent_sku")
-        })
+        # --- Phase 2: REST pricing (tiered: listed always, unlisted wave-priced) ---
+        all_parent_skus: Set[str] = set()
+        listed_parent_skus: Set[str] = set()
+        unlisted_hits: List[Dict[str, Any]] = []
+        for hit in hits:
+            psku = hit.get("parent_sku")
+            if not psku:
+                continue
+            psku = str(psku)
+            all_parent_skus.add(psku)
+            if _is_listed_hit(hit):
+                listed_parent_skus.add(psku)
+            else:
+                unlisted_hits.append(hit)
+
+        last_run_finished_at = _parse_run_finished_at(
+            get_last_completed_run_finished_at(conn, scope="full_book")
+        )
+        wave_plan = select_biddable_rest_pricing(
+            unlisted_hits,
+            last_run_finished_at=last_run_finished_at,
+            run_date=run_date,
+            delta_enabled=delta_enabled,
+        )
+        log.info(
+            "Wave pricing: %d unlisted parent_skus discovered, %d selected "
+            "(rotation=%d, delta_changed=%d, shadow_only=%d, delta_enabled=%s)",
+            len(unlisted_hits), len(wave_plan.to_price),
+            len(wave_plan.rotation_selected), len(wave_plan.delta_changed),
+            len(wave_plan.shadow_only), delta_enabled,
+        )
+
+        parent_skus_to_price = sorted(listed_parent_skus | set(wave_plan.to_price))
         rest_data, failed_skus = fetch_rest_pricing_full(
-            parent_skus, progress=progress
+            parent_skus_to_price, progress=progress
         )
         rest_failed_set = set(failed_skus)
+        # Discovered but not attempted this run (wave-pricing skip). Neither
+        # this run's price data nor its absence tells us anything about
+        # these SKUs -- combined with rest_failed_set below, this is exactly
+        # the "couldn't confidently verify" set the disappearance-exemption
+        # logic in core/store.py needs.
+        rest_unchecked_skus = all_parent_skus - set(parent_skus_to_price)
 
-        rest_skus_expected = len(parent_skus)
+        rest_skus_expected = len(parent_skus_to_price)
         rest_skus_priced = len(rest_data)
         rest_skus_failed = len(failed_skus)
         rest_coverage = rest_skus_priced / rest_skus_expected if rest_skus_expected else 1.0
@@ -348,14 +429,29 @@ def run_daily_sweep(
             rest_skus_failed=rest_skus_failed,
             rest_failed_skus=failed_skus,
         )
+        update_run_wave_pricing(
+            conn, run_id,
+            wave_delta_enabled=delta_enabled,
+            wave_rotation_count=len(wave_plan.rotation_selected),
+            wave_delta_changed_count=len(wave_plan.delta_changed),
+            wave_shadow_only_count=len(wave_plan.shadow_only),
+            wave_priced_count=len(wave_plan.to_price),
+        )
         log.info(
-            "REST: %d/%d priced, %d failed (coverage %.1f%%)",
+            "REST: %d/%d attempted priced, %d failed (coverage %.1f%%); "
+            "%d discovered parent_skus not attempted this run (wave-pricing skip)",
             rest_skus_priced, rest_skus_expected, rest_skus_failed, rest_coverage * 100,
+            len(rest_unchecked_skus),
         )
 
         # --- Phase 3: Extract entities ---
         fresh_products = _extract_products(hits)
         fresh_skus = _extract_skus(rest_data)
+        # known_fcs only covers parent_skus_to_price -- for wave-skipped
+        # parent_skus, Offer.from_purchase_option has no known-format list to
+        # cross-check against and falls back to match_confidence="inferred"
+        # unconditionally. Acceptable: these are predominantly newly-added
+        # unlisted wines with no prior REST data to compare against anyway.
         known_fcs = _known_format_codes_by_sku(rest_data)
         fresh_offers = _extract_offers(hits, known_fcs)
 
@@ -427,7 +523,7 @@ def run_daily_sweep(
             current_skus=current_skus,
             current_offers=current_offers,
             algolia_complete=algolia_complete,
-            rest_failed_skus=rest_failed_set,
+            rest_unchecked_skus=rest_failed_set | rest_unchecked_skus,
             final_status=final_status,
             now=now,
         )

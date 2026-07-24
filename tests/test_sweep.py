@@ -44,7 +44,11 @@ def conn():
 # Helpers — fake Algolia hits and REST data
 # ---------------------------------------------------------------
 
-def _hit(parent_sku="SKU1", name="Test Wine", vintage=2020, purchase_options=None):
+def _hit(parent_sku="SKU1", name="Test Wine", vintage=2020, bbx_listings=None, index_last_update=None):
+    """A prod_biddable-shaped hit (what fetch_biddable_universe actually
+    returns) -- listed by default (bbx_listings has one entry); pass
+    bbx_listings=[] for an unlisted wine, or a custom list for multiple/
+    specific listings."""
     return {
         "parent_sku": parent_sku,
         "name": name,
@@ -52,7 +56,7 @@ def _hit(parent_sku="SKU1", name="Test Wine", vintage=2020, purchase_options=Non
         "region": "Bordeaux",
         "colour": "Red",
         "country": "France",
-        "purchase_options": purchase_options or [
+        "bbx_listings": bbx_listings if bbx_listings is not None else [
             {
                 "bbx_listing_id": f"{parent_sku}-001",
                 "case_size": 6,
@@ -60,6 +64,7 @@ def _hit(parent_sku="SKU1", name="Test Wine", vintage=2020, purchase_options=Non
                 "prices": {"price_per_case_exact": 250},
             },
         ],
+        "index_last_update": index_last_update,
     }
 
 
@@ -152,12 +157,27 @@ class TestExtractOffers:
         assert offer.price_per_case_p == 25000
 
     def test_skips_offers_without_price(self):
-        hits = [_hit("SKU1", purchase_options=[
+        hits = [_hit("SKU1", bbx_listings=[
             {"bbx_listing_id": "X", "case_size": 6, "bottle_volume": "75cl",
              "prices": {"price_per_case_exact": 0}},
         ])]
         offers = _extract_offers(hits, {})
         assert len(offers) == 0
+
+    def test_reads_purchase_options_field_too(self):
+        # prod_product (fetch_listings, still used elsewhere -- e.g. the
+        # hourly arbitrage bot) denormalises offers under purchase_options[]
+        # rather than bbx_listings[]. _extract_offers must handle both.
+        hits = [{
+            "parent_sku": "SKU1",
+            "purchase_options": [
+                {"bbx_listing_id": "X", "case_size": 6, "bottle_volume": "75cl",
+                 "prices": {"price_per_case_exact": 250}},
+            ],
+        }]
+        offers = _extract_offers(hits, {})
+        assert len(offers) == 1
+        assert list(offers.values())[0].price_per_case_p == 25000
 
     def test_matches_known_format_codes(self):
         hits = [_hit("SKU1")]
@@ -407,13 +427,42 @@ class TestSelectBiddableRestPricing:
 
 
 def _patch_fetchers(monkeypatch, hits, rest_data, complete=True, failed_skus=None):
-    """Monkeypatch both fetch_listings and fetch_rest_pricing_full."""
+    """Monkeypatch both fetch_biddable_universe and fetch_rest_pricing_full.
+
+    fetch_rest_pricing_full is patched to return rest_data for WHATEVER
+    parent_skus it's called with (ignoring the actual argument) -- fine for
+    tests where every hit is listed (the common case, since listed-tier
+    SKUs are always fully priced regardless of wave-pricing selection), but
+    tests that mix listed and unlisted hits and want to assert exactly which
+    parent_skus got REST-priced should patch fetch_rest_pricing_full
+    themselves to inspect its argument instead of using this helper.
+    """
     result = _fetch_result(hits, complete=complete)
-    monkeypatch.setattr(sweep, "fetch_listings", lambda *a, **kw: result)
+    monkeypatch.setattr(sweep, "fetch_biddable_universe", lambda *a, **kw: result)
     monkeypatch.setattr(
         sweep, "fetch_rest_pricing_full",
         lambda *a, **kw: (rest_data, failed_skus or []),
     )
+
+
+def _patch_fetchers_strict(monkeypatch, hits, rest_data, complete=True, failed_skus=None):
+    """Like _patch_fetchers, but fetch_rest_pricing_full only returns data
+    for parent_skus actually present in its `skus` argument -- required for
+    any test asserting that a specific SKU WAS or WASN'T REST-priced (tiering,
+    rotation, delta selection), since the naive _patch_fetchers mock returns
+    the same rest_data regardless of what was actually requested and can't
+    tell a correctly-excluded SKU from an incorrectly-included one.
+    """
+    result = _fetch_result(hits, complete=complete)
+    monkeypatch.setattr(sweep, "fetch_biddable_universe", lambda *a, **kw: result)
+
+    def fake_fetch_rest_pricing_full(skus, **kw):
+        requested = set(skus)
+        filtered = {k: v for k, v in rest_data.items() if k in requested}
+        failed = [s for s in (failed_skus or []) if s in requested]
+        return filtered, failed
+
+    monkeypatch.setattr(sweep, "fetch_rest_pricing_full", fake_fetch_rest_pricing_full)
 
 
 class TestRunDailySweep:
@@ -511,7 +560,7 @@ class TestRunDailySweep:
         def boom(*a, **kw):
             raise RuntimeError("simulated Algolia outage")
 
-        monkeypatch.setattr(sweep, "fetch_listings", boom)
+        monkeypatch.setattr(sweep, "fetch_biddable_universe", boom)
 
         with pytest.raises(RuntimeError):
             run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
@@ -525,7 +574,7 @@ class TestRunDailySweep:
         hits = [_hit("SKU1")]
         rest = _rest_entries("SKU1")
         result = FetchResult(hits=hits, total_index_hits=0, collected_count=1, truncated=False)
-        monkeypatch.setattr(sweep, "fetch_listings", lambda *a, **kw: result)
+        monkeypatch.setattr(sweep, "fetch_biddable_universe", lambda *a, **kw: result)
         monkeypatch.setattr(sweep, "fetch_rest_pricing_full", lambda *a, **kw: (rest, []))
 
         with caplog.at_level("WARNING"):
@@ -708,3 +757,188 @@ class TestRunDailySweep:
         assert skus["SKU1|06-00750"]["least_listing_price_p"] == 20000
         assert skus["SKU1|12-00750"]["least_listing_price_p"] == 38000
         assert skus["SKU1|01-01500"]["least_listing_price_p"] == 10000
+
+
+# ---------------------------------------------------------------
+# Phase 4: tiering (listed always priced, unlisted wave-priced) wired into
+# run_daily_sweep. TestRunDailySweep above covers pre-existing behaviour,
+# where every hit is listed (via _hit's default bbx_listings entry) --
+# these are specifically about what changes once some hits aren't.
+# ---------------------------------------------------------------
+
+def _find_sku_in_bucket(bucket, limit=2000, exclude=frozenset()):
+    for i in range(limit):
+        candidate = f"UNLISTED{i}"
+        if candidate not in exclude and _sku_rotation_bucket(candidate) == bucket:
+            return candidate
+    raise AssertionError(f"no candidate SKU found in bucket {bucket} within {limit} tries")
+
+
+def _find_sku_not_in_bucket(bucket, limit=2000, exclude=frozenset()):
+    # Deterministic (SHA-256-based), so callers needing >1 distinct SKU
+    # outside the same bucket MUST pass `exclude` -- calling this twice with
+    # identical arguments always returns the identical candidate.
+    for i in range(limit):
+        candidate = f"UNLISTED{i}"
+        if candidate not in exclude and _sku_rotation_bucket(candidate) != bucket:
+            return candidate
+    raise AssertionError(f"no candidate SKU found outside bucket {bucket} within {limit} tries")
+
+
+class TestRunDailySweepWavePricing:
+    def test_listed_wine_priced_regardless_of_rotation_bucket(self, conn, monkeypatch):
+        run_date = "2026-07-18"
+        bucket = rotation_bucket_for_date(run_date)
+        excluded_sku = _find_sku_not_in_bucket(bucket)  # would be skipped if unlisted
+
+        _patch_fetchers_strict(monkeypatch, [_hit(excluded_sku)], _rest_entries(excluded_sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
+
+        skus = load_current_skus(conn)
+        assert f"{excluded_sku}|06-00750" in skus
+
+    def test_unlisted_wine_outside_rotation_bucket_is_not_priced(self, conn, monkeypatch):
+        run_date = "2026-07-18"
+        bucket = rotation_bucket_for_date(run_date)
+        excluded_sku = _find_sku_not_in_bucket(bucket)
+
+        # rest data WOULD price it if it were requested -- the strict mock
+        # only returns data for SKUs actually passed to
+        # fetch_rest_pricing_full, so its absence from skus proves it
+        # genuinely wasn't attempted, not that pricing failed.
+        _patch_fetchers_strict(monkeypatch, [_hit(excluded_sku, bbx_listings=[])], _rest_entries(excluded_sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
+
+        skus = load_current_skus(conn)
+        assert f"{excluded_sku}|06-00750" not in skus
+        # The product itself IS discovered (Algolia-sourced, unaffected by
+        # REST tiering) -- only its SKU-level pricing is withheld.
+        products = load_current_products(conn)
+        assert excluded_sku in products
+
+    def test_unlisted_wine_inside_rotation_bucket_is_priced(self, conn, monkeypatch):
+        run_date = "2026-07-18"
+        bucket = rotation_bucket_for_date(run_date)
+        included_sku = _find_sku_in_bucket(bucket)
+
+        _patch_fetchers_strict(monkeypatch, [_hit(included_sku, bbx_listings=[])], _rest_entries(included_sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
+
+        skus = load_current_skus(conn)
+        assert f"{included_sku}|06-00750" in skus
+
+    def test_unlisted_skip_never_counts_as_a_miss(self, conn, monkeypatch):
+        # Get the SKU into the store on a day its rotation bucket selects it...
+        run_date1 = "2026-07-18"
+        bucket1 = rotation_bucket_for_date(run_date1)
+        sku = _find_sku_in_bucket(bucket1)
+        _patch_fetchers(monkeypatch, [_hit(sku, bbx_listings=[])], _rest_entries(sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
+        assert load_current_skus(conn)[f"{sku}|06-00750"]["consecutive_misses"] == 0
+
+        # ...then run several more days where its bucket does NOT match. A
+        # wave-pricing skip must never accumulate a miss, however many days
+        # in a row it happens -- unlike a genuine disappearance (2 misses ->
+        # gone_since), there's no "eventually give up" here because we never
+        # actually looked.
+        for run_date in ["2026-07-19", "2026-07-20", "2026-07-21"]:
+            bucket = rotation_bucket_for_date(run_date)
+            assert _sku_rotation_bucket(sku) != bucket, "test SKU unexpectedly selected"
+            _patch_fetchers(monkeypatch, [_hit(sku, bbx_listings=[])], {})
+            run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
+
+            skus = load_current_skus(conn)
+            assert skus[f"{sku}|06-00750"]["consecutive_misses"] == 0, f"miss counted on {run_date}"
+            assert skus[f"{sku}|06-00750"]["gone_since"] is None
+
+    def test_rest_skus_expected_counts_only_attempted_not_discovered(self, conn, monkeypatch):
+        run_date = "2026-07-18"
+        bucket = rotation_bucket_for_date(run_date)
+        listed_sku = _find_sku_not_in_bucket(bucket)
+        included_unlisted = _find_sku_in_bucket(bucket)
+        excluded_unlisted = _find_sku_not_in_bucket(bucket, exclude={listed_sku})
+
+        hits = [
+            _hit(listed_sku),
+            _hit(included_unlisted, bbx_listings=[]),
+            _hit(excluded_unlisted, bbx_listings=[]),
+        ]
+        rest = {**_rest_entries(listed_sku), **_rest_entries(included_unlisted),
+                **_rest_entries(excluded_unlisted)}
+        _patch_fetchers(monkeypatch, hits, rest)
+
+        run_id = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
+
+        row = dict(conn.execute("SELECT rest_skus_expected FROM scan_runs WHERE id=?", (run_id,)).fetchone())
+        # 3 discovered, but only 2 attempted (listed + the in-bucket unlisted
+        # one) -- excluded_unlisted must not inflate "expected".
+        assert row["rest_skus_expected"] == 2
+
+    def test_wave_pricing_stats_persisted(self, conn, monkeypatch):
+        run_date = "2026-07-18"
+        bucket = rotation_bucket_for_date(run_date)
+        included = _find_sku_in_bucket(bucket)
+        excluded = _find_sku_not_in_bucket(bucket)
+
+        hits = [_hit(included, bbx_listings=[]), _hit(excluded, bbx_listings=[])]
+        rest = {**_rest_entries(included), **_rest_entries(excluded)}
+        _patch_fetchers(monkeypatch, hits, rest)
+
+        run_id = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
+
+        row = dict(conn.execute(
+            "SELECT wave_delta_enabled, wave_rotation_count, wave_priced_count "
+            "FROM scan_runs WHERE id=?", (run_id,),
+        ).fetchone())
+        assert row["wave_delta_enabled"] == 0
+        assert row["wave_rotation_count"] == 1  # only `included`
+        assert row["wave_priced_count"] == 1
+
+    def test_delta_enabled_prices_an_unlisted_sku_outside_the_rotation_bucket(self, conn, monkeypatch):
+        # Day 1: establish a completed run so there's a finished_at baseline
+        # for delta selection to compare against.
+        run_date1 = "2026-07-18"
+        _patch_fetchers(monkeypatch, [_hit("ANCHOR")], _rest_entries("ANCHOR"))
+        run1 = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
+        assert dict(conn.execute("SELECT status FROM scan_runs WHERE id=?", (run1,)).fetchone())["status"] == "completed"
+
+        # Day 2: an unlisted wine outside today's rotation bucket, but its
+        # index_last_update is far in the future (safely after "now",
+        # whatever the real wall-clock is when this test runs) -- delta
+        # selection should flag it as changed and price it despite rotation
+        # excluding it, only because delta_enabled=True this time.
+        run_date2 = "2026-07-19"
+        bucket2 = rotation_bucket_for_date(run_date2)
+        sku = _find_sku_not_in_bucket(bucket2)
+        _patch_fetchers_strict(
+            monkeypatch,
+            [_hit(sku, bbx_listings=[], index_last_update="1-1-2030 1am")],
+            _rest_entries(sku),
+        )
+        run_daily_sweep(
+            conn, algolia_app_id="app", algolia_api_key="key",
+            run_date=run_date2, delta_enabled=True,
+        )
+
+        skus = load_current_skus(conn)
+        assert f"{sku}|06-00750" in skus
+
+    def test_delta_disabled_does_not_price_the_same_sku(self, conn, monkeypatch):
+        # Same setup as above, but delta_enabled left at its default (False)
+        # -- the delta-flagged-but-rotation-excluded SKU must NOT be priced.
+        run_date1 = "2026-07-18"
+        _patch_fetchers(monkeypatch, [_hit("ANCHOR2")], _rest_entries("ANCHOR2"))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
+
+        run_date2 = "2026-07-19"
+        bucket2 = rotation_bucket_for_date(run_date2)
+        sku = _find_sku_not_in_bucket(bucket2)
+        _patch_fetchers_strict(
+            monkeypatch,
+            [_hit(sku, bbx_listings=[], index_last_update="1-1-2030 1am")],
+            _rest_entries(sku),
+        )
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date2)
+
+        skus = load_current_skus(conn)
+        assert f"{sku}|06-00750" not in skus
