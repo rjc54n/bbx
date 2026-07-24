@@ -548,16 +548,59 @@ column**, not derive one:
   break that guarantee. The format-adjusted toggle is deliberately
   component-local state precisely because it *doesn't* affect rows; don't
   reuse that pattern here.
-- **Default to live listings only** (`is_listed: true`), not unfiltered —
-  decided by external review, not left as an open product call: default to
-  everything and a fresh visitor's first impression of "Explore catalogue"
-  is mostly stale-priced, never-checked-today rows once `prod_biddable`
-  makes unlisted the large majority. Revisit only once price freshness and
-  listing-state accuracy have been trustworthy in production for a while
-  (see Step 6's shadow-mode validation — the same "prove it before you rely
-  on it" bar applies to relaxing this default).
+- ~~**Default to live listings only** (`is_listed: true`), not
+  unfiltered — decided by external review, not left as an open product
+  call: default to everything and a fresh visitor's first impression of
+  "Explore catalogue" is mostly stale-priced, never-checked-today rows once
+  `prod_biddable` makes unlisted the large majority.~~ **Overridden by
+  direct product decision, 2026-07-24, after shipping:** the default is the
+  whole biddable catalogue; `is_listed` is an opt-in "Only listed wines"
+  restriction instead. The external review's staleness concern is real but
+  is addressed by the "Listed" column (below) making unlisted rows visibly
+  distinct, not by hiding them by default.
 - `price_vs_*` metrics must render as "no ask" rather than NULL-as-zero for
   unlisted rows.
+
+**Shipped 2026-07-24, direction corrected same day.** `price_vs_*`
+NULL-as-"–" rendering was already in place from an earlier phase
+(`formatPence`/`formatSignedPct`) — nothing to do there. First shipped with
+the default inverted from what's described below (see the struck-through
+bullet above); corrected within the same session before this was reviewed
+against a real user session, so no separate migration or follow-up doc
+entry for the reversal — this section describes the corrected, current
+behaviour directly.
+
+- `is_listed` appended to `catalogue_view` at ordinal position 31 (a fresh
+  1:1 join back to `skus` on `(parent_sku, format_code)` in the outermost
+  `SELECT`, not threaded through the existing subqueries' `.*` wildcards,
+  which would have shifted every column after it). Migration
+  `20260724200000_catalogue_view_is_listed.sql`; dry-run confirmed
+  68,575 total rows, 18,338 listed / 50,237 unlisted before applying live.
+- `CatalogueFilter` gained a `boolean` kind, fully generic like every other
+  filter kind: presence means constrained, absence means unconstrained.
+  `value: true` is `.eq(is_listed, true)` ("Only listed wines" checked);
+  `value: false` is `.eq(is_listed, false)` ("only unlisted", reachable by
+  hand-editing the URL, though the checkbox never sets it). No default is
+  injected anywhere — `parse()` needed no special-casing once the default
+  went back to "absence = no constraint", the same as every other filter.
+- `is_listed` is excluded from `FilterStrip`'s grouped panels/counts (same
+  treatment as `search`) — not because of any default, just because it has
+  its own dedicated checkbox next to "Show format-adjusted values" instead
+  of a panel entry.
+- A real "Listed" column (`Listed`/`Unlisted` per row) — not in the
+  original spec, added because `registry.test.ts`'s existing
+  self-consistency check (every filterable field must also be a
+  displayable metric, since `is_listed` is a real `catalogue_view` column
+  now, not virtual like `search`) caught that it was missing, and without
+  it rows would otherwise be indistinguishable once unlisted rows are
+  mixed in by default. Shown by default (mixed rows are now the default
+  view), hidden once "Only listed wines" is checked and the column is
+  trivially redundant.
+- Verified live in the browser: default load = 68,575 results (the whole
+  catalogue), checkbox → 18,338 (matches the live listed-row count), chip
+  removal resets cleanly, URL round-trips through a fresh page load
+  unchanged. Full test suite (unit + live): 83/83 passing. `tsc --noEmit`,
+  `next build`, `eslint`: all clean.
 
 ---
 

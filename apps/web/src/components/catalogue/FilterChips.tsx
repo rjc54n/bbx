@@ -56,6 +56,11 @@ function describeFilter(filter: CatalogueFilter): string {
       return `${meta.label}: "${filter.value}"`;
     case "typeahead":
       return `${meta.label}: ${filter.value}`;
+    case "boolean":
+      // Only is_listed uses this kind today. false ("only unlisted") is a
+      // valid state reachable by hand-editing the URL, even though the
+      // checkbox itself only ever sets true.
+      return filter.value ? "Only listed wines" : "Only unlisted wines";
   }
 }
 

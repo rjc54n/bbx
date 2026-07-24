@@ -145,18 +145,21 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
   Algolia discovery every run independent of REST tiering, specifically
   because the obvious alternative (`ask IS NOT NULL`) goes stale for up to
   30 days under wave pricing (external review caught this before Step 7 was
-  built on top of it). `catalogue_view`/Step 7 must read this column, not
-  derive listing state from price fields.
+  built on top of it).
 - Split "Explore catalogue" from "live listings" via a **checkbox filter**
-  (`is_listed`), not a separate mode or tab — the same widget as the
-  format-adjusted-values toggle, but wired as a real filter (URL-serialized,
-  affects returned rows) rather than component-local display state, since
-  unlike that toggle this one changes which wines appear at all. Defaults to
-  **live listings only** until price freshness and listing state have both
-  been trustworthy in production for a while — not to "everything", which
-  would surface stale/unpriced wave-pricing rows by default. Needed because
-  the unlisted share jumps from today's minority (9,592/27,142) to the large
-  majority the moment `prod_biddable` lands.
+  (`is_listed`) — **shipped 2026-07-24** (Step 7, docs/PHASE3-4-IMPLEMENTATION.md).
+  "Only listed wines" next to the format-adjusted toggle, wired as a real,
+  URL-serialized filter (not component-local display state). **Defaults to
+  the whole biddable catalogue, not live-listings-only** — a direct product
+  decision overriding the original spec's "default to live listings" call
+  on the same day it shipped; the staleness/completeness concern that
+  motivated that original default is instead addressed by the "Listed"
+  column, shown by default, which makes unlisted rows visibly distinct
+  rather than hiding them. Verified live: 68,575 rows by default, 18,338
+  with "Only listed wines" checked (matches the live listed-row count),
+  URL round-trips through a fresh page load. The "Listed" column itself
+  wasn't in the original spec either — added because rows would otherwise
+  be indistinguishable once unlisted rows are the default view.
 
 **Unlocks:** the part of the market with no competing seller and therefore no
 competing price anchor. This is where the guide being wrong actually pays.
@@ -205,6 +208,25 @@ floor sits.
   buy. Human confirmation is a permanent requirement, not a starting posture.
 
 ---
+
+## Backlog (not blocking current work)
+
+- **`prod_biddable` sharded discovery undercounts by ~615 hits (~1.2%),
+  reproducibly.** Four consecutive live `biddable_full_book` runs on
+  2026-07-24 all collected exactly 51,492 of an expected 52,107 hits —
+  identical across runs 10+ minutes apart, which rules out index drift.
+  `truncated=True` has never fired, so it isn't the 1,000-hit pagination
+  cap; the likely candidate is a facet value the recursive NOT-filter
+  catch-all in `core/fetch_listings.py` isn't reaching. Root-causing it
+  needs a `parent_sku`-level diff between two runs' collected hits, not
+  just counts — nobody has done that yet. **Not urgent:** as of
+  2026-07-24, backfill and wave-pricing selection were decoupled from
+  `algolia_complete` specifically so this gap can't block REST pricing or
+  rotation (see Phase 4 above) — it only means ~615 parents stay
+  undiscovered until this is fixed. One side effect worth remembering: as
+  long as this gap persists, `scan_runs.status` for `biddable_full_book`
+  will read `partial` on every run, forever — that's the discovery gap
+  showing through, not a sign anything is broken.
 
 ## Standing constraints
 

@@ -17,7 +17,7 @@ import type { CatalogueRow, PriceChangeRow } from "@/lib/query/rows";
 import { startingPointFor } from "@/lib/query/startingPoints";
 import type { CatalogueFilter, QueryState } from "@/lib/query/types";
 import { parse, serialize } from "@/lib/query/url";
-import { CATALOGUE_COLUMNS, PRICE_CHANGE_COLUMNS, withFormatAdjustedColumns } from "./columns";
+import { CATALOGUE_COLUMNS, PRICE_CHANGE_COLUMNS, withFormatAdjustedColumns, withListedColumn } from "./columns";
 import { DataHonestyHeader } from "./DataHonestyHeader";
 import { DataTable } from "./DataTable";
 import { FilterChips } from "./FilterChips";
@@ -159,15 +159,29 @@ export function CatalogueBrowser() {
     pushQuery({ ...queryState, filters, page: 0 });
   }
 
-  const visibleCatalogueColumns = useMemo(
-    () => withFormatAdjustedColumns(CATALOGUE_COLUMNS, showFormatAdjusted),
-    [showFormatAdjusted],
-  );
+  // Default (filter absent) is the whole biddable catalogue, listed and
+  // unlisted alike. Checking "Only listed wines" opts into the restriction
+  // (value: true); unchecking removes the filter entirely rather than
+  // writing value: false, so the URL returns to its unfiltered default
+  // form instead of an equivalent-but-noisier explicit param.
+  function handleSetOnlyListed(checked: boolean) {
+    if (queryState.mode === "price-changes") return;
+    const filters = checked
+      ? setFilter(queryState.filters, { field: "is_listed", kind: "boolean", value: true })
+      : removeFilter(queryState.filters, "is_listed");
+    pushQuery({ ...queryState, filters, page: 0 });
+  }
 
   const isPriceChanges = queryState.mode === "price-changes";
   const totalCount = isPriceChanges ? priceChangeResult.count : catalogueResult.count;
   const resultsWord = queryState.mode === "value-research" ? "value signals" : "results";
   const searchValue = !isPriceChanges ? getFilter(queryState.filters, "search")?.value ?? "" : "";
+  const onlyListed = !isPriceChanges && getFilter(queryState.filters, "is_listed")?.value === true;
+
+  const visibleCatalogueColumns = useMemo(
+    () => withListedColumn(withFormatAdjustedColumns(CATALOGUE_COLUMNS, showFormatAdjusted), !onlyListed),
+    [showFormatAdjusted, onlyListed],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -205,6 +219,17 @@ export function CatalogueBrowser() {
                 className="h-3.5 w-3.5 accent-accent"
               />
               Show format-adjusted values
+            </label>
+          )}
+          {!isPriceChanges && (
+            <label className="flex items-center gap-1.5 whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={onlyListed}
+                onChange={(e) => handleSetOnlyListed(e.target.checked)}
+                className="h-3.5 w-3.5 accent-accent"
+              />
+              Only listed wines
             </label>
           )}
           {!isPriceChanges && (

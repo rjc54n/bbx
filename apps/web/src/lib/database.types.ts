@@ -516,6 +516,7 @@ export type Database = {
           first_seen_at: string | null
           format_code: string | null
           highest_bid_p: number | null
+          is_listed: boolean | null
           last_rest_checked_at: string | null
           last_seen_at: string | null
           last_transaction_p: number | null

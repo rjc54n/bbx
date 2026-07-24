@@ -9,7 +9,7 @@
 // objects instead of redeclaring the field list by hand.
 
 export type FilterGroup = "Wine" | "Format" | "Price" | "Freshness";
-export type FilterKind = "enum" | "range" | "text" | "date" | "typeahead";
+export type FilterKind = "enum" | "range" | "text" | "date" | "typeahead" | "boolean";
 
 export interface FilterMeta {
   field: string;
@@ -165,6 +165,18 @@ export const CATALOGUE_FILTERS = {
     estimate: false,
     explanation: "When this SKU was first observed in the catalogue.",
   },
+  // Not surfaced through FilterStrip's grouped panels (see fieldsForGroup's
+  // exclusion, same treatment as "search") -- this has its own dedicated
+  // checkbox next to "Show format-adjusted values" instead.
+  is_listed: {
+    field: "is_listed",
+    label: "Listed",
+    group: "Freshness",
+    kind: "boolean",
+    estimate: false,
+    explanation:
+      "Whether this SKU currently has a live listing (an ask) on BBX, reconciled against Algolia discovery every scan. Unlisted rows can still carry real prices (market price, highest bid) from REST -- they're wines findable in the wider biddable universe with no seller currently asking.",
+  },
 } as const satisfies Record<string, FilterMeta>;
 
 export type CatalogueFilterField = keyof typeof CATALOGUE_FILTERS;
@@ -248,6 +260,7 @@ export const CATALOGUE_METRICS = {
     estimate: false,
     explanation: "Whether stored and live-scanned prices agreed, as of the last check.",
   },
+  is_listed: CATALOGUE_FILTERS.is_listed,
   first_seen_at: CATALOGUE_FILTERS.first_seen_at,
   last_seen_at: { field: "last_seen_at", label: "Last seen", estimate: false, explanation: "When this SKU was last observed in the catalogue." },
   price_vs_market_pct: CATALOGUE_FILTERS.price_vs_market_pct,

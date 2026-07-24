@@ -8,6 +8,7 @@ import { fetchFacetRanges, fetchFacetValues } from "./facets";
 import { fetchCatalogue, fetchPriceChanges, PAGE_SIZE } from "./fetchCatalogue";
 import { searchProducers } from "./producers";
 import { startingPointFor } from "./startingPoints";
+import { parse } from "./url";
 
 describe("fetchCatalogue (live)", () => {
   it("explore: returns a page of rows and a total count with no filters applied", async () => {
@@ -55,6 +56,37 @@ describe("fetchCatalogue (live)", () => {
     });
     expect(result.rows.length).toBeGreaterThan(0);
     for (const row of result.rows) expect(row.colour).toBe(colour);
+  });
+
+  it("is_listed has no default restriction -- a bare explore URL returns both listed and unlisted rows", async () => {
+    // No default lives in url.ts parse() (see "is_listed defaults to the
+    // whole biddable catalogue" in url.test.ts) -- go through parse() here,
+    // the same path CatalogueBrowser actually uses on a fresh page load.
+    const state = parse(new URLSearchParams("mode=explore"));
+    expect(state.mode).not.toBe("price-changes");
+    if (state.mode === "price-changes") return;
+    expect(state.filters.some((f) => f.field === "is_listed")).toBe(false);
+    const result = await fetchCatalogue(state);
+    expect(result.rows.length).toBeGreaterThan(0);
+    expect(result.rows.some((row) => row.is_listed === false)).toBe(true);
+  });
+
+  it("is_listed: true ('only listed wines') restricts to listed rows, a strict subset of unfiltered", async () => {
+    const unfiltered = await fetchCatalogue({
+      mode: "explore",
+      filters: [],
+      sort: { field: "last_seen_at", dir: "desc" },
+      page: 0,
+    });
+    const filtered = await fetchCatalogue({
+      mode: "explore",
+      filters: [{ field: "is_listed", kind: "boolean", value: true }],
+      sort: { field: "last_seen_at", dir: "desc" },
+      page: 0,
+    });
+    expect(filtered.rows.length).toBeGreaterThan(0);
+    for (const row of filtered.rows) expect(row.is_listed).toBe(true);
+    expect(filtered.count).toBeLessThan(unfiltered.count);
   });
 
   it("the free-text search filter matches on name or producer", async () => {

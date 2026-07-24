@@ -51,7 +51,19 @@ export interface TypeaheadFilter {
   value: string;
 }
 
-export type CatalogueFilter = EnumFilter | RangeFilter | DateFilter | TextFilter | TypeaheadFilter;
+// Currently only backs is_listed. Fully generic, like every other filter
+// kind: presence means "constrained", absence means "no constraint" --
+// value: true applies .eq(field, true) (only listed), value: false applies
+// .eq(field, false) (only unlisted). Unfiltered (both listed and unlisted,
+// the app's default) is simply this filter's absence, not a third value --
+// see url.ts parse(), which no longer needs to inject anything here.
+export interface BooleanFilter {
+  field: FieldsOfKind<"boolean">;
+  kind: "boolean";
+  value: boolean;
+}
+
+export type CatalogueFilter = EnumFilter | RangeFilter | DateFilter | TextFilter | TypeaheadFilter | BooleanFilter;
 
 export type CatalogueMode = "explore" | "value-research" | "recent-listings";
 

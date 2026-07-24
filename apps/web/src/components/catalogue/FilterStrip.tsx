@@ -226,8 +226,14 @@ function boundsFor(field: CatalogueFilterField, ranges: FacetRanges | null) {
   return undefined;
 }
 
+// is_listed has its own dedicated checkbox next to "Show format-adjusted
+// values" (CatalogueBrowser), not a FilterStrip panel control -- same
+// treatment as "search", which has its own SearchBar instead of a panel
+// entry.
 function fieldsForGroup(group: FilterGroup): CatalogueFilterField[] {
-  return (Object.keys(CATALOGUE_FILTERS) as CatalogueFilterField[]).filter((field) => CATALOGUE_FILTERS[field].group === group && field !== "search");
+  return (Object.keys(CATALOGUE_FILTERS) as CatalogueFilterField[]).filter(
+    (field) => CATALOGUE_FILTERS[field].group === group && field !== "search" && field !== "is_listed",
+  );
 }
 
 function WinePanel({ filters, facetValues, onSetFilter, onRemoveFilter }: {

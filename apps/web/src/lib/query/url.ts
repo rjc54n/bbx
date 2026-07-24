@@ -118,6 +118,12 @@ function parseCatalogueFilters(params: URLSearchParams): CatalogueFilter[] {
         if (raw) filters.push({ field, kind: "typeahead", value: raw } as CatalogueFilter);
         break;
       }
+      case "boolean": {
+        const raw = params.get(field);
+        if (raw === "true") filters.push({ field, kind: "boolean", value: true } as CatalogueFilter);
+        else if (raw === "false") filters.push({ field, kind: "boolean", value: false } as CatalogueFilter);
+        break;
+      }
     }
   }
 
@@ -167,6 +173,9 @@ export function serialize(state: QueryState): URLSearchParams {
       case "text":
       case "typeahead":
         if (filter.value) params.set(filter.field, filter.value);
+        break;
+      case "boolean":
+        params.set(filter.field, filter.value ? "true" : "false");
         break;
     }
   }

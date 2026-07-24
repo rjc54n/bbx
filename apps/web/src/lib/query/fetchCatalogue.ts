@@ -61,6 +61,9 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
       case "typeahead":
         if (filter.value) query = query.eq(filter.field, filter.value);
         break;
+      case "boolean":
+        query = query.eq(filter.field, filter.value);
+        break;
     }
   }
 

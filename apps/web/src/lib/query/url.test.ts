@@ -46,7 +46,7 @@ describe("serialize/parse round-trip", () => {
     };
     const params = serialize(state);
     expect(params.get("first_seen_at_days")).toBe("14");
-    expect(parse(params)).toEqual(state);
+    expect(normalise(parse(params))).toEqual(normalise(state));
   });
 
   it("omits page from the URL at page 0 but still round-trips to 0", () => {
@@ -145,7 +145,7 @@ describe("codec robustness", () => {
       sort: { field: "last_seen_at", dir: "desc" },
       page: 0,
     };
-    expect(parse(serialize(state))).toEqual(state);
+    expect(normalise(parse(serialize(state)))).toEqual(normalise(state));
   });
 
   it("keeps exactly one filter per field on serialize -- last entry wins, deterministically", () => {
@@ -162,5 +162,32 @@ describe("codec robustness", () => {
     const params = serialize(state);
     expect(params.get("ask_min")).toBe("2015");
     expect(params.get("ask_max")).toBe("2020");
+  });
+});
+
+describe("is_listed defaults to the whole biddable catalogue", () => {
+  it("applies no restriction on a bare catalogue URL with no is_listed param", () => {
+    const state = parse(new URLSearchParams("mode=explore"));
+    expect(state.filters.some((f) => f.field === "is_listed")).toBe(false);
+  });
+
+  it("preserves an explicit is_listed=true ('only listed wines') as an opt-in restriction", () => {
+    const state = parse(new URLSearchParams("mode=explore&is_listed=true"));
+    expect(state.filters).toContainEqual({ field: "is_listed", kind: "boolean", value: true });
+  });
+
+  it("preserves an explicit is_listed=false ('only unlisted wines') too, even though the UI never sets it", () => {
+    const state = parse(new URLSearchParams("mode=explore&is_listed=false"));
+    expect(state.filters).toContainEqual({ field: "is_listed", kind: "boolean", value: false });
+  });
+
+  it("round-trips 'only listed wines' (true) through serialize -> parse unchanged", () => {
+    const state: QueryState = {
+      mode: "explore",
+      filters: [{ field: "is_listed", kind: "boolean", value: true }],
+      sort: { field: "last_seen_at", dir: "desc" },
+      page: 0,
+    };
+    expect(parse(serialize(state))).toEqual(state);
   });
 });

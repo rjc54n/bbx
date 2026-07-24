@@ -27,6 +27,20 @@ export function withFormatAdjustedColumns<Row, SortField extends string>(
   return show ? columns : columns.filter((column) => !FORMAT_ADJUSTED_COLUMN_IDS.has(column.id));
 }
 
+// The default view mixes listed and unlisted rows, which are otherwise
+// indistinguishable (price_vs_* etc. already render "–" for both an
+// unlisted row and a listed row missing that particular signal) -- so this
+// column is shown by default and hidden only once "Only listed wines" is
+// checked, when every row is trivially listed and the column is redundant.
+export const LISTED_COLUMN_IDS = new Set(["is_listed"]);
+
+export function withListedColumn<Row, SortField extends string>(
+  columns: Column<Row, SortField>[],
+  show: boolean,
+): Column<Row, SortField>[] {
+  return show ? columns : columns.filter((column) => !LISTED_COLUMN_IDS.has(column.id));
+}
+
 function WineCell({
   name,
   vintage,
@@ -96,6 +110,13 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     label: "Format",
     align: "left",
     render: (row) => formatFormat(row.case_size, row.bottle_volume_ml),
+  },
+  {
+    id: "is_listed",
+    label: "Listed",
+    align: "left",
+    sortField: "is_listed",
+    render: (row) => (row.is_listed ? "Listed" : "Unlisted"),
   },
   {
     id: "ask",
