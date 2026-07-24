@@ -601,15 +601,27 @@ def run_daily_sweep(
             if last_rest_checked_at_by_parent.get(psku) is None
         }
         if is_baseline_pending:
-            parent_skus_to_price = sorted(baseline_unchecked_before)
+            # The listed tier is priced every day unconditionally -- that
+            # invariant does not pause just because the one-time backfill
+            # hasn't finished. Without this union, a listed parent that
+            # already has a successful check (e.g. from a prior attempt)
+            # drops out of baseline_unchecked_before and would silently stop
+            # being priced for as long as the baseline stays incomplete,
+            # which can be indefinitely if algolia_complete never reaches
+            # True.
+            parent_skus_to_price = sorted(
+                baseline_unchecked_before | listed_parent_skus
+            )
             log.info(
                 "No completed %s baseline -- resumable full backfill: %d/%d "
                 "discovered parent_skus still need a successful REST check; "
-                "%d parents selected.",
+                "%d parents selected (including %d always-priced listed "
+                "parents).",
                 BIDDABLE_FULL_BOOK_SCOPE,
                 len(baseline_unchecked_before),
                 len(all_parent_skus),
                 len(parent_skus_to_price),
+                len(listed_parent_skus),
             )
         else:
             parent_skus_to_price = sorted(listed_parent_skus | set(wave_plan.to_price))

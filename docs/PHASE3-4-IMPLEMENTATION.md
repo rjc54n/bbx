@@ -401,12 +401,63 @@ Four real gaps caught by review, all fixed and tested (243/243 passing) —
   `products` and `catalogue_view` columns are `TIMESTAMPTZ`; all 15,669
   existing product values were `NULL`, as required before the baseline.
 
-The first manual `biddable_full_book` dispatch remains the operational
-acceptance test. At 52,430 discovered parents and batches of 96, the full
-baseline is about 547 REST calls. Record discovery completeness, requested
-batches, failed parents, 429 responses and remaining `NULL` timestamps. Do
-not enable `WAVE_PRICING_DELTA_ENABLED` until the listed-tier validation has
-enough observations.
+**First manual `biddable_full_book` dispatch, 2026-07-24 (run
+`97fc2acc-7581-4071-be6e-e55e760dfb26`), 18m13s wall clock:**
+- Algolia discovery: 51,492/52,107 expected hits collected, `algolia_complete
+  = false`, `truncated = false` — no leaf shard hit the 1,000-hit pagination
+  cap, so the ~615-hit shortfall reads as index drift over the ~10-minute
+  live sharded crawl rather than a sharding blind spot. A re-dispatch will
+  show whether the gap shrinks (drift) or recurs at the same shard (a real
+  gap to fix).
+- REST: 51,492/51,492 discovered parents requested and successfully checked
+  (~536 batches at batch size 96 — matches the ~547-call estimate), 0
+  failures, 0 429 responses, REST phase ~6m18s. `rest_skus_priced = 50,001`:
+  1,491 parents returned a successful empty response (no priceable format
+  right now), which is a completed check, not a failure.
+- Run status was `partial` on the Algolia shortfall alone — the REST
+  baseline itself is fully caught up, confirmed live: 0 discovered parents
+  remain unchecked from this run.
+- 170 pre-Phase-4 products (`first_seen` under the legacy `full_book` scope)
+  are not present in `prod_biddable` at all, so `biddable_full_book`
+  discovery can never check them. Expected: they've left the biddable
+  universe, and the existing consecutive-miss disappearance logic will mark
+  them `gone_since` in the ordinary course rather than leaving them stuck
+  with a permanently `NULL` `last_rest_checked_at`.
+
+**Second manual dispatch, 2026-07-24 (run
+`5b1696f0-e4af-4a29-b114-30877a02d633`), 14m31s wall clock:**
+- Algolia discovery came back **identical** to the first run: 51,492/52,107,
+  same per-region shard composition (Piedmont off by 1 hit; everything else
+  exact). That rules out the "index drift over a long crawl" theory from the
+  first run — this reads as a reproducible ~615-hit gap in the sharded
+  discovery, not transient churn. Root cause not yet found; needs its own
+  investigation (candidate: a facet value the recursive NOT-filter catch-all
+  isn't reaching, not a `truncated=True` pagination-cap case since that
+  still didn't fire).
+- **Real bug, found from this reproducibility check:** `rest_skus_expected
+  = 0` for this run — REST pricing was skipped entirely, including for the
+  ~15,483-parent listed tier that must be priced every day unconditionally.
+  Cause: `parent_skus_to_price` was set to exactly `baseline_unchecked_before`
+  while `is_baseline_pending`, with no union against `listed_parent_skus`.
+  Once every discovered parent already has a successful check (true after
+  run 1's 100% REST success), `baseline_unchecked_before` is empty — and
+  since `algolia_complete` may never reach `True` if the discovery gap
+  above is structural, `is_baseline_pending` could stay `True` indefinitely,
+  silently starving the listed tier of daily pricing for as long as that
+  holds. Fixed in `core/sweep.py`: `parent_skus_to_price` is now
+  `baseline_unchecked_before | listed_parent_skus` while baseline is
+  pending, restoring the "listed tier always priced" invariant
+  unconditionally. Regression test:
+  `test_listed_parent_still_priced_while_baseline_pending_and_already_checked`
+  (confirmed it reproduces `requested == [set()]` against the pre-fix code).
+  Real-world impact was contained to this one run — listed prices are one
+  cycle stale, not silently abandoned, because this was caught the same day.
+
+Re-dispatch again to (a) confirm the listed tier is priced now that the fix
+is in, and (b) get a third discovery-count data point — if the ~615-hit gap
+recurs a third time at the same shard, treat it as a real, structural
+sharding gap to fix, not drift. Do not enable `WAVE_PRICING_DELTA_ENABLED`
+until the listed-tier validation has enough observations.
 
 ---
 

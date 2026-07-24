@@ -593,6 +593,57 @@ class TestRunDailySweep:
             for sku in ("LEGACY-A", "LEGACY-B")
         )
 
+    def test_listed_parent_still_priced_while_baseline_pending_and_already_checked(
+        self, conn, monkeypatch
+    ):
+        # Real bug found on the second live biddable_full_book dispatch:
+        # Algolia discovery came back short of its own expected count on
+        # both runs (algolia_complete stays False), so the baseline never
+        # reaches a completed run. Once every discovered parent already has
+        # a successful REST check from a prior attempt,
+        # baseline_unchecked_before is empty -- and parent_skus_to_price
+        # used to be set to exactly that set while baseline was pending,
+        # silently dropping the listed tier's unconditional daily pricing
+        # for as long as the baseline stays incomplete (which can be
+        # forever if the discovery gap is structural, not transient).
+        listed_sku = "LISTED1"
+        hits = [_hit(listed_sku)]  # listed by default
+        rest = _rest_entries(listed_sku, price=250)
+
+        # Day 1: Algolia discovery incomplete, REST succeeds -- run commits
+        # as 'partial' (on the Algolia gap alone) but records a successful
+        # REST check for the listed parent.
+        _patch_fetchers_strict(monkeypatch, hits, rest, complete=False)
+        run1 = run_daily_sweep(
+            conn, algolia_app_id="app", algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+        assert dict(
+            conn.execute(
+                "SELECT status FROM scan_runs WHERE id=?", (run1,)
+            ).fetchone()
+        )["status"] == "partial"
+        assert (
+            load_current_products(conn)[listed_sku]["last_rest_checked_at"]
+            is not None
+        )
+
+        # Day 2: same discovery gap, so the baseline is still pending -- but
+        # the listed parent already has a successful check, so
+        # baseline_unchecked_before no longer contains it. It must still be
+        # requested: the listed tier is priced every day, unconditionally.
+        requested = []
+        _patch_fetchers_strict(
+            monkeypatch, hits, rest, complete=False,
+            requested_batches=requested,
+        )
+        run_daily_sweep(
+            conn, algolia_app_id="app", algolia_api_key="key",
+            run_date="2026-07-19",
+        )
+
+        assert requested == [{listed_sku}]
+
     def test_partial_run_allows_retry(self, conn, monkeypatch):
         hits = [_hit("SKU1")]
         rest = _rest_entries("SKU1")
@@ -874,7 +925,11 @@ class TestRunDailySweep:
             algolia_api_key="key",
             run_date=run_date,
         )
-        assert retry_requests == [{sku_b}]
+        # sku_a is listed, so it's requested again even though it already
+        # has a successful check -- the listed tier is priced daily
+        # unconditionally, baseline status notwithstanding. sku_b is the
+        # one still-unchecked parent driving this retry.
+        assert retry_requests == [{sku_a, sku_b}]
         assert dict(
             conn.execute(
                 "SELECT status FROM scan_runs WHERE id=?", (retry_run,)

@@ -107,12 +107,27 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
   checked immediately rather than waiting for their rotation day. Delta
   selection stays off by default
   (`WAVE_PRICING_DELTA_ENABLED`) pending the week-long verification the plan
-  calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. At 52,430
-  discovered parents and batches of 96, the first baseline is about 547
-  REST calls. This remains unmeasured. The first manual `workflow_dispatch`
-  must record the actual discovery count, requested batches, duration,
-  failures, 429 responses and remaining `NULL` freshness timestamps before
-  the budget or 90-minute timeout is treated as proven.
+  calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. **Measured across
+  the first two manual `workflow_dispatch` runs, 2026-07-24:** discovery
+  came back **identical** both times — 51,492/52,107 expected `prod_biddable`
+  hits, same shard composition — which reads as a reproducible ~615-hit gap
+  in the sharded discovery, not transient index drift (root cause still
+  open). REST on run 1: all 51,492 discovered parents checked successfully
+  (~536 batches at batch size 96, close to the ~547-call estimate), 0
+  failures, 0 rate-limit (429) responses, REST phase ~6m, full run 18m —
+  comfortably inside the 90-minute timeout. **Run 2 exposed a real bug:**
+  REST pricing was skipped entirely, including the always-priced listed
+  tier, because the resumable-baseline selection didn't union in
+  `listed_parent_skus` while a baseline stays pending — and it can stay
+  pending indefinitely if the discovery gap above turns out to be
+  structural. Fixed same-day, with a regression test — see
+  docs/PHASE3-4-IMPLEMENTATION.md Step 6 for detail. Separately, 170
+  pre-Phase-4 products (tracked under the legacy `full_book` scope) don't
+  appear in `prod_biddable` at all and so can never get a
+  `biddable_full_book` REST check — expected, since they're stock that has
+  left the biddable universe; the existing miss-counting disappearance
+  logic will mark them `gone_since` in the ordinary course rather than
+  leaving them stuck.
 - Model unlisted-but-biddable SKUs as first-class: `skus.is_listed`, a real
   stored column (not a new entity) — **built 2026-07-24**, derived from
   Algolia discovery every run independent of REST tiering, specifically
