@@ -453,11 +453,49 @@ Four real gaps caught by review, all fixed and tested (243/243 passing) —
   Real-world impact was contained to this one run — listed prices are one
   cycle stale, not silently abandoned, because this was caught the same day.
 
-Re-dispatch again to (a) confirm the listed tier is priced now that the fix
-is in, and (b) get a third discovery-count data point — if the ~615-hit gap
-recurs a third time at the same shard, treat it as a real, structural
-sharding gap to fix, not drift. Do not enable `WAVE_PRICING_DELTA_ENABLED`
-until the listed-tier validation has enough observations.
+**Third manual dispatch, 2026-07-24 (run
+`89564178939`), 17m0s wall clock:**
+- Algolia discovery: **51,492/52,107, identical for the third consecutive
+  run.** This settles the drift-vs-structural question from the runs above:
+  three live sharded crawls, each ~10+ minutes apart, returning a
+  bit-for-bit identical shortfall rules out transient index movement as the
+  (sole) explanation. Treated as a reproducible, structural gap in the
+  sharded discovery — see "Known non-blocking gap" below.
+- REST: listed-tier fix confirmed working — 16,096/16,096 attempted and
+  checked successfully, 0 failed, exactly the listed-parent count (grown
+  from the ~15,483 measured before Phase 4 discovery widened the tracked
+  book). The 35,396 unlisted parents were wave-pricing-skipped as expected
+  (already fully checked from the run-1 backfill; today's rotation slice is
+  what run 4 will show).
+- **Second real bug, found by asking why three identical Algolia counts
+  mattered beyond the count itself:** `is_baseline_pending` was gated on
+  `last_run_finished_at`, i.e. on a *completed* scan_run existing for this
+  scope — and `_determine_final_status` requires `algolia_complete=True` to
+  mark a run completed. Since the discovery gap above is now confirmed
+  reproducible, no `biddable_full_book` run may ever reach `completed`,
+  which means the `else` branch selecting unlisted parents via
+  `wave_plan.to_price` (rotation/delta) was dead code in production — the
+  35,396 unlisted parents would have been priced once during the run-1
+  backfill and never touched again, indefinitely, for a reason with nothing
+  to do with REST at all. Fixed: the backfill-vs-steady-state branch is now
+  driven directly by `bool(baseline_unchecked_before)` — live per-parent
+  REST freshness — not by run-completion history. `algolia_complete` still
+  gates `scan_runs.status` (an honest completeness signal worth keeping),
+  it just no longer gates whether wave-pricing rotation is allowed to run.
+  Regression test: `test_wave_rotation_still_runs_when_algolia_never_reaches_complete`
+  (confirmed it reproduces `requested == [set()]` against the pre-fix code).
+
+**Known non-blocking gap:** the ~615-hit (~1.2%) `prod_biddable` sharding
+shortfall is unresolved. Deliberately not chased further right now —
+decoupling backfill/wave-pricing from `algolia_complete` (above) removes
+the operational risk; the remaining question is purely "which ~615 parents
+are structurally invisible to the shard walk," which needs its own
+investigation (candidate: a facet value the recursive NOT-filter catch-all
+isn't reaching — `truncated=True` still hasn't fired on any of the three
+runs, so it isn't the 1,000-hit pagination cap). Revisit once there's
+time to diff the actual `parent_sku` sets between two runs' collected hits,
+not just the counts. Do not enable `WAVE_PRICING_DELTA_ENABLED` until the
+listed-tier validation has enough observations.
 
 ---
 

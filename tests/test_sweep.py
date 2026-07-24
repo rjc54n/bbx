@@ -1204,6 +1204,60 @@ class TestRunDailySweepWavePricing:
 
         assert requested == [{included_sku}]
 
+    def test_wave_rotation_still_runs_when_algolia_never_reaches_complete(
+        self, conn, monkeypatch
+    ):
+        # Real bug found from three consecutive live runs where Algolia
+        # discovery reproducibly came back short of its own expected count
+        # (algolia_complete=False every time -- not one-off drift). No
+        # scan_run for this scope can ever reach status='completed' while
+        # that holds, since _determine_final_status requires
+        # algolia_complete=True. Backfill-vs-steady-state selection must not
+        # be gated on run completion, or wave-pricing rotation for the
+        # unlisted tier would silently never activate for as long as the
+        # discovery gap persists -- possibly forever.
+        run_date = "2026-07-19"
+        bucket = rotation_bucket_for_date(run_date)
+        included_sku = _find_sku_in_bucket(bucket)
+        excluded_sku = _find_sku_not_in_bucket(bucket, exclude={included_sku})
+        hits = [
+            _hit(included_sku, bbx_listings=[]),
+            _hit(excluded_sku, bbx_listings=[]),
+        ]
+        rest = {**_rest_entries(included_sku), **_rest_entries(excluded_sku)}
+
+        # Day 1: both unlisted parents get checked during backfill, but
+        # Algolia discovery is incomplete -- the run can never reach
+        # 'completed' status.
+        _patch_fetchers_strict(monkeypatch, hits, rest, complete=False)
+        run1 = run_daily_sweep(
+            conn, algolia_app_id="app", algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+        assert dict(
+            conn.execute(
+                "SELECT status FROM scan_runs WHERE id=?", (run1,)
+            ).fetchone()
+        )["status"] == "partial"
+
+        # Day 2: backfill is done (both parents already checked), but
+        # Algolia is still incomplete, so no completed run exists for this
+        # scope. Wave-pricing rotation must still select included_sku (in
+        # today's bucket) and skip excluded_sku (not in it) -- proving
+        # selection isn't frozen just because the run history never shows a
+        # completed baseline.
+        requested = []
+        _patch_fetchers_strict(
+            monkeypatch, hits, rest, complete=False,
+            requested_batches=requested,
+        )
+        run_daily_sweep(
+            conn, algolia_app_id="app", algolia_api_key="key",
+            run_date=run_date,
+        )
+
+        assert requested == [{included_sku}]
+
     def test_new_unlisted_parent_is_checked_immediately_outside_rotation(
         self, conn, monkeypatch
     ):

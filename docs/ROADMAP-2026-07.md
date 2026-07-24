@@ -108,20 +108,32 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
   selection stays off by default
   (`WAVE_PRICING_DELTA_ENABLED`) pending the week-long verification the plan
   calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. **Measured across
-  the first two manual `workflow_dispatch` runs, 2026-07-24:** discovery
-  came back **identical** both times — 51,492/52,107 expected `prod_biddable`
-  hits, same shard composition — which reads as a reproducible ~615-hit gap
-  in the sharded discovery, not transient index drift (root cause still
-  open). REST on run 1: all 51,492 discovered parents checked successfully
+  three manual `workflow_dispatch` runs, 2026-07-24:** discovery came back
+  **identical all three times** — 51,492/52,107 expected `prod_biddable`
+  hits. Three live crawls, each 10+ minutes apart, returning a bit-for-bit
+  identical shortfall rules out transient index drift; treated as a
+  reproducible, structural ~1.2% gap in the sharded discovery. Root cause
+  not yet found — **deliberately deferred as a non-blocker**, see below.
+  REST on run 1: all 51,492 discovered parents checked successfully
   (~536 batches at batch size 96, close to the ~547-call estimate), 0
   failures, 0 rate-limit (429) responses, REST phase ~6m, full run 18m —
-  comfortably inside the 90-minute timeout. **Run 2 exposed a real bug:**
-  REST pricing was skipped entirely, including the always-priced listed
-  tier, because the resumable-baseline selection didn't union in
-  `listed_parent_skus` while a baseline stays pending — and it can stay
-  pending indefinitely if the discovery gap above turns out to be
-  structural. Fixed same-day, with a regression test — see
-  docs/PHASE3-4-IMPLEMENTATION.md Step 6 for detail. Separately, 170
+  comfortably inside the 90-minute timeout. **Two real bugs surfaced by
+  the discovery gap being reproducible, both fixed same-day:** run 2
+  skipped REST pricing entirely, including the always-priced listed tier,
+  because the resumable-baseline selection didn't union in
+  `listed_parent_skus` while a baseline stayed pending. Fixing that exposed
+  a second, larger issue: "baseline pending" was gated on a *completed*
+  scan_run existing for this scope, which can never happen while discovery
+  stays incomplete — meaning unlisted-tier wave-pricing rotation would have
+  been permanently dead code in production, not merely delayed. Both fixed
+  by decoupling backfill/wave-pricing selection from `algolia_complete`
+  entirely, driving it off live per-parent REST freshness instead — see
+  docs/PHASE3-4-IMPLEMENTATION.md Step 6 for detail and regression tests.
+  **Why the discovery gap itself is safe to defer:** with that decoupling
+  in place, a persistent ~1.2% Algolia shortfall no longer blocks REST
+  pricing, wave-pricing rotation, or delta selection from operating
+  normally on the ~98.8% it does find — it only means ~615 parents stay
+  undiscovered until the sharding root cause is found. Separately, 170
   pre-Phase-4 products (tracked under the legacy `full_book` scope) don't
   appear in `prod_biddable` at all and so can never get a
   `biddable_full_book` REST check — expected, since they're stock that has

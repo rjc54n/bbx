@@ -588,35 +588,37 @@ def run_daily_sweep(
             delta_enabled,
         )
 
-        # A completed run under the successor scope is the Phase 4 baseline.
-        # Until one exists, resume the one-time backfill from per-parent REST
-        # freshness. The first attempt sees NULL for every legacy parent and
-        # therefore checks the whole discovered book. A partial attempt
-        # retries only the parents still lacking a successful check, including
-        # listed parents, so successful baseline work is not repeated.
-        is_baseline_pending = last_run_finished_at is None
+        # The one-time backfill is driven entirely by live per-parent REST
+        # freshness, not by whether a scan_run ever reaches status=completed.
+        # That distinction matters: a completed run additionally requires
+        # algolia_complete=True, and discovery has come back short of its
+        # own expected count on every live run so far (reproducibly, not as
+        # one-off drift -- see docs/PHASE3-4-IMPLEMENTATION.md). Gating
+        # backfill-vs-steady-state on run completion would make
+        # baseline_unchecked_before permanently irrelevant and wave_plan
+        # permanently unused the moment discovery finished checking
+        # everything it currently finds once -- silently freezing the
+        # unlisted tier's rotation/delta pricing forever, for reasons
+        # unrelated to REST at all.
         baseline_unchecked_before = {
             psku
             for psku in all_parent_skus
             if last_rest_checked_at_by_parent.get(psku) is None
         }
-        if is_baseline_pending:
+        if baseline_unchecked_before:
             # The listed tier is priced every day unconditionally -- that
             # invariant does not pause just because the one-time backfill
             # hasn't finished. Without this union, a listed parent that
             # already has a successful check (e.g. from a prior attempt)
             # drops out of baseline_unchecked_before and would silently stop
-            # being priced for as long as the baseline stays incomplete,
-            # which can be indefinitely if algolia_complete never reaches
-            # True.
+            # being priced until the remaining unchecked parents are found.
             parent_skus_to_price = sorted(
                 baseline_unchecked_before | listed_parent_skus
             )
             log.info(
-                "No completed %s baseline -- resumable full backfill: %d/%d "
-                "discovered parent_skus still need a successful REST check; "
-                "%d parents selected (including %d always-priced listed "
-                "parents).",
+                "%s backfill in progress: %d/%d discovered parent_skus "
+                "still need a successful REST check; %d parents selected "
+                "(including %d always-priced listed parents).",
                 BIDDABLE_FULL_BOOK_SCOPE,
                 len(baseline_unchecked_before),
                 len(all_parent_skus),
@@ -762,7 +764,7 @@ def run_daily_sweep(
             - rest_checked_parent_skus
         )
         final_status = _determine_final_status(algolia_complete, rest_coverage)
-        if is_baseline_pending and baseline_unchecked_after:
+        if baseline_unchecked_after:
             final_status = "partial"
             log.warning(
                 "%s baseline remains incomplete: %d discovered parent_skus "
