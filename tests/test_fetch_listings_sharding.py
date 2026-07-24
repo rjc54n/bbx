@@ -10,6 +10,7 @@ from core.fetch_listings import (
     _build_not_filter,
     _escape_facet_value,
     _fetch_sharded,
+    fetch_biddable_universe,
     fetch_listings,
 )
 
@@ -146,6 +147,88 @@ def test_oversized_shard_recurses_into_next_dimension(use_fake_index):
         if "region:'Burgundy'" in c and any(f.startswith("colour:") for f in c)
     ]
     assert len(burgundy_colour_calls) == 2
+
+
+def test_biddable_shard_dims_recurse_two_levels_deep(use_fake_index):
+    # Mirrors prod_biddable's real shape: Burgundy alone (1500) exceeds the
+    # cap, and even after splitting by vintage, 2019 alone (1200) still does
+    # -- proving region -> vintage -> colour (BIDDABLE_SHARD_DIMENSIONS, no
+    # price/format facet available on this index) recurses a full two levels,
+    # not just one.
+    records = (
+        _records(700, region="Burgundy", vintage="2019", colour="Red")
+        + _records(500, region="Burgundy", vintage="2019", colour="White")
+        + _records(300, region="Burgundy", vintage="2020", colour="Red")
+        + _records(100, region="Loire", vintage="2020", colour="White")
+    )
+    fake = FakeIndex(records, cap=1000)
+    use_fake_index(fake)
+
+    collected = _run(["base:'x'"], fl.BIDDABLE_SHARD_DIMENSIONS)
+
+    assert len(collected) == 1600
+
+    # Burgundy 2019 (1200, over cap) must have split further by colour.
+    burgundy_2019_calls = [
+        c for c in fake.fetch_calls
+        if "region:'Burgundy'" in c and "vintage:'2019'" in c
+    ]
+    assert len(burgundy_2019_calls) == 2
+    assert all(any(f.startswith("colour:") for f in c) for c in burgundy_2019_calls)
+
+    # Burgundy 2020 (300, under cap) must NOT have needed a colour split.
+    burgundy_2020_calls = [
+        c for c in fake.fetch_calls
+        if "region:'Burgundy'" in c and "vintage:'2020'" in c
+    ]
+    assert len(burgundy_2020_calls) == 1
+    assert not any(f.startswith("colour:") for f in burgundy_2020_calls[0])
+
+
+def test_biddable_shard_dims_recurse_three_levels_deep_via_maturity(use_fake_index):
+    # Mirrors a real failure found live against prod_biddable on 2026-07-23:
+    # several Burgundy vintage x colour leaf shards (e.g. 2019 Red, 1,374
+    # hits) still exceeded the cap with region -> vintage -> colour alone,
+    # no dimension left to split by. maturity was added as a 4th dimension
+    # for exactly this case -- this fixture reproduces the same shape
+    # (region -> vintage -> colour still over cap -> maturity) end to end.
+    records = (
+        _records(800, region="Burgundy", vintage="2019", colour="Red", maturity="Ready - youthful")
+        + _records(600, region="Burgundy", vintage="2019", colour="Red", maturity="Ready - at best")
+        + _records(400, region="Burgundy", vintage="2019", colour="White")
+        + _records(300, region="Burgundy", vintage="2020", colour="Red")
+        + _records(100, region="Loire", vintage="2020", colour="White")
+    )
+    fake = FakeIndex(records, cap=1000)
+    use_fake_index(fake)
+
+    collected = _run(["base:'x'"], fl.BIDDABLE_SHARD_DIMENSIONS)
+
+    assert len(collected) == 2200
+
+    # Burgundy/2019/Red (1400, over cap) must have split further by maturity.
+    red_calls = [
+        c for c in fake.fetch_calls
+        if "region:'Burgundy'" in c and "vintage:'2019'" in c and "colour:'Red'" in c
+    ]
+    assert len(red_calls) == 2
+    assert all(any(f.startswith("maturity:") for f in c) for c in red_calls)
+
+    # Burgundy/2019/White (400, under cap) must NOT have needed a maturity split.
+    white_calls = [
+        c for c in fake.fetch_calls
+        if "region:'Burgundy'" in c and "vintage:'2019'" in c and "colour:'White'" in c
+    ]
+    assert len(white_calls) == 1
+    assert not any(f.startswith("maturity:") for f in white_calls[0])
+
+    # Burgundy/2020 (300, under cap) must NOT have needed a colour split at all.
+    y2020_calls = [
+        c for c in fake.fetch_calls
+        if "region:'Burgundy'" in c and "vintage:'2020'" in c
+    ]
+    assert len(y2020_calls) == 1
+    assert not any(f.startswith("colour:") for f in y2020_calls[0])
 
 
 def test_dims_exhausted_over_cap_still_fetches_with_truncation(use_fake_index, caplog):
@@ -295,6 +378,42 @@ def test_fetch_listings_returns_fetch_result(use_fake_index):
     assert result.total_index_hits == 50
     assert result.collected_count == 50
     assert result.discovery_complete is True
+
+
+# ----------------------------------------------------------------
+# fetch_biddable_universe: prod_biddable discovery (Phase 4)
+# ----------------------------------------------------------------
+
+def test_fetch_biddable_universe_returns_fetch_result(use_fake_index):
+    records = [{"objectID": str(i), "family_type": "Wines", "region": f"R{i}"}
+               for i in range(50)]
+    fake = FakeIndex(records)
+    use_fake_index(fake)
+    result = fetch_biddable_universe("app", "key")
+    assert isinstance(result, FetchResult)
+    assert len(result.hits) == 50
+    assert result.total_index_hits == 50
+    assert result.collected_count == 50
+    assert result.discovery_complete is True
+
+
+def test_fetch_biddable_universe_excludes_assortment_mixed_cases(use_fake_index):
+    # products/skus is one-SKU-one-wine; mixed cases don't have a single
+    # case_size/bottle_volume_ml/market_price and aren't handled by this
+    # ingest, so they must never reach the collected set.
+    records = (
+        [{"objectID": f"wine-{i}", "family_type": "Wines", "region": "Loire"} for i in range(20)]
+        + [{"objectID": f"case-{i}", "family_type": "Assortment Mixed Cases", "region": "Loire"} for i in range(5)]
+    )
+    fake = FakeIndex(records)
+    use_fake_index(fake)
+
+    result = fetch_biddable_universe("app", "key")
+
+    assert result.collected_count == 20
+    assert all(h["family_type"] == "Wines" for h in result.hits)
+    assert all("family_type:'Wines'" in c for c in fake.count_calls)
+    assert all("family_type:'Wines'" in c for c in fake.fetch_calls)
 
 
 def test_truncated_set_when_shard_dims_exhausted(use_fake_index, caplog):

@@ -83,7 +83,9 @@ room exactly where the asset is most under-priced.
 Grows the addressable catalogue from the 15,483 wines currently tracked to
 52,430.
 
-- Ingest `prod_biddable` with sharded discovery (region → vintage → colour).
+- Ingest `prod_biddable` with sharded discovery (region → vintage → colour →
+  maturity; live-verified 2026-07-23 that three dimensions alone truncated
+  several Burgundy vintage/colour leaf shards).
 - Raise `REST_BATCH_SIZE` 24 → 96. Fewer requests for the same data.
 - **Wave pricing**, not brute force: one-time full backfill (~535 REST calls),
   then a daily delta driven by Algolia's `index_last_update` (~19 calls) plus a

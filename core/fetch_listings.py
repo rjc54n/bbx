@@ -21,6 +21,11 @@
 # 429/5xx responses are retried with exponential backoff. Sharding is
 # lazy — narrow queries (e.g. "new in last N days") never shard and cost
 # the same handful of requests they always did.
+#
+# fetch_biddable_universe() reuses this same sharding machinery against a
+# second index, prod_biddable (the full 52,430-product biddable universe,
+# Phase 4) -- see its docstring for how the shard dimensions and base filter
+# differ from fetch_listings().
 
 from __future__ import annotations
 
@@ -42,6 +47,12 @@ DEFAULT_ALGOLIA_INDEX = "prod_product"
 DEFAULT_HITS_PER_PAGE = 100
 DEFAULT_MAX_PAGES = 500
 
+# The full biddable universe -- 52,430 products at last count (2026-07-23),
+# vs. ~27,000 active SKUs currently tracked via prod_product's BBX-listed
+# scope. ~94% of it carries no live listing; REST still prices those (see
+# core/pipeline.py), so this is the discovery source for Phase 4.
+DEFAULT_BIDDABLE_INDEX = "prod_biddable"
+
 # The index refuses to return hits beyond this many per filter set.
 PAGINATION_CAP = 1000
 
@@ -58,6 +69,31 @@ BOTTLE_FACET_FIELD = "purchase_options.bottle_order_unit"
 # Facet dimensions used to shard over-cap queries, in splitting order.
 # Region first (80 values, mostly small), then colour, price band, vintage.
 SHARD_DIMENSIONS = ["region", "colour", PRICE_FACET_FIELD, "vintage"]
+
+# prod_biddable exposes no price or format facet (confirmed 2026-07-23:
+# colour, region, country, vintage, maturity, grape_varieties,
+# index_last_update only), so its shard order can't reuse SHARD_DIMENSIONS.
+# Region alone isn't enough -- Burgundy alone is ~28,000 of ~52,000 records,
+# well over the 1,000-hit cap by itself.
+#
+# region -> vintage -> colour is ALSO not enough: live-verified 2026-07-23
+# against real Burgundy data, several vintage x colour leaf shards (e.g.
+# 2019 Red at 1,374 hits) still exceeded the cap with no dimension left to
+# split by, silently truncating. maturity (4 low-cardinality values: Ready -
+# youthful/at-best/mature, Not ready) is added as a 4th dimension for
+# exactly this case -- it won't fire for most shards (most vintage x colour
+# combinations are already under cap after 2 splits), but it's load-bearing
+# for the handful of oversized ones, same as vintage is for region alone.
+BIDDABLE_SHARD_DIMENSIONS = ["region", "vintage", "colour", "maturity"]
+
+# family_type also includes 'Assortment Mixed Cases' alongside 'Wines' (a few
+# hundred of ~52,000 -- this is a live index and the exact split drifted
+# within the same session on 2026-07-23, so treat any count here as
+# indicative, not fixed). The products/skus model is one-SKU-one-wine; a
+# mixed case doesn't have a single case_size/bottle_volume_ml/market_price
+# and isn't handled by this ingest, so it's excluded rather than silently
+# mis-shaped into the SKU model.
+BIDDABLE_BASE_FILTERS = ["family_type:'Wines'"]
 
 # Politeness knobs
 REQUEST_JITTER = (0.2, 0.5)      # seconds slept after every request
@@ -429,6 +465,45 @@ def fetch_listings(
     collected: Dict[str, Dict] = {}
     _fetch_sharded(
         algolia_app_id, algolia_api_key, base_filters, shard_dims,
+        collected, index_name, hits_per_page,
+        truncation_flag=truncation_flag,
+    )
+
+    return FetchResult(
+        hits=list(collected.values()),
+        total_index_hits=total_index_hits,
+        collected_count=len(collected),
+        truncated=truncation_flag[0],
+    )
+
+
+def fetch_biddable_universe(
+    algolia_app_id: str,
+    algolia_api_key: str,
+    *,
+    index_name: str = DEFAULT_BIDDABLE_INDEX,
+    hits_per_page: int = DEFAULT_HITS_PER_PAGE,
+) -> FetchResult:
+    """
+    Full-book sharded discovery over the biddable universe (prod_biddable),
+    Phase 4's discovery source -- see DEFAULT_BIDDABLE_INDEX. Reuses the same
+    _fetch_sharded/_count_and_facets machinery as fetch_listings, which is
+    already generic over index_name and shard facet fields; only the base
+    filter and shard order differ (BIDDABLE_BASE_FILTERS,
+    BIDDABLE_SHARD_DIMENSIONS).
+
+    Unlike fetch_listings, there is no stock_origin filter: prod_biddable is
+    already scoped to biddable-eligible stock, and stock_origin isn't even a
+    configured facet on this index.
+    """
+    total_index_hits, _ = _count_and_facets(
+        algolia_app_id, algolia_api_key, BIDDABLE_BASE_FILTERS, [], index_name,
+    )
+
+    truncation_flag = [False]
+    collected: Dict[str, Dict] = {}
+    _fetch_sharded(
+        algolia_app_id, algolia_api_key, BIDDABLE_BASE_FILTERS, BIDDABLE_SHARD_DIMENSIONS,
         collected, index_name, hits_per_page,
         truncation_flag=truncation_flag,
     )

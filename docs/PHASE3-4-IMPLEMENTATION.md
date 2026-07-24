@@ -91,24 +91,54 @@ asserting batch chunking at the new size.
 
 ---
 
-## Step 5 — `prod_biddable` discovery (Phase 4)
+## Step 5 — `prod_biddable` discovery (Phase 4) — done 2026-07-23
 
-**File:** `core/fetch_listings.py`.
+**File:** `core/fetch_listings.py`; new function `fetch_biddable_universe()`,
+reusing the existing `_fetch_sharded`/`_count_and_facets` machinery unchanged
+(both are already generic over `index_name` and shard facet fields).
 
 `index_name` is already parameterised, so the sharding machinery transfers.
 What differs:
-- Shard dimensions for this index are `region → vintage → colour`. Available
-  facets are region, country, vintage, colour, maturity, grape_varieties,
-  index_last_update — **there is no price or format facet**, so the existing
-  price-band shard level does not apply here.
-- Burgundy is 23,824 records and France 36,975, so the region level will not
-  clear the 1,000-hit cap alone. Recursion into vintage then colour is
-  mandatory, and the `NOT` complement query per level must be retained.
+- Shard dimensions for this index started as planned at `region → vintage →
+  colour`. Available facets are region, country, vintage, colour, maturity,
+  grape_varieties, index_last_update — **there is no price or format
+  facet**, so the existing price-band shard level does not apply here.
+- Burgundy alone is ~28,000 records (order of magnitude only — this is a
+  live index and the count drifts within a session), well over the
+  1,000-hit cap by itself, so recursion into vintage then colour is
+  mandatory, and the `NOT` complement query per level is retained.
+- **Live-verified against real data that three dimensions were not enough.**
+  A full Burgundy sweep (region pinned, sharding by vintage → colour) hit six
+  explicit truncation warnings — vintage×colour leaf shards from 1,088 to
+  1,374 hits with no dimension left to split by (e.g. 2019 Red: 1,374 hits).
+  Added **`maturity`** (4 low-cardinality single-valued values: Ready -
+  youthful/at-best/mature, Not ready) as a 4th shard dimension —
+  `BIDDABLE_SHARD_DIMENSIONS = ["region", "vintage", "colour", "maturity"]`.
+  Re-verified live against the exact failing leaf (Burgundy/2019/Red,
+  pinned, sharded by `maturity` alone): 1,374/1,374 collected,
+  `discovery_complete = True`, in 15s (vs. 267s for the full-region sweep —
+  scoping the re-check to the known failure was far cheaper than repeating
+  the whole thing). **Even four dimensions may not be exhaustive for every
+  possible leaf** — the existing truncation-with-warning fallback (Phase 0.5)
+  still applies if a future combination outgrows all four; this is a
+  measured improvement, not a proof of sufficiency for all time.
+- Excluded `family_type:'Wines'` only (`BIDDABLE_BASE_FILTERS`) — the index
+  also carries `'Assortment Mixed Cases'`, which don't fit the
+  one-SKU-one-wine `products`/`skus` model and aren't handled by this
+  ingest.
 - Discovery completeness must be reported exactly as it is today: compare root
   `nbHits` to unique `objectID`s collected, and fail rather than advance any
-  `gone` counter on an incomplete sweep.
+  `gone` counter on an incomplete sweep. (Caution for anyone re-testing this
+  live: capture the root count *before* running the sharded fetch, matching
+  `fetch_listings`/`fetch_biddable_universe` — capturing it afterwards against
+  a long-running sweep compares to a moving target on a continuously-updated
+  index, which is a measurement artifact, not a discovery-completeness bug.)
 
-**Test:** shard recursion against a fixture that exceeds the cap at two levels.
+**Test:** `tests/test_fetch_listings_sharding.py` — a fixture recursing two
+levels deep (region → vintage → colour) and a second reproducing the real
+failure shape three levels deep (region → vintage → colour, still over cap →
+maturity), plus `fetch_biddable_universe`-level tests (FetchResult shape,
+`family_type:'Wines'` exclusion of mixed cases).
 
 ---
 
