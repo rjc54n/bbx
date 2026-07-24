@@ -224,14 +224,14 @@ separate, already-captured metric (`wave_priced_count` vs. total unlisted
 hits), not conflated with REST-attempt coverage.
 
 **Chosen between two options, not picked silently:**
-- **Option A (chosen)** — swap the discovery source, as above.
-- **Option B — a separate, parallel sweep.** A new `scope='biddable'` run
-  (the schema already supports multiple scan scopes via
-  `UNIQUE (scope, run_date) WHERE status='completed'`) alongside the
-  existing `full_book` sweep, untouched. Simpler in isolation, but two
-  independently-complete discovery sweeps writing `gone_since` to the same
-  shared `products`/`skus`/`offers` rows risks the two scopes disagreeing
-  about the same row's presence. Not used.
+- **Option A (chosen):** swap the discovery source in the existing sweep.
+  The run scope is now `biddable_full_book`, the permanent successor to
+  `full_book`. Existing `full_book` rows are history. They do not block a
+  `biddable_full_book` dispatch or supply its delta baseline.
+- **Option B, a separate parallel sweep:** run both scopes against the same
+  shared `products`/`skus`/`offers` rows. Two independently complete
+  discovery sweeps could disagree about the same row's presence and write
+  conflicting `gone_since` state. Not used.
 
 - `apps/daily_sweep/run_sweep.py` reads `WAVE_PRICING_DELTA_ENABLED` (default
   unset/false) and threads it through as `delta_enabled`.
@@ -367,6 +367,46 @@ Four real gaps caught by review, all fixed and tested (243/243 passing) —
    `information_schema.columns` on the linked Supabase project directly
    (not assumed from the earlier `supabase db query` output) — confirmed
    present.
+
+### REST freshness and resumable baseline follow-up (2026-07-24)
+
+**Files:** `core/sweep.py`, `core/store.py`, `core/db.py`,
+`supabase/migrations/20260724170000_products_last_rest_checked_at.sql`.
+
+- `run_daily_sweep` now uses `scope='biddable_full_book'` for both run
+  creation and the previous-completed-run lookup. This is a new run
+  generation inside the existing single sweep, not a second sweep.
+- `products.last_rest_checked_at` records that the parent was included in a
+  successful REST batch. A successful response with no formats still updates
+  it. A failed batch does not. Listing-state reconciliation and synthetic SKU
+  updates do not touch it.
+- Existing PostgreSQL and SQLite rows start with `NULL`. SQLite bootstrap
+  adds the column to existing stores as well as fresh schemas.
+- While no completed `biddable_full_book` run exists, each dispatch selects
+  discovered parents whose timestamp is `NULL`. The first attempt therefore
+  includes the listed tier with the rest of the legacy book. A partial
+  attempt retries only unchecked parents. It cannot be marked completed
+  while any discovered parent remains unchecked.
+- After the baseline, listed parents remain selected every day. Unlisted
+  selection is the deterministic rotation, enabled delta selection, and any
+  parent with `NULL` freshness or a check older than 30 days. This catches
+  newly discovered parents and missed rotation days.
+- REST attempt coverage now counts successful checks, not parents that
+  returned one or more formats. The priced count remains separately recorded
+  in `rest_skus_priced`.
+- `last_rest_checked_at` is the final column in `catalogue_view` and is present
+  in regenerated database types. Step 7 can use it to label market price and
+  highest-bid freshness for unlisted rows.
+- The linked migration was applied and checked on 2026-07-24. Both the
+  `products` and `catalogue_view` columns are `TIMESTAMPTZ`; all 15,669
+  existing product values were `NULL`, as required before the baseline.
+
+The first manual `biddable_full_book` dispatch remains the operational
+acceptance test. At 52,430 discovered parents and batches of 96, the full
+baseline is about 547 REST calls. Record discovery completeness, requested
+batches, failed parents, 429 responses and remaining `NULL` timestamps. Do
+not enable `WAVE_PRICING_DELTA_ENABLED` until the listed-tier validation has
+enough observations.
 
 ---
 

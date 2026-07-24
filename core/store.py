@@ -350,6 +350,7 @@ def commit_sweep(
     rest_unchecked_skus: Set[str],
     final_status: str,
     now: str,
+    rest_checked_parent_skus: Set[str] = frozenset(),
 ) -> None:
     p = placeholder()
     cur = conn.cursor()
@@ -394,6 +395,25 @@ def commit_sweep(
                     f"first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, "
                     f"consecutive_misses, gone_since) VALUES ({placeholders(16)}) " + product_conflict,
                     product_rows,
+                )
+
+        # REST is requested per parent_sku and returns every known format.
+        # A successful batch is a freshness observation even when a parent
+        # has no pricing entries in the response. Failed batches are excluded
+        # by the caller. Update only these parents so Algolia-only listing
+        # reconciliation cannot make stale REST data look fresh.
+        if rest_checked_parent_skus:
+            checked = sorted(rest_checked_parent_skus)
+            log.info(
+                "Recording successful REST checks for %d products", len(checked)
+            )
+            batch_size = 400
+            for offset in range(0, len(checked), batch_size):
+                batch = checked[offset:offset + batch_size]
+                cur.execute(
+                    f"UPDATE products SET last_rest_checked_at = {p} "
+                    f"WHERE parent_sku IN ({placeholders(len(batch))})",
+                    (now, *batch),
                 )
 
         # --- upsert skus ---

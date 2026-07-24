@@ -420,6 +420,28 @@ class TestSelectBiddableRestPricing:
         assert plan.rotation_selected == expected
         assert set(plan.to_price) == expected
 
+    def test_null_and_more_than_30_day_old_checks_are_selected(self):
+        run_date = "2026-07-31"
+        bucket = rotation_bucket_for_date(run_date)
+        fresh = _find_sku_not_in_bucket(bucket)
+        missing = _find_sku_not_in_bucket(bucket, exclude={fresh})
+        overdue = _find_sku_not_in_bucket(bucket, exclude={fresh, missing})
+        hits = [_biddable_hit(sku) for sku in (fresh, missing, overdue)]
+
+        plan = select_biddable_rest_pricing(
+            hits,
+            last_run_finished_at=datetime(2026, 7, 30, 12, 0),
+            run_date=run_date,
+            last_rest_checked_at_by_parent={
+                fresh: "2026-07-30T02:00:00+00:00",
+                missing: None,
+                overdue: "2026-06-30T02:00:00+00:00",
+            },
+        )
+
+        assert plan.overdue_selected == {missing, overdue}
+        assert set(plan.to_price) == {missing, overdue}
+
 
 # ---------------------------------------------------------------
 # Integration tests: run_daily_sweep
@@ -445,7 +467,14 @@ def _patch_fetchers(monkeypatch, hits, rest_data, complete=True, failed_skus=Non
     )
 
 
-def _patch_fetchers_strict(monkeypatch, hits, rest_data, complete=True, failed_skus=None):
+def _patch_fetchers_strict(
+    monkeypatch,
+    hits,
+    rest_data,
+    complete=True,
+    failed_skus=None,
+    requested_batches=None,
+):
     """Like _patch_fetchers, but fetch_rest_pricing_full only returns data
     for parent_skus actually present in its `skus` argument -- required for
     any test asserting that a specific SKU WAS or WASN'T REST-priced (tiering,
@@ -458,6 +487,8 @@ def _patch_fetchers_strict(monkeypatch, hits, rest_data, complete=True, failed_s
 
     def fake_fetch_rest_pricing_full(skus, **kw):
         requested = set(skus)
+        if requested_batches is not None:
+            requested_batches.append(requested)
         filtered = {k: v for k, v in rest_data.items() if k in requested}
         failed = [s for s in (failed_skus or []) if s in requested]
         return filtered, failed
@@ -504,6 +535,63 @@ class TestRunDailySweep:
             conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18",
         )
         assert run2 is None
+
+    def test_completed_legacy_scope_does_not_block_biddable_baseline(
+        self, conn, monkeypatch
+    ):
+        run_date = "2026-07-18"
+        conn.execute(
+            "INSERT INTO scan_runs "
+            "(id, scope, run_date, status, started_at, finished_at) "
+            "VALUES (?, 'full_book', ?, 'completed', ?, ?)",
+            (
+                "legacy-run",
+                run_date,
+                "2026-07-18T01:00:00+00:00",
+                "2026-07-18T01:10:00+00:00",
+            ),
+        )
+        conn.commit()
+        hits = [
+            _hit("LEGACY-A", bbx_listings=[]),
+            _hit("LEGACY-B", bbx_listings=[]),
+        ]
+        rest = {
+            **_rest_entries("LEGACY-A"),
+            **_rest_entries("LEGACY-B"),
+        }
+        requested = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            rest,
+            requested_batches=requested,
+        )
+
+        run_id = run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date=run_date,
+        )
+
+        assert run_id is not None
+        assert requested == [{"LEGACY-A", "LEGACY-B"}]
+        row = dict(
+            conn.execute(
+                "SELECT scope, status FROM scan_runs WHERE id=?",
+                (run_id,),
+            ).fetchone()
+        )
+        assert row == {
+            "scope": sweep.BIDDABLE_FULL_BOOK_SCOPE,
+            "status": "completed",
+        }
+        products = load_current_products(conn)
+        assert all(
+            products[sku]["last_rest_checked_at"] is not None
+            for sku in ("LEGACY-A", "LEGACY-B")
+        )
 
     def test_partial_run_allows_retry(self, conn, monkeypatch):
         hits = [_hit("SKU1")]
@@ -695,6 +783,120 @@ class TestRunDailySweep:
         assert "A|06-00750" in skus
         assert not any(k.startswith("B|") for k in skus)
 
+        run = dict(
+            conn.execute(
+                "SELECT status FROM scan_runs ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+        )
+        assert run["status"] == "partial"
+        assert products["A"]["last_rest_checked_at"] is not None
+        assert products["B"]["last_rest_checked_at"] is None
+
+    def test_successful_rest_check_with_no_formats_records_freshness(
+        self, conn, monkeypatch
+    ):
+        sku = "NO-FORMATS"
+        hits = [_hit(sku, bbx_listings=[])]
+        _patch_fetchers_strict(monkeypatch, hits, {})
+
+        run_id = run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+
+        run = dict(
+            conn.execute(
+                "SELECT status, rest_skus_priced FROM scan_runs WHERE id=?",
+                (run_id,),
+            ).fetchone()
+        )
+        assert run == {"status": "completed", "rest_skus_priced": 0}
+        assert (
+            load_current_products(conn)[sku]["last_rest_checked_at"] is not None
+        )
+        assert not any(
+            key.startswith(f"{sku}|") for key in load_current_skus(conn)
+        )
+
+    def test_partial_baseline_retries_only_unchecked_parents(
+        self, conn, monkeypatch
+    ):
+        run_date = "2026-07-18"
+        next_date = "2026-07-19"
+        next_bucket = rotation_bucket_for_date(next_date)
+        sku_a = _find_sku_not_in_bucket(next_bucket)
+        sku_b = _find_sku_not_in_bucket(next_bucket, exclude={sku_a})
+        hits = [
+            _hit(sku_a),
+            _hit(sku_b, bbx_listings=[]),
+        ]
+        rest = {
+            **_rest_entries(sku_a),
+            **_rest_entries(sku_b),
+        }
+
+        first_requests = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            _rest_entries(sku_a),
+            failed_skus=[sku_b],
+            requested_batches=first_requests,
+        )
+        first_run = run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date=run_date,
+        )
+        assert first_requests == [{sku_a, sku_b}]
+        assert dict(
+            conn.execute(
+                "SELECT status FROM scan_runs WHERE id=?", (first_run,)
+            ).fetchone()
+        )["status"] == "partial"
+        products = load_current_products(conn)
+        assert products[sku_a]["last_rest_checked_at"] is not None
+        assert products[sku_b]["last_rest_checked_at"] is None
+
+        retry_requests = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            rest,
+            requested_batches=retry_requests,
+        )
+        retry_run = run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date=run_date,
+        )
+        assert retry_requests == [{sku_b}]
+        assert dict(
+            conn.execute(
+                "SELECT status FROM scan_runs WHERE id=?", (retry_run,)
+            ).fetchone()
+        )["status"] == "completed"
+        assert load_current_products(conn)[sku_b]["last_rest_checked_at"] is not None
+
+        later_requests = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            rest,
+            requested_batches=later_requests,
+        )
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date=next_date,
+        )
+        assert later_requests == [{sku_a}]
+
     def test_source_agreement_set(self, conn, monkeypatch):
         hits = [_hit("SKU1")]
         rest = _rest_entries("SKU1", price=250)
@@ -802,6 +1004,9 @@ class TestRunDailySweepWavePricing:
         skus = load_current_skus(conn)
         assert skus[f"{sku}|06-00750"]["least_listing_price_p"] == 25000
         assert bool(skus[f"{sku}|06-00750"]["is_listed"]) is True
+        first_rest_checked_at = load_current_products(conn)[sku][
+            "last_rest_checked_at"
+        ]
 
         # Day 2: the listing is gone, and (checked explicitly) this SKU's
         # rotation bucket does NOT match today's -- wave pricing alone would
@@ -819,6 +1024,10 @@ class TestRunDailySweepWavePricing:
         row = skus[f"{sku}|06-00750"]
         assert row["least_listing_price_p"] is None, "stale ask must be cleared, not left from day 1"
         assert bool(row["is_listed"]) is False
+        assert (
+            load_current_products(conn)[sku]["last_rest_checked_at"]
+            == first_rest_checked_at
+        )
 
     def test_relisting_restores_is_listed(self, conn, monkeypatch):
         # The reverse transition, for symmetry: listed -> unlisted (ask
@@ -850,10 +1059,10 @@ class TestRunDailySweepWavePricing:
         assert bool(row["is_listed"]) is True
         assert row["least_listing_price_p"] == 25000
 
-    def test_first_ever_run_backfills_the_whole_book_not_just_wave_selection(self, conn, monkeypatch):
-        # No prior completed run for this scope -- every discovered unlisted
-        # wine must be priced, not just the ~1/ROTATION_BUCKETS a normal
-        # wave-selection day would pick.
+    def test_first_biddable_run_checks_the_whole_book_not_just_wave_selection(self, conn, monkeypatch):
+        # No completed biddable_full_book baseline means every discovered
+        # parent with NULL freshness must be checked, not only the normal
+        # rotation slice.
         run_date = "2026-07-18"
         bucket = rotation_bucket_for_date(run_date)
         would_be_excluded = [_find_sku_not_in_bucket(bucket, exclude={f"UNLISTED{i}" for i in range(5)})]
@@ -864,8 +1073,10 @@ class TestRunDailySweepWavePricing:
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
 
         skus = load_current_skus(conn)
+        products = load_current_products(conn)
         for sku in would_be_excluded:
             assert f"{sku}|06-00750" in skus, f"{sku} should have been backfilled on the first run"
+            assert products[sku]["last_rest_checked_at"] is not None
 
     def test_listed_wine_priced_regardless_of_rotation_bucket(self, conn, monkeypatch):
         # Anchor run first so this isn't confounded by first-run backfill,
@@ -884,47 +1095,147 @@ class TestRunDailySweepWavePricing:
         assert f"{excluded_sku}|06-00750" in skus
 
     def test_unlisted_wine_outside_rotation_bucket_is_not_priced(self, conn, monkeypatch):
-        # An anchor run first: the very first run for a scope is a one-time
-        # full backfill (see test_first_ever_run_backfills...) and would
-        # price this SKU regardless of rotation, masking what this test
-        # actually wants to check -- rotation exclusion on a NON-first run.
-        _patch_fetchers_strict(monkeypatch, [_hit("ANCHOR3")], _rest_entries("ANCHOR3"))
-        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
-
         run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         excluded_sku = _find_sku_not_in_bucket(bucket)
+        hits = [_hit(excluded_sku, bbx_listings=[])]
+        rest = _rest_entries(excluded_sku)
 
-        # rest data WOULD price it if it were requested -- the strict mock
-        # only returns data for SKUs actually passed to
-        # fetch_rest_pricing_full, so its absence from skus proves it
-        # genuinely wasn't attempted, not that pricing failed.
-        _patch_fetchers_strict(monkeypatch, [_hit(excluded_sku, bbx_listings=[])], _rest_entries(excluded_sku))
+        # Establish freshness for this parent during the baseline. A newly
+        # discovered parent has NULL freshness and is deliberately selected
+        # immediately even when it is outside rotation.
+        _patch_fetchers_strict(monkeypatch, hits, rest)
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+
+        requested = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            rest,
+            requested_batches=requested,
+        )
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
 
-        skus = load_current_skus(conn)
-        assert f"{excluded_sku}|06-00750" not in skus
-        # The product itself IS discovered (Algolia-sourced, unaffected by
-        # REST tiering) -- only its SKU-level pricing is withheld.
-        products = load_current_products(conn)
-        assert excluded_sku in products
+        assert requested == [set()]
 
     def test_unlisted_wine_inside_rotation_bucket_is_priced(self, conn, monkeypatch):
-        # Anchor run first -- see test_listed_wine_priced_regardless_of_
-        # rotation_bucket for why (avoids first-run backfill masking what's
-        # actually being tested).
-        _patch_fetchers_strict(monkeypatch, [_hit("ANCHOR5")], _rest_entries("ANCHOR5"))
-        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
-
         run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         included_sku = _find_sku_in_bucket(bucket)
+        hits = [_hit(included_sku, bbx_listings=[])]
+        rest = _rest_entries(included_sku)
 
-        _patch_fetchers_strict(monkeypatch, [_hit(included_sku, bbx_listings=[])], _rest_entries(included_sku))
+        _patch_fetchers_strict(monkeypatch, hits, rest)
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+
+        requested = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            rest,
+            requested_batches=requested,
+        )
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
 
-        skus = load_current_skus(conn)
-        assert f"{included_sku}|06-00750" in skus
+        assert requested == [{included_sku}]
+
+    def test_new_unlisted_parent_is_checked_immediately_outside_rotation(
+        self, conn, monkeypatch
+    ):
+        run_date = "2026-07-19"
+        bucket = rotation_bucket_for_date(run_date)
+        existing_sku = _find_sku_not_in_bucket(bucket)
+        new_sku = _find_sku_not_in_bucket(bucket, exclude={existing_sku})
+
+        baseline_hits = [_hit(existing_sku, bbx_listings=[])]
+        baseline_rest = _rest_entries(existing_sku)
+        _patch_fetchers_strict(monkeypatch, baseline_hits, baseline_rest)
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+
+        hits = [
+            _hit(existing_sku, bbx_listings=[]),
+            _hit(new_sku, bbx_listings=[]),
+        ]
+        rest = {
+            **_rest_entries(existing_sku),
+            **_rest_entries(new_sku),
+        }
+        requested = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            rest,
+            requested_batches=requested,
+        )
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date=run_date,
+        )
+
+        assert requested == [{new_sku}]
+        assert (
+            load_current_products(conn)[new_sku]["last_rest_checked_at"]
+            is not None
+        )
+
+    def test_unlisted_parent_is_checked_when_freshness_exceeds_30_days(
+        self, conn, monkeypatch
+    ):
+        run_date = "2026-07-19"
+        bucket = rotation_bucket_for_date(run_date)
+        sku = _find_sku_not_in_bucket(bucket)
+        hits = [_hit(sku, bbx_listings=[])]
+        rest = _rest_entries(sku)
+
+        _patch_fetchers_strict(monkeypatch, hits, rest)
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+        conn.execute(
+            "UPDATE products SET last_rest_checked_at=? WHERE parent_sku=?",
+            ("2026-06-01T02:00:00+00:00", sku),
+        )
+        conn.commit()
+
+        requested = []
+        _patch_fetchers_strict(
+            monkeypatch,
+            hits,
+            rest,
+            requested_batches=requested,
+        )
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date=run_date,
+        )
+
+        assert requested == [{sku}]
+        assert (
+            load_current_products(conn)[sku]["last_rest_checked_at"]
+            != "2026-06-01T02:00:00+00:00"
+        )
 
     def test_unlisted_skip_never_counts_as_a_miss(self, conn, monkeypatch):
         # Get the SKU into the store on a day its rotation bucket selects it...
@@ -951,12 +1262,6 @@ class TestRunDailySweepWavePricing:
             assert skus[f"{sku}|06-00750"]["gone_since"] is None
 
     def test_rest_skus_expected_counts_only_attempted_not_discovered(self, conn, monkeypatch):
-        # Anchor run first -- on the first-ever run everything is backfilled
-        # (see test_first_ever_run_backfills...), which would make
-        # rest_skus_expected 3, not the 2 this test wants to check.
-        _patch_fetchers(monkeypatch, [_hit("ANCHOR6")], _rest_entries("ANCHOR6"))
-        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
-
         run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         listed_sku = _find_sku_not_in_bucket(bucket)
@@ -970,6 +1275,14 @@ class TestRunDailySweepWavePricing:
         ]
         rest = {**_rest_entries(listed_sku), **_rest_entries(included_unlisted),
                 **_rest_entries(excluded_unlisted)}
+        _patch_fetchers_strict(monkeypatch, hits, rest)
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+
         _patch_fetchers(monkeypatch, hits, rest)
 
         run_id = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
@@ -980,13 +1293,21 @@ class TestRunDailySweepWavePricing:
         assert row["rest_skus_expected"] == 2
 
     def test_wave_pricing_stats_persisted(self, conn, monkeypatch):
-        run_date = "2026-07-18"
+        run_date = "2026-07-19"
         bucket = rotation_bucket_for_date(run_date)
         included = _find_sku_in_bucket(bucket)
         excluded = _find_sku_not_in_bucket(bucket)
 
         hits = [_hit(included, bbx_listings=[]), _hit(excluded, bbx_listings=[])]
         rest = {**_rest_entries(included), **_rest_entries(excluded)}
+        _patch_fetchers(monkeypatch, hits, rest)
+        run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-18",
+        )
+
         _patch_fetchers(monkeypatch, hits, rest)
 
         run_id = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
@@ -1037,7 +1358,13 @@ class TestRunDailySweepWavePricing:
         # Day 1: establish a completed run so there's a finished_at baseline
         # for delta selection to compare against.
         run_date1 = "2026-07-18"
-        _patch_fetchers(monkeypatch, [_hit("ANCHOR")], _rest_entries("ANCHOR"))
+        run_date2 = "2026-07-19"
+        bucket2 = rotation_bucket_for_date(run_date2)
+        sku = _find_sku_not_in_bucket(bucket2)
+        baseline_hits = [
+            _hit(sku, bbx_listings=[], index_last_update="1-1-2020 1am")
+        ]
+        _patch_fetchers(monkeypatch, baseline_hits, _rest_entries(sku))
         run1 = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
         assert dict(conn.execute("SELECT status FROM scan_runs WHERE id=?", (run1,)).fetchone())["status"] == "completed"
 
@@ -1046,9 +1373,6 @@ class TestRunDailySweepWavePricing:
         # whatever the real wall-clock is when this test runs) -- delta
         # selection should flag it as changed and price it despite rotation
         # excluding it, only because delta_enabled=True this time.
-        run_date2 = "2026-07-19"
-        bucket2 = rotation_bucket_for_date(run_date2)
-        sku = _find_sku_not_in_bucket(bucket2)
         _patch_fetchers_strict(
             monkeypatch,
             [_hit(sku, bbx_listings=[], index_last_update="1-1-2030 1am")],
@@ -1066,18 +1390,22 @@ class TestRunDailySweepWavePricing:
         # Same setup as above, but delta_enabled left at its default (False)
         # -- the delta-flagged-but-rotation-excluded SKU must NOT be priced.
         run_date1 = "2026-07-18"
-        _patch_fetchers(monkeypatch, [_hit("ANCHOR2")], _rest_entries("ANCHOR2"))
-        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
-
         run_date2 = "2026-07-19"
         bucket2 = rotation_bucket_for_date(run_date2)
         sku = _find_sku_not_in_bucket(bucket2)
+        baseline_hits = [
+            _hit(sku, bbx_listings=[], index_last_update="1-1-2020 1am")
+        ]
+        _patch_fetchers(monkeypatch, baseline_hits, _rest_entries(sku))
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
+
+        requested = []
         _patch_fetchers_strict(
             monkeypatch,
             [_hit(sku, bbx_listings=[], index_last_update="1-1-2030 1am")],
             _rest_entries(sku),
+            requested_batches=requested,
         )
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date2)
 
-        skus = load_current_skus(conn)
-        assert f"{sku}|06-00750" not in skus
+        assert requested == [set()]

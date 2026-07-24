@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
-from datetime import date, timezone, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from core.db import bootstrap_schema
@@ -44,6 +44,8 @@ from core.store import (
 log = logging.getLogger(__name__)
 
 REST_COVERAGE_THRESHOLD = 0.80
+BIDDABLE_FULL_BOOK_SCOPE = "biddable_full_book"
+REST_FRESHNESS_MAX_AGE_DAYS = 30
 
 
 # ---------------------------------------------------------------------------
@@ -170,10 +172,38 @@ class RestPricingPlan:
     """
     to_price: List[str]
     rotation_selected: Set[str]
+    overdue_selected: Set[str]
     delta_changed: Set[str]
-    shadow_only: Set[str]   # delta_changed, outside the rotation slice -- what
-                            # delta would add beyond rotation alone
+    shadow_only: Set[str]   # what delta would add beyond rotation/overdue
     delta_enabled: bool
+
+
+def _rest_check_is_overdue(
+    raw: Any,
+    *,
+    run_date: str,
+    max_age_days: int = REST_FRESHNESS_MAX_AGE_DAYS,
+) -> bool:
+    """Whether a parent needs a REST freshness catch-up.
+
+    Missing and unparseable timestamps are treated as overdue. Postgres
+    returns TIMESTAMPTZ as datetime while SQLite stores ISO8601 text, so both
+    forms are accepted. A check becomes overdue once it is more than
+    max_age_days old; the deterministic rotation remains the normal path at
+    exactly 30 days.
+    """
+    if raw is None:
+        return True
+    try:
+        checked_at = (
+            raw
+            if isinstance(raw, datetime)
+            else datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        )
+    except (TypeError, ValueError):
+        return True
+    cutoff = date.fromisoformat(run_date) - timedelta(days=max_age_days)
+    return checked_at.date() < cutoff
 
 
 def select_biddable_rest_pricing(
@@ -183,11 +213,12 @@ def select_biddable_rest_pricing(
     run_date: str,
     delta_enabled: bool = False,
     rotation_buckets: int = ROTATION_BUCKETS,
+    last_rest_checked_at_by_parent: Optional[Dict[str, Any]] = None,
 ) -> RestPricingPlan:
     """
     Decide which parent_skus to REST-price this run: a rotating slice of the
-    whole discovered book (always), plus index_last_update-driven deltas
-    (only once delta_enabled=True).
+    whole discovered book (always), overdue or never-checked parents (always),
+    plus index_last_update-driven deltas (only once delta_enabled=True).
 
     last_run_finished_at=None (e.g. no prior completed run to compare
     against) means no delta selection is possible -- delta_changed stays
@@ -195,6 +226,7 @@ def select_biddable_rest_pricing(
     """
     bucket = rotation_bucket_for_date(run_date)
     rotation_selected: Set[str] = set()
+    overdue_selected: Set[str] = set()
     delta_changed: Set[str] = set()
 
     for hit in hits:
@@ -206,20 +238,30 @@ def select_biddable_rest_pricing(
         if _sku_rotation_bucket(psku, rotation_buckets) == bucket:
             rotation_selected.add(psku)
 
+        if (
+            last_rest_checked_at_by_parent is not None
+            and _rest_check_is_overdue(
+                last_rest_checked_at_by_parent.get(psku),
+                run_date=run_date,
+            )
+        ):
+            overdue_selected.add(psku)
+
         if last_run_finished_at is not None:
             changed_at = parse_index_last_update(hit.get("index_last_update"))
             if changed_at is not None and changed_at > last_run_finished_at:
                 delta_changed.add(psku)
 
-    to_price = set(rotation_selected)
+    to_price = rotation_selected | overdue_selected
     if delta_enabled:
         to_price |= delta_changed
 
     return RestPricingPlan(
         to_price=sorted(to_price),
         rotation_selected=rotation_selected,
+        overdue_selected=overdue_selected,
         delta_changed=delta_changed,
-        shadow_only=delta_changed - rotation_selected,
+        shadow_only=delta_changed - rotation_selected - overdue_selected,
         delta_enabled=delta_enabled,
     )
 
@@ -451,7 +493,7 @@ def run_daily_sweep(
     if run_date is None:
         run_date = date.today().isoformat()
 
-    run_id = start_run(conn, scope="full_book", run_date=run_date)
+    run_id = start_run(conn, scope=BIDDABLE_FULL_BOOK_SCOPE, run_date=run_date)
     if run_id is None:
         log.info("Completed run already exists for %s — skipping.", run_date)
         return None
@@ -483,6 +525,17 @@ def run_daily_sweep(
             fetch_result.collected_count, fetch_result.total_index_hits, algolia_complete,
         )
 
+        # REST freshness is stored per parent because getBiddableCprStock is
+        # called per parent_sku and returns all of that parent's formats.
+        # Load it before selection so baseline retries, new products and
+        # missed rotation days can be selected from evidence rather than run
+        # history alone.
+        current_products = load_current_products(conn)
+        last_rest_checked_at_by_parent = {
+            psku: row.get("last_rest_checked_at")
+            for psku, row in current_products.items()
+        }
+
         # --- Phase 2: REST pricing (tiered: listed always, unlisted wave-priced) ---
         all_parent_skus: Set[str] = set()
         listed_parent_skus: Set[str] = set()
@@ -501,13 +554,16 @@ def run_daily_sweep(
                 unlisted_hits.append(hit)
 
         last_run_finished_at = _parse_run_finished_at(
-            get_last_completed_run_finished_at(conn, scope="full_book")
+            get_last_completed_run_finished_at(
+                conn, scope=BIDDABLE_FULL_BOOK_SCOPE
+            )
         )
         wave_plan = select_biddable_rest_pricing(
             unlisted_hits,
             last_run_finished_at=last_run_finished_at,
             run_date=run_date,
             delta_enabled=delta_enabled,
+            last_rest_checked_at_by_parent=last_rest_checked_at_by_parent,
         )
         # Shadow-mode validation ground truth: the listed tier is always
         # fully REST-priced and diffed, so (unlike the unlisted tier, which
@@ -524,28 +580,36 @@ def run_daily_sweep(
         )
         log.info(
             "Wave pricing: %d unlisted parent_skus discovered, %d selected "
-            "(rotation=%d, delta_changed=%d, shadow_only=%d, delta_enabled=%s)",
+            "(rotation=%d, overdue=%d, delta_changed=%d, shadow_only=%d, "
+            "delta_enabled=%s)",
             len(unlisted_hits), len(wave_plan.to_price),
-            len(wave_plan.rotation_selected), len(wave_plan.delta_changed),
-            len(wave_plan.shadow_only), delta_enabled,
+            len(wave_plan.rotation_selected), len(wave_plan.overdue_selected),
+            len(wave_plan.delta_changed), len(wave_plan.shadow_only),
+            delta_enabled,
         )
 
-        # No prior completed run for this scope means no wave-pricing
-        # baseline exists yet: treat this as the roadmap's one-time full
-        # backfill and price every discovered parent_sku, not just what
-        # wave pricing would select. Without this, the very first run
-        # would price only the listed tier plus a 1/ROTATION_BUCKETS slice
-        # of the unlisted universe, leaving the rest with no skus row at
-        # all -- and therefore absent from catalogue_view entirely (an
-        # INNER JOIN against skus), not just unpriced.
-        is_first_run_for_scope = last_run_finished_at is None
-        if is_first_run_for_scope:
-            parent_skus_to_price = sorted(all_parent_skus)
+        # A completed run under the successor scope is the Phase 4 baseline.
+        # Until one exists, resume the one-time backfill from per-parent REST
+        # freshness. The first attempt sees NULL for every legacy parent and
+        # therefore checks the whole discovered book. A partial attempt
+        # retries only the parents still lacking a successful check, including
+        # listed parents, so successful baseline work is not repeated.
+        is_baseline_pending = last_run_finished_at is None
+        baseline_unchecked_before = {
+            psku
+            for psku in all_parent_skus
+            if last_rest_checked_at_by_parent.get(psku) is None
+        }
+        if is_baseline_pending:
+            parent_skus_to_price = sorted(baseline_unchecked_before)
             log.info(
-                "No prior completed run for this scope -- one-time full "
-                "backfill: pricing all %d discovered parent_skus (wave "
-                "selection alone would have priced %d).",
-                len(all_parent_skus), len(listed_parent_skus | set(wave_plan.to_price)),
+                "No completed %s baseline -- resumable full backfill: %d/%d "
+                "discovered parent_skus still need a successful REST check; "
+                "%d parents selected.",
+                BIDDABLE_FULL_BOOK_SCOPE,
+                len(baseline_unchecked_before),
+                len(all_parent_skus),
+                len(parent_skus_to_price),
             )
         else:
             parent_skus_to_price = sorted(listed_parent_skus | set(wave_plan.to_price))
@@ -554,6 +618,7 @@ def run_daily_sweep(
             parent_skus_to_price, progress=progress
         )
         rest_failed_set = set(failed_skus)
+        rest_checked_parent_skus = set(parent_skus_to_price) - rest_failed_set
         # Discovered but not attempted this run (wave-pricing skip). Neither
         # this run's price data nor its absence tells us anything about
         # these SKUs -- combined with rest_failed_set below, this is exactly
@@ -562,9 +627,14 @@ def run_daily_sweep(
         rest_unchecked_skus = all_parent_skus - set(parent_skus_to_price)
 
         rest_skus_expected = len(parent_skus_to_price)
+        rest_skus_checked = len(rest_checked_parent_skus)
         rest_skus_priced = len(rest_data)
         rest_skus_failed = len(failed_skus)
-        rest_coverage = rest_skus_priced / rest_skus_expected if rest_skus_expected else 1.0
+        rest_coverage = (
+            rest_skus_checked / rest_skus_expected
+            if rest_skus_expected
+            else 1.0
+        )
 
         update_run_rest(
             conn, run_id,
@@ -582,10 +652,11 @@ def run_daily_sweep(
             wave_priced_count=len(wave_plan.to_price),
         )
         log.info(
-            "REST: %d/%d attempted priced, %d failed (coverage %.1f%%); "
+            "REST: %d/%d attempted checked successfully, %d returned pricing, "
+            "%d failed (coverage %.1f%%); "
             "%d discovered parent_skus not attempted this run (wave-pricing skip)",
-            rest_skus_priced, rest_skus_expected, rest_skus_failed, rest_coverage * 100,
-            len(rest_unchecked_skus),
+            rest_skus_checked, rest_skus_expected, rest_skus_priced,
+            rest_skus_failed, rest_coverage * 100, len(rest_unchecked_skus),
         )
 
         # --- Phase 3: Extract entities ---
@@ -610,7 +681,6 @@ def run_daily_sweep(
         now = _now_utc()
 
         log.info("Loading current state from store...")
-        current_products = load_current_products(conn)
         current_skus = load_current_skus(conn)
         current_offers = load_current_offers(conn)
         log.info(
@@ -670,7 +740,24 @@ def run_daily_sweep(
         )
 
         # --- Phase 5: Atomic commit ---
+        baseline_unchecked_after = (
+            all_parent_skus
+            - {
+                psku
+                for psku, checked_at in last_rest_checked_at_by_parent.items()
+                if checked_at is not None
+            }
+            - rest_checked_parent_skus
+        )
         final_status = _determine_final_status(algolia_complete, rest_coverage)
+        if is_baseline_pending and baseline_unchecked_after:
+            final_status = "partial"
+            log.warning(
+                "%s baseline remains incomplete: %d discovered parent_skus "
+                "have never completed a successful REST check.",
+                BIDDABLE_FULL_BOOK_SCOPE,
+                len(baseline_unchecked_after),
+            )
 
         log.info("Committing sweep as '%s'...", final_status)
         commit_sweep(
@@ -690,6 +777,7 @@ def run_daily_sweep(
             rest_unchecked_skus=rest_failed_set | rest_unchecked_skus,
             final_status=final_status,
             now=now,
+            rest_checked_parent_skus=rest_checked_parent_skus,
         )
 
         log.info(

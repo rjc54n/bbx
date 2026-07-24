@@ -94,19 +94,25 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
   pass of this doc conflated with the total: at today's book size
   (~15,483 listed parent_skus) that's ~161 more calls/day on its own, every
   day, forever — so **total steady-state cost is ~180–200 calls/day, not
-  ~40.** The very first run for a scope automatically backfills the entire
-  discovered book (external review, 2026-07-24, caught that this wasn't
-  actually implemented despite being claimed) — pricing everything once,
-  not just what wave selection would have picked. Built, tested, and
+  ~40.** `biddable_full_book` is the permanent successor to the legacy
+  `full_book` run scope. Its first completed run is a resumable baseline:
+  every discovered parent must have a successful REST check recorded in
+  `products.last_rest_checked_at`. Failed parents remain `NULL` and are
+  retried on the next dispatch. Built, tested, and
   **wired into `run_daily_sweep`** 2026-07-24 (`select_biddable_rest_pricing`;
   discovery swapped from `prod_product` to `prod_biddable`, REST pricing
-  tiered by listed/unlisted). Delta selection stays off by default
+  tiered by listed/unlisted). After the baseline, unlisted parents are
+  selected by rotation, enabled delta selection, or missing/stale REST
+  freshness (more than 30 days). Newly discovered parents are therefore
+  checked immediately rather than waiting for their rotation day. Delta
+  selection stays off by default
   (`WAVE_PRICING_DELTA_ENABLED`) pending the week-long verification the plan
-  calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. **All estimates
-  above are unmeasured** — the first real run (manual `workflow_dispatch`)
-  should be used to record actual listed-parent count, REST batch count,
-  duration, failures and any rate-limit (429) responses before treating
-  this budget or the 90-minute timeout as proven.
+  calls for — see docs/PHASE3-4-IMPLEMENTATION.md Step 6. At 52,430
+  discovered parents and batches of 96, the first baseline is about 547
+  REST calls. This remains unmeasured. The first manual `workflow_dispatch`
+  must record the actual discovery count, requested batches, duration,
+  failures, 429 responses and remaining `NULL` freshness timestamps before
+  the budget or 90-minute timeout is treated as proven.
 - Model unlisted-but-biddable SKUs as first-class: `skus.is_listed`, a real
   stored column (not a new entity) — **built 2026-07-24**, derived from
   Algolia discovery every run independent of REST tiering, specifically

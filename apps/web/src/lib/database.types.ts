@@ -208,6 +208,7 @@ export type Database = {
           first_seen_run_id: string | null
           gone_since: string | null
           grape_varieties: string[] | null
+          last_rest_checked_at: string | null
           last_seen_at: string
           last_seen_run_id: string | null
           name: string | null
@@ -226,6 +227,7 @@ export type Database = {
           first_seen_run_id?: string | null
           gone_since?: string | null
           grape_varieties?: string[] | null
+          last_rest_checked_at?: string | null
           last_seen_at: string
           last_seen_run_id?: string | null
           name?: string | null
@@ -244,6 +246,7 @@ export type Database = {
           first_seen_run_id?: string | null
           gone_since?: string | null
           grape_varieties?: string[] | null
+          last_rest_checked_at?: string | null
           last_seen_at?: string
           last_seen_run_id?: string | null
           name?: string | null
@@ -301,6 +304,11 @@ export type Database = {
           scope: string
           started_at: string
           status: string
+          wave_delta_changed_count: number | null
+          wave_delta_enabled: boolean | null
+          wave_priced_count: number | null
+          wave_rotation_count: number | null
+          wave_shadow_only_count: number | null
         }
         Insert: {
           algolia_complete?: boolean | null
@@ -317,6 +325,11 @@ export type Database = {
           scope: string
           started_at: string
           status?: string
+          wave_delta_changed_count?: number | null
+          wave_delta_enabled?: boolean | null
+          wave_priced_count?: number | null
+          wave_rotation_count?: number | null
+          wave_shadow_only_count?: number | null
         }
         Update: {
           algolia_complete?: boolean | null
@@ -333,6 +346,11 @@ export type Database = {
           scope?: string
           started_at?: string
           status?: string
+          wave_delta_changed_count?: number | null
+          wave_delta_enabled?: boolean | null
+          wave_priced_count?: number | null
+          wave_rotation_count?: number | null
+          wave_shadow_only_count?: number | null
         }
         Relationships: []
       }
@@ -346,6 +364,7 @@ export type Database = {
           format_code: string
           gone_since: string | null
           highest_bid_p: number | null
+          is_listed: boolean
           last_seen_at: string
           last_seen_run_id: string | null
           last_transaction_p: number | null
@@ -364,6 +383,7 @@ export type Database = {
           format_code: string
           gone_since?: string | null
           highest_bid_p?: number | null
+          is_listed?: boolean
           last_seen_at: string
           last_seen_run_id?: string | null
           last_transaction_p?: number | null
@@ -382,6 +402,7 @@ export type Database = {
           format_code?: string
           gone_since?: string | null
           highest_bid_p?: number | null
+          is_listed?: boolean
           last_seen_at?: string
           last_seen_run_id?: string | null
           last_transaction_p?: number | null
@@ -495,6 +516,7 @@ export type Database = {
           first_seen_at: string | null
           format_code: string | null
           highest_bid_p: number | null
+          last_rest_checked_at: string | null
           last_seen_at: string | null
           last_transaction_p: number | null
           market_price_p: number | null

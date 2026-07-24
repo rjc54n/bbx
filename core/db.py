@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS products (
     producer                TEXT,
     grape_varieties         TEXT,
     product_url             TEXT,
+    last_rest_checked_at    TEXT,
     first_seen_run_id       TEXT REFERENCES scan_runs(id),
     first_seen_at           TEXT NOT NULL,
     last_seen_run_id        TEXT REFERENCES scan_runs(id),
@@ -200,6 +201,23 @@ def bootstrap_schema(conn) -> None:
 
 def _bootstrap_sqlite(conn) -> None:
     conn.executescript(_SQLITE_SCHEMA)
+    # CREATE TABLE IF NOT EXISTS does not add columns to an existing SQLite
+    # store. Keep the local persistent-store path forward-compatible with the
+    # additive Postgres migrations rather than only making fresh test
+    # databases work.
+    product_columns = {
+        row["name"] if isinstance(row, sqlite3.Row) else row[1]
+        for row in conn.execute("PRAGMA table_info(products)").fetchall()
+    }
+    if "last_rest_checked_at" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN last_rest_checked_at TEXT")
+
+    sku_columns = {
+        row["name"] if isinstance(row, sqlite3.Row) else row[1]
+        for row in conn.execute("PRAGMA table_info(skus)").fetchall()
+    }
+    if "is_listed" not in sku_columns:
+        conn.execute("ALTER TABLE skus ADD COLUMN is_listed INTEGER NOT NULL DEFAULT 0")
     conn.commit()
 
 

@@ -69,6 +69,38 @@ class TestBootstrap:
         assert "rest_failed_skus" in cols
         assert "status" in cols
 
+    def test_existing_sqlite_store_gains_rest_freshness_without_data_loss(
+        self, conn
+    ):
+        conn.execute(
+            "INSERT INTO scan_runs "
+            "(id, scope, run_date, status, started_at) "
+            "VALUES ('run1', 'full_book', '2026-07-18', 'running', "
+            "'2026-07-18T02:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO products "
+            "(parent_sku, name, first_seen_run_id, first_seen_at, "
+            "last_seen_run_id, last_seen_at) "
+            "VALUES ('SKU1', 'Preserved wine', 'run1', "
+            "'2026-07-18T02:00:00Z', 'run1', '2026-07-18T02:00:00Z')"
+        )
+        conn.commit()
+        conn.execute("ALTER TABLE products DROP COLUMN last_rest_checked_at")
+        conn.commit()
+
+        bootstrap_schema(conn)
+
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(products)")
+        }
+        assert "last_rest_checked_at" in columns
+        row = conn.execute(
+            "SELECT name, last_rest_checked_at "
+            "FROM products WHERE parent_sku='SKU1'"
+        ).fetchone()
+        assert tuple(row) == ("Preserved wine", None)
+
     def test_observation_events_unique_constraint(self, conn):
         conn.execute(
             "INSERT INTO scan_runs (id, scope, run_date, status, started_at) "
