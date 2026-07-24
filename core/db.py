@@ -106,7 +106,12 @@ CREATE TABLE IF NOT EXISTS scan_runs (
     rest_skus_expected      INTEGER,
     rest_skus_priced        INTEGER,
     rest_skus_failed        INTEGER,
-    rest_failed_skus        TEXT
+    rest_failed_skus        TEXT,
+    wave_delta_enabled      INTEGER,
+    wave_rotation_count     INTEGER,
+    wave_delta_changed_count INTEGER,
+    wave_shadow_only_count  INTEGER,
+    wave_priced_count       INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS products (

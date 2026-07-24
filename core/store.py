@@ -85,6 +85,30 @@ def update_run_rest(
     cur.close()
 
 
+def update_run_wave_pricing(
+    conn, run_id: str, *,
+    wave_delta_enabled: bool,
+    wave_rotation_count: int,
+    wave_delta_changed_count: int,
+    wave_shadow_only_count: int,
+    wave_priced_count: int,
+) -> None:
+    """Persists core.sweep.RestPricingPlan's stats for one run -- the
+    auditability Phase 4 Step 6 asks for, so the "at least a week" delta-vs-
+    rotation comparison is a SQL query against scan_runs, not log-scraping."""
+    p = placeholder()
+    cur = conn.cursor()
+    cur.execute(
+        f"UPDATE scan_runs SET wave_delta_enabled = {p}, wave_rotation_count = {p}, "
+        f"wave_delta_changed_count = {p}, wave_shadow_only_count = {p}, "
+        f"wave_priced_count = {p} WHERE id = {p}",
+        (wave_delta_enabled, wave_rotation_count, wave_delta_changed_count,
+         wave_shadow_only_count, wave_priced_count, run_id),
+    )
+    conn.commit()
+    cur.close()
+
+
 def mark_run_failed(conn, run_id: str, error_message: str) -> None:
     p = placeholder()
     cur = conn.cursor()

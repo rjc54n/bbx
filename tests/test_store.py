@@ -19,6 +19,7 @@ from core.store import (
     start_run,
     update_run_discovery,
     update_run_rest,
+    update_run_wave_pricing,
 )
 
 
@@ -87,6 +88,46 @@ class TestStartRun:
         conn.commit()
         rid2 = start_run(conn, scope="full_book", run_date="2026-07-18")
         assert rid2 is not None
+
+
+# ---------------------------------------------------------------------------
+# update_run_wave_pricing (Phase 4 Step 6 auditability)
+# ---------------------------------------------------------------------------
+
+class TestUpdateRunWavePricing:
+    def test_persists_all_fields(self, conn):
+        run_id = start_run(conn, scope="biddable", run_date="2026-07-24")
+        update_run_wave_pricing(
+            conn, run_id,
+            wave_delta_enabled=False,
+            wave_rotation_count=1748,
+            wave_delta_changed_count=1800,
+            wave_shadow_only_count=1650,
+            wave_priced_count=1748,
+        )
+        row = dict(conn.execute(
+            "SELECT * FROM scan_runs WHERE id=?", (run_id,),
+        ).fetchone())
+        assert row["wave_delta_enabled"] == 0  # SQLite has no native BOOLEAN
+        assert row["wave_rotation_count"] == 1748
+        assert row["wave_delta_changed_count"] == 1800
+        assert row["wave_shadow_only_count"] == 1650
+        assert row["wave_priced_count"] == 1748
+
+    def test_delta_enabled_persists_true(self, conn):
+        run_id = start_run(conn, scope="biddable", run_date="2026-07-24")
+        update_run_wave_pricing(
+            conn, run_id,
+            wave_delta_enabled=True,
+            wave_rotation_count=1748,
+            wave_delta_changed_count=1800,
+            wave_shadow_only_count=1650,
+            wave_priced_count=3398,
+        )
+        row = dict(conn.execute(
+            "SELECT wave_delta_enabled FROM scan_runs WHERE id=?", (run_id,),
+        ).fetchone())
+        assert row["wave_delta_enabled"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +495,17 @@ class TestPostgresConnectionCompat:
         update_run_rest(
             conn, "run1", rest_skus_expected=5, rest_skus_priced=5,
             rest_skus_failed=0, rest_failed_skus=[],
+        )
+        cur.execute.assert_called_once()
+        conn.commit.assert_called_once()
+
+    def test_update_run_wave_pricing_uses_cursor(self):
+        conn, cur = _pg_like_conn()
+        update_run_wave_pricing(
+            conn, "run1",
+            wave_delta_enabled=False, wave_rotation_count=10,
+            wave_delta_changed_count=5, wave_shadow_only_count=3,
+            wave_priced_count=10,
         )
         cur.execute.assert_called_once()
         conn.commit.assert_called_once()

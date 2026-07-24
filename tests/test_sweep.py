@@ -1,5 +1,6 @@
 """Integration tests for core.sweep — daily sweep orchestration against SQLite."""
 import sqlite3
+from datetime import datetime
 
 import pytest
 
@@ -9,13 +10,19 @@ from core.models import _now_utc
 from core.store import load_current_offers, load_current_products, load_current_skus
 import core.sweep as sweep
 from core.sweep import (
+    ROTATION_BUCKETS,
+    RestPricingPlan,
     _compute_source_agreement,
     _determine_final_status,
     _extract_offers,
     _extract_products,
     _extract_skus,
     _known_format_codes_by_sku,
+    _sku_rotation_bucket,
+    parse_index_last_update,
+    rotation_bucket_for_date,
     run_daily_sweep,
+    select_biddable_rest_pricing,
 )
 
 
@@ -219,6 +226,179 @@ class TestSourceAgreement:
         }
         _compute_source_agreement(skus, offers)
         assert skus["SKU1|06-00750"].source_agreement == "ok"
+
+
+# ---------------------------------------------------------------
+# Phase 4 Step 6: wave-pricing selection (not yet wired into run_daily_sweep)
+# ---------------------------------------------------------------
+
+
+class TestParseIndexLastUpdate:
+    def test_parses_real_observed_formats(self):
+        assert parse_index_last_update("23-07-2026 1pm") == datetime(2026, 7, 23, 13, 0)
+        assert parse_index_last_update("20-02-2026 9pm") == datetime(2026, 2, 20, 21, 0)
+        assert parse_index_last_update("22-01-2026 6am") == datetime(2026, 1, 22, 6, 0)
+
+    def test_midnight_and_noon(self):
+        assert parse_index_last_update("23-07-2026 12am") == datetime(2026, 7, 23, 0, 0)
+        assert parse_index_last_update("23-07-2026 12pm") == datetime(2026, 7, 23, 12, 0)
+
+    def test_unpadded_day_and_month(self):
+        assert parse_index_last_update("1-1-2026 1am") == datetime(2026, 1, 1, 1, 0)
+
+    def test_lowercase_am_pm(self):
+        # The real data is always lowercase ("1pm"), not "1PM" -- confirm
+        # case isn't fragile either way.
+        assert parse_index_last_update("23-07-2026 1PM") == datetime(2026, 7, 23, 13, 0)
+
+    def test_none_empty_and_garbage_return_none(self):
+        assert parse_index_last_update(None) is None
+        assert parse_index_last_update("") is None
+        assert parse_index_last_update("garbage") is None
+        assert parse_index_last_update("23-07-2026") is None  # missing time
+
+
+class TestRotationBucketForDate:
+    def test_deterministic_for_same_date(self):
+        assert rotation_bucket_for_date("2026-07-18") == rotation_bucket_for_date("2026-07-18")
+
+    def test_regression_known_value(self):
+        # Locks in the concrete mapping -- a future change to the bucketing
+        # algorithm should be a deliberate, visible decision, not silent.
+        assert rotation_bucket_for_date("2026-07-18") == 15
+
+    def test_cycles_through_every_bucket_over_rotation_buckets_days(self):
+        from datetime import date, timedelta
+        start = date(2026, 7, 18)
+        buckets = {
+            rotation_bucket_for_date((start + timedelta(days=i)).isoformat())
+            for i in range(ROTATION_BUCKETS)
+        }
+        assert buckets == set(range(ROTATION_BUCKETS))
+
+    def test_wraps_around_after_rotation_buckets_days(self):
+        from datetime import date, timedelta
+        d0 = date(2026, 7, 18)
+        d30 = d0 + timedelta(days=ROTATION_BUCKETS)
+        assert rotation_bucket_for_date(d0.isoformat()) == rotation_bucket_for_date(d30.isoformat())
+
+
+class TestSkuRotationBucket:
+    def test_deterministic_across_repeated_calls(self):
+        assert _sku_rotation_bucket("20138117265") == _sku_rotation_bucket("20138117265")
+
+    def test_regression_known_value(self):
+        assert _sku_rotation_bucket("20138117265") == 26
+
+    def test_stays_within_bucket_range(self):
+        for sku in ["A", "B", "20138117265", "SKU-with-dashes", ""]:
+            assert 0 <= _sku_rotation_bucket(sku) < ROTATION_BUCKETS
+
+    def test_distributes_reasonably_evenly(self):
+        # Not cryptographically rigorous -- just a sanity check that this
+        # isn't secretly bucketing everything into #0. 3000 synthetic SKUs
+        # over 30 buckets: expect ~100 each, allow generous slack either way.
+        from collections import Counter
+        counts = Counter(_sku_rotation_bucket(f"SKU{i}") for i in range(3000))
+        assert set(counts.keys()) == set(range(ROTATION_BUCKETS))
+        assert min(counts.values()) > 40
+        assert max(counts.values()) < 200
+
+
+def _biddable_hit(parent_sku, index_last_update=None):
+    return {"parent_sku": parent_sku, "index_last_update": index_last_update}
+
+
+class TestSelectBiddableRestPricing:
+    def test_delta_disabled_by_default_prices_rotation_only(self):
+        # SKU2's index_last_update is after last_run, so delta WOULD select
+        # it -- but delta_enabled defaults to False, so it must not be priced
+        # unless it also happens to land in today's rotation bucket.
+        hits = [
+            _biddable_hit("SKU1", "18-07-2026 1am"),   # before last run -- unchanged
+            _biddable_hit("SKU2", "19-07-2026 1am"),   # after last run -- delta-flagged
+        ]
+        last_run = datetime(2026, 7, 18, 12, 0)
+        plan = select_biddable_rest_pricing(hits, last_run_finished_at=last_run, run_date="2026-07-19")
+
+        assert plan.delta_enabled is False
+        assert plan.delta_changed == {"SKU2"}
+        # Rotation-only means to_price is EXACTLY the rotation set when the
+        # flag is off, regardless of what delta flagged -- this must hold
+        # even though SKU2 is delta-changed.
+        assert set(plan.to_price) == plan.rotation_selected
+
+    def test_delta_enabled_adds_delta_changed_to_rotation(self):
+        hits = [
+            _biddable_hit("SKU1", "18-07-2026 1am"),
+            _biddable_hit("SKU2", "19-07-2026 1am"),
+        ]
+        last_run = datetime(2026, 7, 18, 12, 0)
+        plan = select_biddable_rest_pricing(
+            hits, last_run_finished_at=last_run, run_date="2026-07-19", delta_enabled=True,
+        )
+
+        assert plan.delta_enabled is True
+        assert set(plan.to_price) == plan.rotation_selected | plan.delta_changed
+        assert "SKU2" in plan.to_price  # delta-flagged, must be priced when enabled
+
+    def test_shadow_only_reports_delta_beyond_rotation_regardless_of_flag(self):
+        hits = [_biddable_hit(f"SKU{i}", "19-07-2026 1am") for i in range(50)]
+        last_run = datetime(2026, 7, 18, 12, 0)
+
+        plan_off = select_biddable_rest_pricing(hits, last_run_finished_at=last_run, run_date="2026-07-19")
+        plan_on = select_biddable_rest_pricing(
+            hits, last_run_finished_at=last_run, run_date="2026-07-19", delta_enabled=True,
+        )
+
+        # delta_changed/shadow_only don't depend on the flag -- only to_price does.
+        assert plan_off.delta_changed == plan_on.delta_changed
+        assert plan_off.shadow_only == plan_on.shadow_only
+        assert plan_off.shadow_only == plan_off.delta_changed - plan_off.rotation_selected
+        assert set(plan_off.to_price) == plan_off.rotation_selected
+        assert set(plan_on.to_price) == plan_on.rotation_selected | plan_on.delta_changed
+
+    def test_no_last_run_means_no_delta_selection(self):
+        # First-ever run: nothing to compare index_last_update against, so
+        # nothing should be flagged as "changed" -- there's no baseline.
+        hits = [_biddable_hit(f"SKU{i}", "23-07-2026 1pm") for i in range(20)]
+        plan = select_biddable_rest_pricing(hits, last_run_finished_at=None, run_date="2026-07-23")
+        assert plan.delta_changed == set()
+        assert plan.shadow_only == set()
+        assert set(plan.to_price) == plan.rotation_selected
+
+    def test_missing_or_unparseable_index_last_update_excluded_from_delta_but_still_rotates(self):
+        hits = [
+            _biddable_hit("SKU1", None),
+            _biddable_hit("SKU2", "garbage"),
+            _biddable_hit("SKU3"),  # no index_last_update key at all
+        ]
+        last_run = datetime(2026, 7, 18, 12, 0)
+        plan = select_biddable_rest_pricing(hits, last_run_finished_at=last_run, run_date="2026-07-19")
+
+        assert plan.delta_changed == set()
+        # All three are still eligible for the rotation slice on their own terms.
+        expected_rotation = {
+            h["parent_sku"] for h in hits
+            if _sku_rotation_bucket(h["parent_sku"]) == rotation_bucket_for_date("2026-07-19")
+        }
+        assert plan.rotation_selected == expected_rotation
+
+    def test_hits_missing_parent_sku_are_skipped(self):
+        hits = [{"index_last_update": "23-07-2026 1pm"}, _biddable_hit("SKU1", "23-07-2026 1pm")]
+        plan = select_biddable_rest_pricing(hits, last_run_finished_at=None, run_date="2026-07-23")
+        # Must not raise, and the sku-less hit contributes nothing.
+        assert all(psku for psku in plan.to_price)
+
+    def test_rotation_selection_matches_the_underlying_bucket_functions(self):
+        hits = [_biddable_hit(f"SKU{i}") for i in range(200)]
+        run_date = "2026-07-19"
+        plan = select_biddable_rest_pricing(hits, last_run_finished_at=None, run_date=run_date)
+
+        bucket = rotation_bucket_for_date(run_date)
+        expected = {h["parent_sku"] for h in hits if _sku_rotation_bucket(h["parent_sku"]) == bucket}
+        assert plan.rotation_selected == expected
+        assert set(plan.to_price) == expected
 
 
 # ---------------------------------------------------------------

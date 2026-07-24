@@ -7,7 +7,9 @@ error reporting) — those belong in the caller (apps/daily_sweep/run_sweep.py).
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+from dataclasses import dataclass
 from datetime import date, timezone, datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -39,6 +41,141 @@ from core.store import (
 log = logging.getLogger(__name__)
 
 REST_COVERAGE_THRESHOLD = 0.80
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 Step 6: wave-pricing selection for the biddable universe.
+#
+# NOT YET WIRED into run_daily_sweep below -- this is the selection
+# mechanism and its auditability plumbing (see update_run_wave_pricing in
+# core/store.py), built and tested per docs/PHASE3-4-IMPLEMENTATION.md
+# Step 6, but not yet called from a live sweep. Wiring it in means deciding
+# whether run_daily_sweep's discovery source switches to the full biddable
+# universe (prod_biddable) now, or a separate parallel sweep is added --
+# a bigger call than Step 6 itself, deliberately left for a follow-up
+# decision rather than made silently here.
+#
+# index_last_update is UNVERIFIED as a price-change signal (it may move
+# only on catalogue metadata, not on bid/price changes -- see the Step 6
+# doc). That's exactly why delta selection always runs and is reported
+# (delta_changed/shadow_only) regardless of delta_enabled: the intent is to
+# compare it against real observed price changes on the already-fully-priced
+# listed book for at least a week before it's allowed to affect what gets
+# REST-priced.
+# ---------------------------------------------------------------------------
+
+# prod_biddable's index_last_update stamp, e.g. "23-07-2026 1pm" -- day-month
+# -year, no zero-padding guaranteed, hour with am/pm and no minutes shown.
+# NOT lexically sortable -- always compare parsed datetimes, never the raw
+# strings (e.g. "9pm" > "10am" as strings, backwards from the actual times).
+_INDEX_LAST_UPDATE_FORMAT = "%d-%m-%Y %I%p"
+
+
+def parse_index_last_update(raw: Optional[str]) -> Optional[datetime]:
+    """Parse prod_biddable's index_last_update stamp.
+
+    Returns None for missing or unparseable input rather than raising -- a
+    record with no usable stamp simply can't be delta-selected; that's a
+    normal outcome, not a fatal error worth crashing a sweep over.
+    """
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw.strip().upper(), _INDEX_LAST_UPDATE_FORMAT)
+    except ValueError:
+        return None
+
+
+# How many days a full rotation of the book takes at the rotation-slice
+# REST-pricing rate (see select_biddable_rest_pricing). 30 was sized against
+# the roadmap's ~40-REST-calls/day steady-state budget for the ~52k-product
+# biddable universe (docs/ROADMAP-2026-07.md Phase 4).
+ROTATION_BUCKETS = 30
+
+
+def rotation_bucket_for_date(run_date: str) -> int:
+    """Deterministic day -> bucket (0..ROTATION_BUCKETS-1). Uses the
+    proleptic Gregorian ordinal so it cycles through every bucket roughly
+    once every ROTATION_BUCKETS days, independent of which day of the week
+    or month a sweep happens to run on (unlike e.g. day-of-month, which
+    would skip bucket 31 in February)."""
+    return date.fromisoformat(run_date).toordinal() % ROTATION_BUCKETS
+
+
+def _sku_rotation_bucket(parent_sku: str, total_buckets: int = ROTATION_BUCKETS) -> int:
+    """Stable bucket assignment for a parent_sku.
+
+    Deliberately not Python's built-in hash(): string hashing is salted per
+    process (PYTHONHASHSEED) for security reasons, so the same SKU would
+    land in a different bucket every time the sweep process restarts --
+    exactly wrong for a rotation meant to cycle predictably over 30 days.
+    """
+    digest = hashlib.sha256(parent_sku.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") % total_buckets
+
+
+@dataclass
+class RestPricingPlan:
+    """Which parent_skus to REST-price this run, and why.
+
+    delta_changed/shadow_only are always computed regardless of
+    delta_enabled, so the shadow-logging comparison this step exists for can
+    run continuously without waiting for the flag to flip.
+    """
+    to_price: List[str]
+    rotation_selected: Set[str]
+    delta_changed: Set[str]
+    shadow_only: Set[str]   # delta_changed, outside the rotation slice -- what
+                            # delta would add beyond rotation alone
+    delta_enabled: bool
+
+
+def select_biddable_rest_pricing(
+    hits: List[Dict[str, Any]],
+    *,
+    last_run_finished_at: Optional[datetime],
+    run_date: str,
+    delta_enabled: bool = False,
+    rotation_buckets: int = ROTATION_BUCKETS,
+) -> RestPricingPlan:
+    """
+    Decide which parent_skus to REST-price this run: a rotating slice of the
+    whole discovered book (always), plus index_last_update-driven deltas
+    (only once delta_enabled=True).
+
+    last_run_finished_at=None (e.g. no prior completed run to compare
+    against) means no delta selection is possible -- delta_changed stays
+    empty rather than treating "no baseline" as "everything changed".
+    """
+    bucket = rotation_bucket_for_date(run_date)
+    rotation_selected: Set[str] = set()
+    delta_changed: Set[str] = set()
+
+    for hit in hits:
+        psku = hit.get("parent_sku")
+        if not psku:
+            continue
+        psku = str(psku)
+
+        if _sku_rotation_bucket(psku, rotation_buckets) == bucket:
+            rotation_selected.add(psku)
+
+        if last_run_finished_at is not None:
+            changed_at = parse_index_last_update(hit.get("index_last_update"))
+            if changed_at is not None and changed_at > last_run_finished_at:
+                delta_changed.add(psku)
+
+    to_price = set(rotation_selected)
+    if delta_enabled:
+        to_price |= delta_changed
+
+    return RestPricingPlan(
+        to_price=sorted(to_price),
+        rotation_selected=rotation_selected,
+        delta_changed=delta_changed,
+        shadow_only=delta_changed - rotation_selected,
+        delta_enabled=delta_enabled,
+    )
 
 
 def _determine_final_status(algolia_complete: bool, rest_coverage: float) -> str:
