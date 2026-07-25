@@ -112,8 +112,8 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
   **identical all three times** — 51,492/52,107 expected `prod_biddable`
   hits. Three live crawls, each 10+ minutes apart, returning a bit-for-bit
   identical shortfall rules out transient index drift; treated as a
-  reproducible, structural ~1.2% gap in the sharded discovery. Root cause
-  not yet found — **deliberately deferred as a non-blocker**, see below.
+  reproducible, structural ~1.2% gap in the sharded discovery. **Root cause
+  found and fixed, 2026-07-25** — see below.
   REST on run 1: all 51,492 discovered parents checked successfully
   (~536 batches at batch size 96, close to the ~547-call estimate), 0
   failures, 0 rate-limit (429) responses, REST phase ~6m, full run 18m —
@@ -129,11 +129,25 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
   by decoupling backfill/wave-pricing selection from `algolia_complete`
   entirely, driving it off live per-parent REST freshness instead — see
   docs/PHASE3-4-IMPLEMENTATION.md Step 6 for detail and regression tests.
-  **Why the discovery gap itself is safe to defer:** with that decoupling
-  in place, a persistent ~1.2% Algolia shortfall no longer blocks REST
-  pricing, wave-pricing rotation, or delta selection from operating
-  normally on the ~98.8% it does find — it only means ~615 parents stay
-  undiscovered until the sharding root cause is found. Separately, 170
+  **Root cause and fix, 2026-07-25:** the gap was never missing records.
+  `total_index_hits` (the "expected" baseline) was computed via a bare
+  `hitsPerPage=0` Algolia count with no facets requested, which Algolia
+  serves from a non-exhaustive path — confirmed live via the
+  `exhaustiveNbHits` response flag: `filters="family_type:'Wines'"` alone
+  returned `nbHits=52,109`/`exhaustiveNbHits=False`, vs. the exact
+  `nbHits=51,494`/`exhaustiveNbHits=True` once a facet was requested
+  alongside it, independently matched by four separate per-dimension
+  facet-count reconciliations (region, vintage, colour, maturity). The
+  sharded fetch itself — which always requests a facet, to decide how to
+  shard — had been collecting the correct, complete set all along; only the
+  comparison baseline was wrong. Fixed in `core/fetch_listings.py`: both
+  `fetch_listings()` and `fetch_biddable_universe()` now request the first
+  shard dimension as a facet for the total-count query instead of an empty
+  list. Live-verified post-fix: `total_index_hits == collected_count ==
+  51,494`, `discovery_complete = True`. The `algolia_complete` decoupling
+  above (still correct, still worth keeping as an honest completeness
+  signal that shouldn't gate operational pricing) had been masking a
+  miscounted gap, not a real one. Separately, 170
   pre-Phase-4 products (tracked under the legacy `full_book` scope) don't
   appear in `prod_biddable` at all and so can never get a
   `biddable_full_book` REST check — expected, since they're stock that has
@@ -279,22 +293,8 @@ becoming the source of truth or gaining authority to trade.
 
 ## Backlog (not blocking current work)
 
-- **`prod_biddable` sharded discovery undercounts by ~615 hits (~1.2%),
-  reproducibly.** Four consecutive live `biddable_full_book` runs on
-  2026-07-24 all collected exactly 51,492 of an expected 52,107 hits —
-  identical across runs 10+ minutes apart, which rules out index drift.
-  `truncated=True` has never fired, so it isn't the 1,000-hit pagination
-  cap; the likely candidate is a facet value the recursive NOT-filter
-  catch-all in `core/fetch_listings.py` isn't reaching. Root-causing it
-  needs a `parent_sku`-level diff between two runs' collected hits, not
-  just counts — nobody has done that yet. **Not urgent:** as of
-  2026-07-24, backfill and wave-pricing selection were decoupled from
-  `algolia_complete` specifically so this gap can't block REST pricing or
-  rotation (see Phase 4 above) — it only means ~615 parents stay
-  undiscovered until this is fixed. One side effect worth remembering: as
-  long as this gap persists, `scan_runs.status` for `biddable_full_book`
-  will read `partial` on every run, forever — that's the discovery gap
-  showing through, not a sign anything is broken.
+*(none currently — the `prod_biddable` sharded-discovery undercount tracked
+here was root-caused and fixed 2026-07-25; see Phase 4 above.)*
 
 ## Standing constraints
 

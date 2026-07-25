@@ -522,17 +522,46 @@ Four real gaps caught by review, all fixed and tested (243/243 passing) —
   Regression test: `test_wave_rotation_still_runs_when_algolia_never_reaches_complete`
   (confirmed it reproduces `requested == [set()]` against the pre-fix code).
 
-**Known non-blocking gap:** the ~615-hit (~1.2%) `prod_biddable` sharding
-shortfall is unresolved. Deliberately not chased further right now —
-decoupling backfill/wave-pricing from `algolia_complete` (above) removes
-the operational risk; the remaining question is purely "which ~615 parents
-are structurally invisible to the shard walk," which needs its own
-investigation (candidate: a facet value the recursive NOT-filter catch-all
-isn't reaching — `truncated=True` still hasn't fired on any of the three
-runs, so it isn't the 1,000-hit pagination cap). Revisit once there's
-time to diff the actual `parent_sku` sets between two runs' collected hits,
-not just the counts. Do not enable `WAVE_PRICING_DELTA_ENABLED` until the
-listed-tier validation has enough observations.
+**Resolved, 2026-07-25:** the ~615-hit (~1.2%) `prod_biddable` shortfall
+was never a sharding blind spot — it was a miscounted baseline. Diagnosed
+live against the real index using `.streamlit/secrets.toml` credentials
+(read-only: index settings, facet-count reconciliation across all four
+shard dimensions, and Algolia's own `exhaustiveNbHits`/`exhaustiveFacetsCount`
+response flags):
+
+- `total_index_hits` (`fetch_biddable_universe()`'s "expected" baseline) was
+  computed via `_count_and_facets(BIDDABLE_BASE_FILTERS, [], index_name)` —
+  a `hitsPerPage=0` count with **no facets requested**. Algolia serves that
+  specific query shape from a non-exhaustive path: `filters=
+  "family_type:'Wines'"` alone returned `nbHits=52,109` with
+  `exhaustiveNbHits=False`.
+- The exact count is `51,494`, `exhaustiveNbHits=True` — obtained the moment
+  a facet is requested alongside the same filter — and independently
+  confirmed by four separate reconciliations (per-value facet count +
+  `NOT`-complement, for region, vintage, colour, and maturity each), all
+  landing on exactly `51,494`. `distinct`/`attributeForDistinct` on the
+  index are unset, ruling out variant-dedup as a factor. The Browse API
+  (which would have given a direct ground-truth diff) was blocked by ACL on
+  the search-only key (`403 Method not allowed with this API key`) but
+  wasn't needed once the `exhaustiveNbHits` flag settled it.
+- The recursive sharded fetch itself always requests at least one facet (to
+  decide how to shard), so it was already exact and had been collecting the
+  complete set every run — `truncated` never firing was the correct signal,
+  not a coincidence.
+
+**Fix** (`core/fetch_listings.py`, commit `2f25d75`): both `fetch_listings()`
+and `fetch_biddable_universe()` now pass the first shard dimension as the
+facet for the total-count query instead of `[]`. Live-verified post-fix:
+`total_index_hits == collected_count == 51,494`, `truncated = False`,
+`discovery_complete = True` — the first time this has been `True` since the
+Phase 4 scope switch. Regression tests added in
+`tests/test_fetch_listings_sharding.py` assert the total-count call always
+requests a non-empty facet list. This should let `scan_runs.status` read
+`completed` for `biddable_full_book` starting with the next scheduled sweep,
+which also fixes the web UI's "Last scan" banner (`DataHonestyHeader`)
+staying frozen on the last pre-Phase-4 `full_book` run. Do not enable
+`WAVE_PRICING_DELTA_ENABLED` until the listed-tier validation has enough
+observations.
 
 ---
 
