@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BBX web client
 
-## Getting Started
+The Next.js client contains the public BBX catalogue and the owner-only cellar
+interface.
 
-First, run the development server:
+## Local development
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Use Node.js 22, matching the production runtime declared in `package.json`.
+
+Create `apps/web/.env.local` with the public Supabase connection values:
+
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The browser and server use the public key. Do not add a service-role key to the
+web project.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Run:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cd /Users/richardcarvell/PycharmProjects/bbx/apps/web
+npm install
+npm run dev
+```
 
-## Learn More
+The public catalogue is at `http://localhost:3000`. The owner login is at
+`http://localhost:3000/login`.
 
-To learn more about Next.js, take a look at the following resources:
+## Checks
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+npm test
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The database workflow replays all migrations on a clean local Supabase
+database, lints the public schema and runs the pgTAP tests under
+`supabase/tests/database`.
 
-## Deploy on Vercel
+## Owner bootstrap
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Do this separately in each environment after the cellar migration has been
+applied:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Create the single owner in Supabase Auth and verify the email address.
+2. Copy the user's stable UUID from the Auth users page.
+3. Insert it through an administrative SQL session:
+
+   ```sql
+   INSERT INTO public.app_owners (user_id)
+   VALUES ('00000000-0000-0000-0000-000000000000')
+   ON CONFLICT (user_id) DO NOTHING;
+   ```
+
+4. Disable new sign-up and anonymous sign-in in Supabase Auth.
+5. Test that the owner can sign in and that another authenticated account
+   cannot read the personal tables or private Storage bucket.
+
+There is no public owner-registration or bootstrap route.
+
+## Vercel release
+
+The application can run on Vercel without a service-role secret. Configure the
+same two public Supabase environment variables for the intended Vercel
+environment.
+
+Before exposing the cellar routes:
+
+- apply and verify the database migration through the chosen production
+  migration owner;
+- provision the owner allowlist row;
+- disable sign-up;
+- configure the Vercel production URL in Supabase Auth;
+- finish the required multi-factor authentication flow; and
+- verify owner and non-owner access against the deployed URL.
+
+The migration and owner bootstrap come before the Vercel release. Deploying
+the current code against the old schema would make the cellar pages fail
+closed, but it would not provide a usable upload facility.

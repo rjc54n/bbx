@@ -179,15 +179,18 @@ sharing. Personal tables do not carry unused tenant columns. See
   entity resolution is required for matched BBR rows. Preserve each import's
   source file, imported-at time and row-level provenance rather than replacing
   the previous upload without an audit trail.
-- Upload the CellarTracker all-time history and normalise its records into a
-  lifetime cellar ledger. It must distinguish purchased, held remotely,
-  physically in stock and consumed wine. Preserve unmatched source rows so
-  they can be resolved later without losing their original names or history.
+- Upload the CellarTracker My Cellar summary as a dated inventory source. The
+  representative file records current `Quantity` and `Pending` totals plus
+  zero-total rows. Treat a zero-total row as a wine-level `fully_consumed`
+  state. It does not contain purchase, movement, location or bottle-level
+  consumption events. Preserve unmatched source rows so they can be resolved
+  later without losing their original names.
 - Keep source responsibilities explicit. BBR is the current source for wine
-  held with BBR. CellarTracker supplies lifetime purchase, movement, stock and
-  consumption history, including wine held elsewhere or at home. Reconcile
-  overlapping records; do not silently add both sources together or let one
-  overwrite the other.
+  held with BBR. The supplied CellarTracker file supplies a current inventory
+  cross-check and wine-level consumed state, including wine outside BBR.
+  Bottle-level event history is optional and requires a separate source.
+  Reconcile overlapping records; do not silently add sources together or let
+  one overwrite another.
 - Maintain a backend current-holdings projection from the imported evidence,
   with source, location, quantity, format and last-confirmed time visible.
   Repeated uploads must be idempotent and must report additions, removals,
@@ -225,6 +228,9 @@ Value is in **anchoring bids on purchases**, not in P&L on existing holdings.
 - Gmail connector, incremental, replacing the one-off Takeout extraction.
 - Extract one row per `(offer_date, wine, format)`. 696 of 3,288 rows price
   multiple formats in one string and that content is the format-premium signal.
+- Preserve all source rows, including the 121 exact duplicates in the
+  representative file. Deduplicate the normalised offer evidence by content
+  fingerprint rather than deleting raw provenance.
 - Algolia resolution at ingest, storing `parent_sku`, a confidence score and
   the raw name, so unmatched rows stay queryable and can be re-resolved.
 - Distinguish release from re-offer by offer date versus vintage.

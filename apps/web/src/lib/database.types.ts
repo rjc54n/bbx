@@ -54,6 +54,223 @@ export type Database = {
         }
         Relationships: []
       }
+      app_owners: {
+        Row: {
+          created_at: string
+          singleton: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          singleton?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          singleton?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bbr_holding_evidence: {
+        Row: {
+          alcohol_percent: number | null
+          bbx_highest_bid_p: number | null
+          bbx_last_transaction_price_p: number | null
+          bbx_lowest_price_p: number | null
+          bottle_volume_ml: number
+          case_size: number
+          colour: string | null
+          country: string | null
+          current_status: string | null
+          description: string
+          drinking_window_from: number | null
+          drinking_window_to: number | null
+          eligible_for_bbx: boolean
+          format_code: string
+          import_id: string
+          livex_market_price_p: number | null
+          maturity: string | null
+          parent_sku: string
+          product_code: string
+          purchase_price_per_case_p: number | null
+          quantity_bottles: number
+          region: string | null
+          source_row_number: number
+          vintage: number | null
+          wine_searcher_lowest_list_price_p: number | null
+        }
+        Insert: {
+          alcohol_percent?: number | null
+          bbx_highest_bid_p?: number | null
+          bbx_last_transaction_price_p?: number | null
+          bbx_lowest_price_p?: number | null
+          bottle_volume_ml: number
+          case_size: number
+          colour?: string | null
+          country?: string | null
+          current_status?: string | null
+          description: string
+          drinking_window_from?: number | null
+          drinking_window_to?: number | null
+          eligible_for_bbx: boolean
+          format_code: string
+          import_id: string
+          livex_market_price_p?: number | null
+          maturity?: string | null
+          parent_sku: string
+          product_code: string
+          purchase_price_per_case_p?: number | null
+          quantity_bottles: number
+          region?: string | null
+          source_row_number: number
+          vintage?: number | null
+          wine_searcher_lowest_list_price_p?: number | null
+        }
+        Update: {
+          alcohol_percent?: number | null
+          bbx_highest_bid_p?: number | null
+          bbx_last_transaction_price_p?: number | null
+          bbx_lowest_price_p?: number | null
+          bottle_volume_ml?: number
+          case_size?: number
+          colour?: string | null
+          country?: string | null
+          current_status?: string | null
+          description?: string
+          drinking_window_from?: number | null
+          drinking_window_to?: number | null
+          eligible_for_bbx?: boolean
+          format_code?: string
+          import_id?: string
+          livex_market_price_p?: number | null
+          maturity?: string | null
+          parent_sku?: string
+          product_code?: string
+          purchase_price_per_case_p?: number | null
+          quantity_bottles?: number
+          region?: string | null
+          source_row_number?: number
+          vintage?: number | null
+          wine_searcher_lowest_list_price_p?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bbr_holding_evidence_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "cellar_import_rows"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+        ]
+      }
+      cellar_import_rows: {
+        Row: {
+          format_code: string | null
+          import_id: string
+          match_status: string
+          parent_sku: string | null
+          raw_row: Json
+          source_row_number: number
+          validation_errors: Json
+          validation_warnings: Json
+        }
+        Insert: {
+          format_code?: string | null
+          import_id: string
+          match_status: string
+          parent_sku?: string | null
+          raw_row: Json
+          source_row_number: number
+          validation_errors?: Json
+          validation_warnings?: Json
+        }
+        Update: {
+          format_code?: string | null
+          import_id?: string
+          match_status?: string
+          parent_sku?: string | null
+          raw_row?: Json
+          source_row_number?: number
+          validation_errors?: Json
+          validation_warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellar_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "cellar_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cellar_imports: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          byte_size: number
+          content_checksum: string
+          error_row_count: number
+          failure_summary: string | null
+          id: string
+          matched_row_count: number
+          original_filename: string
+          parsed_row_count: number
+          parser_version: string
+          source_row_count: number
+          source_type: string
+          status: string
+          storage_object_path: string
+          unmatched_row_count: number
+          uploaded_at: string
+          uploaded_by: string
+          warning_row_count: number
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          byte_size: number
+          content_checksum: string
+          error_row_count?: number
+          failure_summary?: string | null
+          id: string
+          matched_row_count?: number
+          original_filename: string
+          parsed_row_count?: number
+          parser_version: string
+          source_row_count?: number
+          source_type: string
+          status: string
+          storage_object_path: string
+          unmatched_row_count?: number
+          uploaded_at?: string
+          uploaded_by: string
+          warning_row_count?: number
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          byte_size?: number
+          content_checksum?: string
+          error_row_count?: number
+          failure_summary?: string | null
+          id?: string
+          matched_row_count?: number
+          original_filename?: string
+          parsed_row_count?: number
+          parser_version?: string
+          source_row_count?: number
+          source_type?: string
+          status?: string
+          storage_object_path?: string
+          unmatched_row_count?: number
+          uploaded_at?: string
+          uploaded_by?: string
+          warning_row_count?: number
+        }
+        Relationships: []
+      }
       observation_events: {
         Row: {
           entity_key: string
@@ -556,6 +773,37 @@ export type Database = {
           },
         ]
       }
+      current_bbr_holdings: {
+        Row: {
+          alcohol_percent: number | null
+          bbx_highest_bid_p: number | null
+          bbx_last_transaction_price_p: number | null
+          bbx_lowest_price_p: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          confirmed_at: string | null
+          country: string | null
+          current_status: string | null
+          description: string | null
+          drinking_window_from: number | null
+          drinking_window_to: number | null
+          eligible_for_bbx: boolean | null
+          format_code: string | null
+          import_id: string | null
+          livex_market_price_p: number | null
+          maturity: string | null
+          parent_sku: string | null
+          product_code: string | null
+          purchase_price_per_case_p: number | null
+          quantity_bottles: number | null
+          region: string | null
+          source_row_number: number | null
+          vintage: number | null
+          wine_searcher_lowest_list_price_p: number | null
+        }
+        Relationships: []
+      }
       facet_ranges_view: {
         Row: {
           ask_max: number | null
@@ -775,12 +1023,28 @@ export type Database = {
       }
     }
     Functions: {
+      accept_bbr_import: {
+        Args: { p_import_id: string }
+        Returns: Json
+      }
       search_producers: {
         Args: { q: string }
         Returns: {
           n: number
           producer: string
         }[]
+      }
+      stage_bbr_import: {
+        Args: {
+          p_byte_size: number
+          p_content_checksum: string
+          p_import_id: string
+          p_original_filename: string
+          p_parser_version: string
+          p_rows: Json
+          p_storage_object_path: string
+        }
+        Returns: Json
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

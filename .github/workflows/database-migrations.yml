@@ -46,6 +46,9 @@ jobs:
           --level warning
           --fail-on error
 
+      - name: Test database permissions and import behaviour
+        run: supabase test db
+
       - name: Remove the local database
         if: always()
         run: supabase stop --no-backup
