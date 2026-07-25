@@ -1,8 +1,8 @@
 # Phase 5 implementation: cellar holdings and history
 
-**Status:** BBR import backend and first accepted snapshot live on 2026-07-25;
-cellar browser and full-app authentication implemented locally pending
-deployment; CellarTracker and MFA remain
+**Status:** BBR import backend, first accepted snapshot, cellar browser and
+full-app authentication deployed and manually accepted on 2026-07-25;
+CellarTracker and MFA remain
 **Decision authority:** `ADR-001-single-owner-application.md`
 **Sources:** BBR current holdings CSV and CellarTracker My Cellar summary
 **Source contracts:** `IMPORT-SOURCE-PROFILES.md`
@@ -66,9 +66,11 @@ found an exact product-format match for all 116 rows. The file has since been
 uploaded, reviewed and accepted in production. The import schema, owner
 allowlist and authentication account are live.
 
-The cellar market view migration and browser remain undeployed while local
-verification is completed. Clean migration replay, pgTAP and browser-level
-owner/non-owner checks remain release gates for this addition.
+GitHub cleanly replayed all migrations, linted the public schema and passed
+pgTAP before the cellar market view migration was applied to production. The
+web deployment completed successfully. Owner browser acceptance passed and
+Vercel Authentication was removed from the stable production domain, leaving
+the Supabase owner sign-in as its application gate.
 
 Raw exports contain personal holdings and purchase history. They remain outside
 Git. Commit only small, synthetic or irreversibly redacted fixtures that retain

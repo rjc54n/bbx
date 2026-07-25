@@ -191,8 +191,9 @@ sharing. Personal tables do not carry unused tenant columns. See
 **Implementation status, 25 July 2026:** the owner boundary, BBR snapshot
 upload, preview and acceptance flow are live. The first snapshot has been
 accepted. The record-level BBR cellar browser and current BBX bid/ask join are
-implemented locally pending migration and deployment. CellarTracker remains
-the next holdings source.
+deployed and passed owner browser acceptance. Supabase owner authentication is
+now the stable production domain's application gate. CellarTracker remains the
+next holdings source.
 
 - Upload the current BBR holdings CSV and maintain it in the backend as a
   dated source snapshot. `Parent ID` joins straight to `parent_sku`, so no
