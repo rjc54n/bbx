@@ -1,0 +1,51 @@
+name: Database migration validation
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/database-migrations.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "supabase/**"
+      - ".github/workflows/database-migrations.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-migrations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Replay migrations on a clean local database
+        run: supabase db start
+
+      - name: Lint the public schema
+        run: >-
+          supabase db lint
+          --local
+          --schema public
+          --level warning
+          --fail-on error
+
+      - name: Remove the local database
+        if: always()
+        run: supabase stop --no-backup

@@ -1,4 +1,4 @@
-# Roadmap — revised 23 July 2026
+# Roadmap: revised 24 July 2026
 
 ## Purpose
 
@@ -164,48 +164,110 @@ Grows the addressable catalogue from the 15,483 wines currently tracked to
 **Unlocks:** the part of the market with no competing seller and therefore no
 competing price anchor. This is where the guide being wrong actually pays.
 
-### Phase 5 — The cellar
+### Phase 5: Cellar holdings and history
 
 The point of the whole exercise.
 
-- Import BBR cellar CSV. `Parent ID` joins straight to `parent_sku` — no
-  entity resolution required.
+**Product decision, 25 July 2026:** BBX is a single-owner, single-cellar
+application. It requires one secure Supabase Auth identity and owner-only RLS,
+but does not support registration, separate user cellars, invitations or
+sharing. Personal tables do not carry unused tenant columns. See
+`ADR-001-single-owner-application.md` and `PHASE5-IMPLEMENTATION.md`.
+
+- Upload the current BBR holdings CSV and maintain it in the backend as a
+  dated source snapshot. `Parent ID` joins straight to `parent_sku`, so no
+  entity resolution is required for matched BBR rows. Preserve each import's
+  source file, imported-at time and row-level provenance rather than replacing
+  the previous upload without an audit trail.
+- Upload the CellarTracker all-time history and normalise its records into a
+  lifetime cellar ledger. It must distinguish purchased, held remotely,
+  physically in stock and consumed wine. Preserve unmatched source rows so
+  they can be resolved later without losing their original names or history.
+- Keep source responsibilities explicit. BBR is the current source for wine
+  held with BBR. CellarTracker supplies lifetime purchase, movement, stock and
+  consumption history, including wine held elsewhere or at home. Reconcile
+  overlapping records; do not silently add both sources together or let one
+  overwrite the other.
+- Maintain a backend current-holdings projection from the imported evidence,
+  with source, location, quantity, format and last-confirmed time visible.
+  Repeated uploads must be idempotent and must report additions, removals,
+  quantity changes, unmatched rows and source conflicts before updating the
+  current view.
 - Drinking windows, maturity, per-region and per-vintage concentration.
 - **Drink-now view:** what is at best or closing, how many bottles, and what is
   under-drunk relative to its window.
 - **Gap view:** what the cellar lacks for near-term drinking, which becomes the
   buy list that Phases 3–4 are searched against.
 
-### Phase 6 — Bid engine
+**Unlocks:** one backend record of what has been bought, where it is now and
+what has been consumed. Catalogue opportunities can then be judged against the
+actual cellar rather than market data alone.
 
-- Bid ladder per wine: guide, adjusted guide, ask, highest bid, last
-  transaction, minimum legal bid (0.8 × guide — **verify against the site
-  before building on it**).
-- Watchlists and saved queries promoted to alerts.
-- Sell side stays a *rotation-funding list*, not a trigger: appreciated, plus
-  outside its drinking window or over-supplied, plus in an over-weight region,
-  plus carrying a live bid. Never a bare "bid exceeds market" signal.
+### Phase 6: Wishlists and favourites
 
-### Phase 7 — Release-price connector
+- Favourites record wines we actively value, independent of whether we intend
+  to buy them now. Preserve notes and preferred formats.
+- Wishlists record purchase intent: desired quantity, acceptable formats,
+  priority and the cellar gap the wine would fill.
+- A wine may be a favourite without being on a wishlist, and a practical gap
+  substitute may be on a wishlist without being a favourite. Keep those
+  meanings separate.
+- Saved catalogue queries can feed candidate lists, but adding or removing a
+  wine remains an explicit user action.
+
+**Unlocks:** catalogue ranking can distinguish personal preference from an
+actual cellar requirement.
+
+### Phase 7: Release-price connector
 
 Value is in **anchoring bids on purchases**, not in P&L on existing holdings.
 
 - Gmail connector, incremental, replacing the one-off Takeout extraction.
-- Extract one row per `(offer_date, wine, format)` — 696 of 3,288 rows price
+- Extract one row per `(offer_date, wine, format)`. 696 of 3,288 rows price
   multiple formats in one string and that content is the format-premium signal.
 - Algolia resolution at ingest, storing `parent_sku`, a confidence score and
   the raw name, so unmatched rows stay queryable and can be re-resolved.
 - Distinguish release from re-offer by offer date versus vintage.
+- Use CellarTracker purchase history as evidence of what we paid. Use release
+  emails as evidence of what was offered to the market. Do not collapse those
+  into one price type.
 
 **Unlocks:** bid anchoring. The seller's mental floor is what they paid, and
 they discount accrued storage; knowing the release price tells us where that
 floor sits.
 
-### Phase 8 — Agentic
+### Phase 8: Strategies
 
-- Read-only tool surface over the existing `QueryState` + registry seam.
+- Store named, versioned strategies that combine cellar state, favourites,
+  wishlists and catalogue evidence. The inputs, rules and exclusions must be
+  inspectable; a strategy cannot be an unexplained score.
+- Initial strategies should cover drink-now selection, cellar-gap buying,
+  bid candidates and rotation funding.
+- Bid strategy uses a ladder per wine: guide, adjusted guide, ask, highest
+  bid, last transaction, purchase or release anchor and minimum legal bid
+  (0.8 x guide; verify against the site before building on it).
+- Sell strategy remains a rotation-funding list, not a trigger: appreciated,
+  outside its drinking window or over-supplied, in an over-weight region and
+  carrying a live bid. Never a bare "bid exceeds market" signal.
+- Saved queries and strategies may produce alerts. Every candidate must show
+  the evidence and rule that selected it.
+
+**Unlocks:** repeatable decisions that can be reviewed, compared and improved
+without hiding judgement inside UI code or an agent prompt.
+
+### Phase 9: Agents
+
+- Add an agent tool surface over holdings, history, favourites, wishlists,
+  strategies and the existing `QueryState` registry seam.
+- Start read-only: answer cellar questions, explain strategy results, find
+  source conflicts and prepare proposed changes.
+- Later write access may maintain favourites, wishlists and strategy drafts
+  with explicit user confirmation and an audit record.
 - Bids are **proposed, never placed.** A BBX bid is a binding commitment to
-  buy. Human confirmation is a permanent requirement, not a starting posture.
+  buy. Human confirmation is permanent.
+
+**Unlocks:** agents can apply the user's stored data and strategies without
+becoming the source of truth or gaining authority to trade.
 
 ---
 

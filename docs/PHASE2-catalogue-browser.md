@@ -14,10 +14,18 @@ browser reads through curated, locked-down views.
 - Read layer live on the BBX Bargains Supabase project: `candidate_view`,
   `product_detail_view`, `price_history_view`, `scan_health_view`. Base tables
   are `REVOKE`d from anon/authenticated; views are `GRANT SELECT` only.
-- `supabase db push` is broken on this CLI/profile
-  (`failed to read profile: Unsupported Config Type ""`). Apply SQL with
-  `supabase db query --profile bbx --linked --file <path>`; regenerate types
-  with `supabase gen types --profile bbx --linked`.
+- **Supabase CLI workflow:** `supabase db push --linked --dry-run` works
+  normally. An earlier version of this doc said `db push` was broken
+  (`failed to read profile: Unsupported Config Type ""`) and recommended
+  applying SQL with `supabase db query --profile bbx --linked --file
+  <path>`; that was a misreading of `--profile` (it selects a service
+  config, e.g. the built-in `supabase` profile, not a Supabase account) —
+  see `PHASE3-4-IMPLEMENTATION.md`'s Preconditions section for the full
+  explanation. Deploy schema changes as committed files under
+  `supabase/migrations/`, verify with `supabase db push --linked
+  --dry-run`, deploy, then confirm with `supabase migration list --linked`.
+  Never pass `--profile bbx`; never use `supabase db query` as the
+  deployment mechanism.
 
 ## Core reframing
 

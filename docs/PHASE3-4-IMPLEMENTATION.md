@@ -3,9 +3,46 @@
 **Target implementer:** Sonnet agents, one step per agent, in order. Each step
 lands green tests before the next begins. Do not batch steps.
 
-**Preconditions:** `supabase db push` is broken on this CLI profile. Apply SQL
-with `supabase db query --profile bbx --linked --file <path>`; regenerate types
-with `supabase gen types --profile bbx --linked`.
+**Preconditions — Supabase CLI workflow.** `supabase db push` works normally.
+An earlier version of this doc said it was broken and recommended applying
+SQL with `supabase db query --profile bbx --linked --file <path>`; that was
+based on a misreading of `--profile` and has been corrected (see below). Use
+the standard workflow: commit the migration under `supabase/migrations/`,
+`supabase db push --linked --dry-run` to preview, deploy through the single
+configured deployment owner, then `supabase migration list --linked` to
+confirm. Regenerate types with `supabase gen types --linked
+--lang=typescript`. Never pass `--profile bbx`, and never use
+`supabase db query` as the deployment mechanism.
+
+Four distinct concepts, easy to conflate:
+
+- **Linked project** — the remote Supabase project this repo talks to
+  (`ytgzgybgwsucsqeyetmk`), set by `supabase link`.
+- **Account token** — the credential authenticating CLI calls, from
+  `supabase login` or `SUPABASE_ACCESS_TOKEN`. `supabase login --name bbx`
+  names the *access token*, not a config profile — it has no effect on which
+  project or config the CLI targets.
+- **`--profile` (built-in `supabase` service profile)** — selects a Supabase
+  *service configuration* (the built-in `supabase`, `supabase-staging`,
+  `supabase-local` or a custom config file), read from
+  `~/.supabase/profile`. It is not an account selector. `--profile bbx`
+  fails because no such service config exists — a bare name with no
+  recognised extension fails with `failed to read profile: Unsupported
+  Config Type ""`. Leave `~/.supabase/profile` at the built-in `supabase`
+  service.
+- **Remote migration ledger** — `supabase_migrations.schema_migrations` on
+  the linked project, tracked by `supabase db push` / `supabase migration
+  list`. Applying SQL by any other means (`supabase db query --file`, a
+  manual `psql` session) changes the schema without updating this ledger, so
+  `db push --dry-run` will report those migrations as still pending even
+  though their effects are already live. If that happens, fix the ledger
+  with `supabase migration repair --linked --status applied <version>...`
+  after independently verifying the live schema — never by re-running the
+  SQL.
+
+Use `SUPABASE_ACCESS_TOKEN` / `SUPABASE_DB_PASSWORD` (via a password
+manager, shell environment, or CI secret — never committed) to separate
+credentials between repositories or accounts, instead of `--profile`.
 
 ---
 
