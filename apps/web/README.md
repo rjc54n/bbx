@@ -28,23 +28,22 @@ npm run dev
 The public catalogue is at `http://localhost:3000`. The owner login is at
 `http://localhost:3000/login`.
 
-Password setup and recovery use a server-side token exchange:
+Password setup and recovery use Supabase's standard implicit recovery flow:
 
 1. `/forgot-password` requests the Supabase recovery email.
-2. Supabase's standard Recovery template redirects to `/auth/callback` using
-   PKCE. No custom SMTP or email-template edit is required.
-3. `/auth/callback` exchanges the one-time code, checks the owner allowlist and
-   creates the cookie-backed recovery session. The link must be opened in the
-   same browser that requested it because the PKCE verifier is held in a
-   secure cookie.
-4. `/auth/update-password` accepts and confirms the new password, signs the
-   recovery session out and returns to a fresh login.
+2. Supabase's standard Recovery template redirects to
+   `/auth/update-password` with the recovery session in the URL fragment. No
+   custom SMTP or email-template edit is required.
+3. The browser client validates the recovery session before it displays the
+   password form.
+4. `/auth/update-password` updates the password directly through Supabase,
+   signs the recovery session out and returns to a fresh cookie-backed login.
 
 Set the Supabase Auth Site URL to the stable production origin. Keep the local
 and any intended preview origins in the Auth redirect allowlist.
-`NEXT_PUBLIC_SITE_URL` can override the recovery origin. On Vercel the app
-otherwise uses `VERCEL_PROJECT_PRODUCTION_URL`; local development falls back
-to `http://localhost:3000`.
+`NEXT_PUBLIC_SITE_URL` can override the recovery origin. Otherwise the reset
+request uses its validated request origin; local development falls back to
+`http://localhost:3000`.
 
 ## Checks
 

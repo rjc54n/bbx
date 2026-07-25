@@ -1,15 +1,34 @@
 "use server";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
+import type { Database } from "@/lib/database.types";
 import type { PasswordResetRequestState } from "./state";
 
-function recoveryRedirectUrl(): string {
-  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  const vercelDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  const origin = configuredOrigin
-    ?? (vercelDomain ? `https://${vercelDomain}` : "http://localhost:3000");
+async function recoveryRedirectUrl(): Promise<string> {
+  const requestOrigin = (await headers()).get("origin");
+  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+    ?? requestOrigin
+    ?? "http://localhost:3000";
 
-  return new URL("/auth/callback", origin).toString();
+  return new URL("/auth/update-password", configuredOrigin).toString();
+}
+
+function passwordResetClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error("Supabase URL and publishable key are not configured.");
+  }
+
+  return createClient<Database>(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      flowType: "implicit",
+      persistSession: false,
+    },
+  });
 }
 
 export async function requestPasswordReset(
@@ -25,9 +44,9 @@ export async function requestPasswordReset(
     return { error: "Enter a valid email address.", sent: false };
   }
 
-  const supabase = await createServerSupabaseClient();
+  const supabase = passwordResetClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: recoveryRedirectUrl(),
+    redirectTo: await recoveryRedirectUrl(),
   });
 
   if (error) {

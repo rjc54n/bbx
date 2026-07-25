@@ -1,11 +1,8 @@
-import { requireOwner } from "@/lib/auth/owner";
 import { UpdatePasswordForm } from "./UpdatePasswordForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function UpdatePasswordPage() {
-  await requireOwner();
-
+export default function UpdatePasswordPage() {
   return (
     <main className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-accent-soft px-4 py-10">
       <section className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-sm">
@@ -14,8 +11,8 @@ export default async function UpdatePasswordPage() {
         </p>
         <h1 className="text-2xl font-semibold">Choose your password</h1>
         <p className="mb-6 mt-2 text-sm text-ink-muted">
-          The recovery link has been accepted. Set the password used for future
-          owner sign-ins.
+          Set the password used for future owner sign-ins. The browser verifies
+          the recovery session before accepting a change.
         </p>
         <UpdatePasswordForm />
       </section>
