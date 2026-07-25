@@ -19,7 +19,8 @@ export function PasswordResetRequestForm() {
           role="status"
         >
           Check your email for a password link. The link can be used once and may
-          take a minute to arrive.
+          take a minute to arrive. Open it in this browser so the secure request
+          can be completed.
         </p>
         <Link
           href="/login"

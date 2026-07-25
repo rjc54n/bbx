@@ -3,6 +3,15 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { PasswordResetRequestState } from "./state";
 
+function recoveryRedirectUrl(): string {
+  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const vercelDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  const origin = configuredOrigin
+    ?? (vercelDomain ? `https://${vercelDomain}` : "http://localhost:3000");
+
+  return new URL("/auth/callback", origin).toString();
+}
+
 export async function requestPasswordReset(
   _previousState: PasswordResetRequestState,
   formData: FormData,
@@ -17,7 +26,9 @@ export async function requestPasswordReset(
   }
 
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: recoveryRedirectUrl(),
+  });
 
   if (error) {
     return {

@@ -31,15 +31,20 @@ The public catalogue is at `http://localhost:3000`. The owner login is at
 Password setup and recovery use a server-side token exchange:
 
 1. `/forgot-password` requests the Supabase recovery email.
-2. The Recovery email template links to
-   `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`.
-3. `/auth/confirm` verifies the one-time token, checks the owner allowlist and
-   creates the cookie-backed recovery session.
+2. Supabase's standard Recovery template redirects to `/auth/callback` using
+   PKCE. No custom SMTP or email-template edit is required.
+3. `/auth/callback` exchanges the one-time code, checks the owner allowlist and
+   creates the cookie-backed recovery session. The link must be opened in the
+   same browser that requested it because the PKCE verifier is held in a
+   secure cookie.
 4. `/auth/update-password` accepts and confirms the new password, signs the
    recovery session out and returns to a fresh login.
 
 Set the Supabase Auth Site URL to the stable production origin. Keep the local
 and any intended preview origins in the Auth redirect allowlist.
+`NEXT_PUBLIC_SITE_URL` can override the recovery origin. On Vercel the app
+otherwise uses `VERCEL_PROJECT_PRODUCTION_URL`; local development falls back
+to `http://localhost:3000`.
 
 ## Checks
 
@@ -87,7 +92,6 @@ Before exposing the cellar routes:
 - provision the owner allowlist row;
 - disable sign-up;
 - configure the Vercel production URL in Supabase Auth;
-- configure the Supabase Recovery email template described above;
 - finish the required multi-factor authentication flow; and
 - verify owner and non-owner access against the deployed URL.
 

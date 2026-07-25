@@ -10,25 +10,21 @@ function loginErrorRedirect(request: NextRequest): NextResponse {
 }
 
 export async function GET(request: NextRequest) {
-  const tokenHash = request.nextUrl.searchParams.get("token_hash");
-  const type = request.nextUrl.searchParams.get("type");
-  if (!tokenHash || type !== "recovery") {
+  const code = request.nextUrl.searchParams.get("code");
+  if (!code) {
     return loginErrorRedirect(request);
   }
 
   const supabase = await createServerSupabaseClient();
-  const { error: verifyError } = await supabase.auth.verifyOtp({
-    token_hash: tokenHash,
-    type: "recovery",
-  });
-  if (verifyError) {
+  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  if (exchangeError) {
     return loginErrorRedirect(request);
   }
 
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (claimsError || typeof userId !== "string") {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     return loginErrorRedirect(request);
   }
 
@@ -38,7 +34,7 @@ export async function GET(request: NextRequest) {
     .eq("user_id", userId)
     .maybeSingle();
   if (ownerError || !owner) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     return loginErrorRedirect(request);
   }
 
