@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
+import { passwordRecoveryErrorMessage } from "@/lib/auth/recoveryError";
 import type { Database } from "@/lib/database.types";
 import type { PasswordResetRequestState } from "./state";
 
@@ -51,7 +52,7 @@ export async function requestPasswordReset(
 
   if (error) {
     return {
-      error: "The password email could not be sent. Wait a few minutes and try again.",
+      error: passwordRecoveryErrorMessage(error),
       sent: false,
     };
   }
