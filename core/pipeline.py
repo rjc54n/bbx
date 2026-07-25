@@ -22,6 +22,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 import requests
 
@@ -313,6 +314,20 @@ def build_bbx_url(entry: Dict[str, Any]) -> str:
     return f"https://www.bbr.com/{raw_path.lstrip('/')}"
 
 
+WINE_SEARCHER_FIND_URL = "https://www.wine-searcher.com/find/"
+
+
+def build_wine_searcher_url(entry: Dict[str, Any]) -> Optional[str]:
+    """Build a wine-searcher.com query link, matching wineSearcherUrl() in
+    apps/web/src/lib/listingLinks.ts (name, plus vintage when known)."""
+    name = (entry.get("name") or "").strip()
+    if not name:
+        return None
+    vintage = entry.get("vintage")
+    query = name if vintage is None else f"{name} {vintage}"
+    return f"{WINE_SEARCHER_FIND_URL}{quote(query, safe='')}"
+
+
 # --------------------------------------------------------------
 # Phase 2: batched REST pricing
 # --------------------------------------------------------------
@@ -587,6 +602,7 @@ def run_scan(
             "case_format": derive_case_format(entry),
             **disc,
             "url": build_bbx_url(entry),
+            "wine_searcher_url": build_wine_searcher_url(entry),
         })
 
         if progress:

@@ -17,7 +17,21 @@ def _candidate(sku="S1", ask=100.0):
         "last": None, "next_lowest": None,
         "pct_market": 23.0, "pct_last": None, "pct_next": None,
         "url": "https://www.bbr.com/x",
+        "wine_searcher_url": "https://www.wine-searcher.com/find/Test%20Wine%202010",
     }
+
+
+def test_format_slack_message_includes_wine_searcher_link():
+    msg = bot.format_slack_message([_candidate("S1")])
+    assert "https://www.bbr.com/x" in msg
+    assert "https://www.wine-searcher.com/find/Test%20Wine%202010" in msg
+
+
+def test_format_slack_message_omits_wine_searcher_link_when_absent():
+    candidate = _candidate("S1")
+    candidate["wine_searcher_url"] = None
+    msg = bot.format_slack_message([candidate])
+    assert "wine-searcher.com" not in msg
 
 
 @pytest.fixture

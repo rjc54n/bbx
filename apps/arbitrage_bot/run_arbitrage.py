@@ -128,6 +128,9 @@ def format_slack_message(candidates, suppressed=None):
             f"£{c['ask']} ask | £{c['mkt']} mkt ({c['pct_market']}%) | "
             f"last {c['pct_last']}% | next {c['pct_next']}% - {c['url']}"
         )
+        wine_searcher_url = c.get("wine_searcher_url")
+        if wine_searcher_url:
+            line += f" | {wine_searcher_url}"
         lines.append(line)
 
     if len(candidates) > MAX_WINES_PER_ALERT:

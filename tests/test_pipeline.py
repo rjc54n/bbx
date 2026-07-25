@@ -8,6 +8,7 @@ from core.pipeline import (
     ScanOutcome,
     OB_NOT_CHECKED, OB_SOLE, OB_COMPETING, OB_UNAVAILABLE, OB_CHANGED,
     build_bbx_url,
+    build_wine_searcher_url,
     classify_order_book,
     compute_discounts,
     count_variant_nodes,
@@ -267,6 +268,22 @@ def test_build_bbx_url():
     assert build_bbx_url({"product_path": "products-x"}) == "https://www.bbr.com/products-x"
     assert build_bbx_url({"product_url": "https://www.bbr.com/products-x"}) == \
         "https://www.bbr.com/products-x"
+
+
+def test_build_wine_searcher_url_name_only_when_vintage_missing():
+    # Mirrors wineSearcherUrl() in apps/web/src/lib/listingLinks.ts
+    assert build_wine_searcher_url({"name": "Chateau Example", "vintage": None}) == \
+        "https://www.wine-searcher.com/find/Chateau%20Example"
+
+
+def test_build_wine_searcher_url_adds_vintage_and_encodes():
+    assert build_wine_searcher_url({"name": "Chateau Example & Co", "vintage": 2016}) == \
+        "https://www.wine-searcher.com/find/Chateau%20Example%20%26%20Co%202016"
+
+
+def test_build_wine_searcher_url_missing_name_returns_none():
+    assert build_wine_searcher_url({"name": None, "vintage": 2016}) is None
+    assert build_wine_searcher_url({"name": "   ", "vintage": 2016}) is None
 
 
 # ----------------------------------------------------------------
