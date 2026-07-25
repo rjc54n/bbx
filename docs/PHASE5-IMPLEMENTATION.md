@@ -1,7 +1,8 @@
 # Phase 5 implementation: cellar holdings and history
 
-**Status:** BBR slice implemented locally on 2026-07-25; database deployment,
-owner bootstrap, MFA and live acceptance remain
+**Status:** BBR import backend and first accepted snapshot live on 2026-07-25;
+cellar browser and full-app authentication implemented locally pending
+deployment; CellarTracker and MFA remain
 **Decision authority:** `ADR-001-single-owner-application.md`
 **Sources:** BBR current holdings CSV and CellarTracker My Cellar summary
 **Source contracts:** `IMPORT-SOURCE-PROFILES.md`
@@ -50,22 +51,24 @@ The local implementation now includes:
 - immutable import, source-row and normalised BBR evidence tables;
 - atomic staging and acceptance RPCs;
 - a current BBR holdings view derived from the latest accepted snapshot;
+- an owner-only current-holdings and BBX market view at exact product-format
+  grain;
 - strict BBR CSV parsing, checksum idempotency and exact product-format
   matching;
 - login, logout, protected import history, upload, preview, comparison and
-  acceptance pages; and
+  acceptance pages;
+- an owner-only BBR cellar browser with URL-backed filters and current BBX bid
+  and ask values; and
 - parser tests plus database permission and import-behaviour tests.
 
 The representative BBR file has 116 rows. A live catalogue read on 2026-07-25
-found an exact product-format match for all 116 rows. This is source profiling,
-not a live import. The private file has not been uploaded by the implementation
-work.
+found an exact product-format match for all 116 rows. The file has since been
+uploaded, reviewed and accepted in production. The import schema, owner
+allowlist and authentication account are live.
 
-The migration remains unapplied at this point. A linked dry run on 2026-07-25
-listed only `20260725120000_bbr_cellar_import.sql` for deployment. The
-production build, lint and 77 web tests pass locally. Clean migration replay,
-pgTAP, owner provisioning, MFA and browser-level owner/non-owner checks remain
-release gates.
+The cellar market view migration and browser remain undeployed while local
+verification is completed. Clean migration replay, pgTAP and browser-level
+owner/non-owner checks remain release gates for this addition.
 
 Raw exports contain personal holdings and purchase history. They remain outside
 Git. Commit only small, synthetic or irreversibly redacted fixtures that retain

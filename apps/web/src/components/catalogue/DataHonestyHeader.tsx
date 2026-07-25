@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { formatCoveragePct, formatDate } from "@/lib/format";
 import { fetchLatestCompletedScan, type ScanHealthRow } from "@/lib/query/scanHealth";
 
@@ -54,12 +53,6 @@ export function DataHonestyHeader() {
         </>
       )}
       <span className="italic">Prices and next-offer values are scan-time estimates, not a live feed.</span>
-      <Link
-        href="/cellar/imports/bbr"
-        className="ml-auto whitespace-nowrap font-medium text-accent underline-offset-2 hover:underline"
-      >
-        My BBR cellar
-      </Link>
     </div>
   );
 }

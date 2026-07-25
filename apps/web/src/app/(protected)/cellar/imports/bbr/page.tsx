@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireOwner } from "@/lib/auth/owner";
 import { BbrUploadForm } from "./BbrUploadForm";
-import { CellarHeader } from "./CellarHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +47,29 @@ export default async function BbrImportsPage() {
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
-      <CellarHeader />
       <div className="mx-auto max-w-6xl space-y-6 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+              Import data
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold">BBR holdings imports</h1>
+          </div>
+          <nav className="flex gap-4 text-sm">
+            <Link
+              href="/cellar/bbr"
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              My BBR Cellar
+            </Link>
+            <Link
+              href="/cellar/imports"
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              All imports
+            </Link>
+          </nav>
+        </div>
         <section className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-border bg-background p-4">
             <p className="text-xs uppercase tracking-wide text-ink-muted">Accepted wine-format rows</p>

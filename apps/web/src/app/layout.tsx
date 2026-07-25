@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Explore BBX",
-  description: "Browse the active BBX wine catalogue and research value against market, last-transaction and next-offer references.",
+  title: "BBX",
+  description: "Private BBX catalogue research and cellar management.",
 };
 
 export default function RootLayout({

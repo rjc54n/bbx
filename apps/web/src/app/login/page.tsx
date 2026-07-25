@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { safeReturnPath } from "@/lib/auth/routing";
 import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
@@ -7,6 +7,7 @@ type LoginPageProps = {
   searchParams: Promise<{
     password_updated?: string;
     recovery_error?: string;
+    next?: string;
   }>;
 };
 
@@ -21,7 +22,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </p>
         <h1 className="text-2xl font-semibold">Owner sign in</h1>
         <p className="mb-6 mt-2 text-sm text-ink-muted">
-          Cellar uploads and holdings are private. There is no registration flow.
+          BBX is a private single-owner application. There is no registration flow.
         </p>
         {query.password_updated === "1" && (
           <p
@@ -39,10 +40,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             That password link is invalid or has expired. Request a new link.
           </p>
         )}
-        <LoginForm />
-        <Link href="/" className="mt-5 block text-center text-sm text-accent underline-offset-2 hover:underline">
-          Return to the catalogue
-        </Link>
+        <LoginForm returnPath={safeReturnPath(query.next)} />
       </section>
     </main>
   );

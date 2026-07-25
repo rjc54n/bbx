@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(18);
+SELECT plan(26);
 
 INSERT INTO auth.users (id)
 VALUES
@@ -28,18 +28,30 @@ VALUES (
 INSERT INTO public.products (
     parent_sku,
     name,
+    vintage,
+    region,
+    colour,
+    producer,
+    product_url,
     first_seen_run_id,
     first_seen_at,
     last_seen_run_id,
-    last_seen_at
+    last_seen_at,
+    last_rest_checked_at
 )
 VALUES (
     '20000000001',
     'Test wine',
+    2019,
+    'Bordeaux',
+    'Red',
+    'Test producer',
+    '/products/test-wine',
     '20000000-0000-0000-0000-000000000001',
     now(),
     '20000000-0000-0000-0000-000000000001',
-    now()
+    now(),
+    '2026-07-25 12:00:00+00'
 );
 
 INSERT INTO public.skus (
@@ -47,6 +59,10 @@ INSERT INTO public.skus (
     format_code,
     case_size,
     bottle_volume_ml,
+    least_listing_price_p,
+    market_price_p,
+    highest_bid_p,
+    is_listed,
     first_seen_run_id,
     first_seen_at,
     last_seen_run_id,
@@ -57,6 +73,10 @@ VALUES (
     '06-00750',
     6,
     750,
+    42000,
+    40000,
+    31000,
+    TRUE,
     '20000000-0000-0000-0000-000000000001',
     now(),
     '20000000-0000-0000-0000-000000000001',
@@ -73,6 +93,22 @@ SELECT is(
     has_table_privilege('authenticated', 'public.cellar_imports', 'SELECT'),
     TRUE,
     'authenticated users have the select grant required for RLS'
+);
+
+SELECT is(
+    has_table_privilege('anon', 'public.bbr_cellar_market_view', 'SELECT'),
+    FALSE,
+    'anonymous users have no cellar market view privilege'
+);
+
+SELECT is(
+    has_table_privilege(
+        'authenticated',
+        'public.bbr_cellar_market_view',
+        'SELECT'
+    ),
+    TRUE,
+    'authenticated users have the select grant required for owner RLS'
 );
 
 SELECT is(
@@ -142,6 +178,8 @@ SELECT is(
                 "bottle_volume_ml": 750,
                 "quantity_bottles": 6,
                 "eligible_for_bbx": true,
+                "bbx_lowest_price_p": 10000,
+                "bbx_highest_bid_p": 9000,
                 "case_size": 6
               },
               {
@@ -243,6 +281,65 @@ SELECT is(
     'the accepted snapshot supplies the current BBR holdings view'
 );
 
+SELECT is(
+    (SELECT count(*)::INT FROM public.bbr_cellar_market_view),
+    1,
+    'the owner can read the current cellar market view'
+);
+
+SELECT is(
+    (
+        SELECT highest_bid_p
+        FROM public.bbr_cellar_market_view
+    ),
+    31000,
+    'the cellar view uses the current scanner bid instead of the imported bid'
+);
+
+SELECT is(
+    (
+        SELECT lowest_ask_p
+        FROM public.bbr_cellar_market_view
+    ),
+    42000,
+    'the cellar view uses the current scanner ask instead of the imported ask'
+);
+
+RESET ROLE;
+UPDATE public.skus
+SET highest_bid_p = 33000
+WHERE parent_sku = '20000000001'
+  AND format_code = '06-00750';
+SET LOCAL ROLE authenticated;
+
+SELECT is(
+    (
+        SELECT highest_bid_p
+        FROM public.bbr_cellar_market_view
+    ),
+    33000,
+    'scanner price changes appear without another cellar import'
+);
+
+RESET ROLE;
+UPDATE public.skus
+SET gone_since = now()
+WHERE parent_sku = '20000000001'
+  AND format_code = '06-00750';
+SET LOCAL ROLE authenticated;
+
+SELECT is(
+    (
+        SELECT count(*)::INT
+        FROM public.bbr_cellar_market_view
+        WHERE parent_sku = '20000000001'
+          AND lowest_ask_p IS NULL
+          AND highest_bid_p IS NULL
+    ),
+    1,
+    'a holding remains visible when its active catalogue row is absent'
+);
+
 RESET ROLE;
 SELECT set_config(
     'request.jwt.claims',
@@ -267,6 +364,12 @@ SELECT is(
     (SELECT count(*)::INT FROM public.current_bbr_holdings),
     0,
     'RLS also hides the personal current-holdings view from a non-owner'
+);
+
+SELECT is(
+    (SELECT count(*)::INT FROM public.bbr_cellar_market_view),
+    0,
+    'RLS also hides the cellar market view from a non-owner'
 );
 
 RESET ROLE;

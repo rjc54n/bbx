@@ -722,6 +722,39 @@ export type Database = {
           },
         ]
       }
+      bbr_cellar_market_view: {
+        Row: {
+          bottle_volume_ml: number | null
+          case_size: number | null
+          catalogue_name: string | null
+          colour: string | null
+          confirmed_at: string | null
+          country: string | null
+          current_status: string | null
+          description: string | null
+          drinking_window_from: number | null
+          drinking_window_to: number | null
+          eligible_for_bbx: boolean | null
+          format_code: string | null
+          highest_bid_p: number | null
+          import_id: string | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          lowest_ask_p: number | null
+          market_price_p: number | null
+          maturity: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_code: string | null
+          product_url: string | null
+          purchase_price_per_case_p: number | null
+          quantity_bottles: number | null
+          region: string | null
+          source_row_number: number | null
+          vintage: number | null
+        }
+        Relationships: []
+      }
       catalogue_view: {
         Row: {
           adjusted_guide_p: number | null

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PasswordResetRequestForm } from "./PasswordResetRequestForm";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +15,6 @@ export default function ForgotPasswordPage() {
           for choosing a password.
         </p>
         <PasswordResetRequestForm />
-        <Link
-          href="/"
-          className="mt-5 block text-center text-sm text-accent underline-offset-2 hover:underline"
-        >
-          Return to the catalogue
-        </Link>
       </section>
     </main>
   );

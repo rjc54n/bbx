@@ -159,6 +159,7 @@ export async function stageBbrImport(
   }
 
   revalidatePath("/cellar/imports/bbr");
+  revalidatePath("/cellar/imports");
   redirect(`/cellar/imports/bbr/${resultId}${result.duplicate ? "?duplicate=1" : ""}`);
 }
 
@@ -174,6 +175,8 @@ export async function acceptBbrImport(importId: string): Promise<never> {
   }
 
   revalidatePath("/cellar/imports/bbr");
+  revalidatePath("/cellar/imports");
+  revalidatePath("/cellar/bbr");
   revalidatePath(`/cellar/imports/bbr/${importId}`);
   redirect(`/cellar/imports/bbr/${importId}?accepted=1`);
 }

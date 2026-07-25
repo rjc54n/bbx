@@ -40,3 +40,12 @@ export function formatDate(iso: string | null): string {
   if (!iso) return "–";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
+
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return "–";
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/London",
+  }).format(new Date(iso));
+}

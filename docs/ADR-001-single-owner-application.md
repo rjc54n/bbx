@@ -64,9 +64,11 @@ replace database or Storage policies.
   explicit owner check. Ordinary security-definer views must not bypass the
   personal tables' RLS policies.
 
-The public catalogue views may remain anonymously readable because they contain
-market data rather than cellar data. Making the catalogue private is a separate
-product and operating-cost decision. It is not required to protect the cellar.
+The production application front end requires the owner session for catalogue,
+price-change, cellar and import routes. The underlying catalogue database views
+may remain anonymously readable because they contain market data rather than
+cellar data. Tightening those database grants is a later hardening decision and
+is not part of the application route gate.
 
 ## Authentication operation
 

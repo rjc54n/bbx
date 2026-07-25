@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOwner } from "@/lib/auth/owner";
 import { acceptBbrImport } from "../actions";
-import { CellarHeader } from "../CellarHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -152,11 +151,15 @@ export default async function BbrImportPage({
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
-      <CellarHeader />
       <div className="mx-auto max-w-7xl space-y-5 p-5">
-        <Link href="/cellar/imports/bbr" className="text-sm text-accent underline-offset-2 hover:underline">
-          Back to BBR imports
-        </Link>
+        <nav className="flex flex-wrap gap-4 text-sm">
+          <Link href="/cellar/imports/bbr" className="text-accent underline-offset-2 hover:underline">
+            Back to BBR imports
+          </Link>
+          <Link href="/cellar/bbr" className="text-accent underline-offset-2 hover:underline">
+            My BBR Cellar
+          </Link>
+        </nav>
 
         {query.duplicate && (
           <p className="rounded border border-border bg-background px-4 py-3 text-sm">

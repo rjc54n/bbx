@@ -22,7 +22,6 @@ import { DataHonestyHeader } from "./DataHonestyHeader";
 import { DataTable } from "./DataTable";
 import { FilterChips } from "./FilterChips";
 import { FilterStrip } from "./FilterStrip";
-import { ModeTabs } from "./ModeTabs";
 import { Pagination } from "./Pagination";
 import { SearchBar } from "./SearchBar";
 
@@ -120,10 +119,6 @@ export function CatalogueBrowser() {
     pushQuery({ ...queryState, page } as QueryState);
   }
 
-  function handleModeChange(mode: "explore" | "price-changes") {
-    pushQuery(startingPointFor(mode).initialState);
-  }
-
   function handleSetFilter(filter: CatalogueFilter) {
     if (queryState.mode === "price-changes") return;
     pushQuery({ ...queryState, filters: setFilter(queryState.filters, filter), page: 0 });
@@ -186,8 +181,6 @@ export function CatalogueBrowser() {
   return (
     <div className="flex h-full flex-col">
       <DataHonestyHeader />
-
-      <ModeTabs mode={queryState.mode} onChange={handleModeChange} />
 
       {!isPriceChanges && (
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">

@@ -188,6 +188,12 @@ but does not support registration, separate user cellars, invitations or
 sharing. Personal tables do not carry unused tenant columns. See
 `ADR-001-single-owner-application.md` and `PHASE5-IMPLEMENTATION.md`.
 
+**Implementation status, 25 July 2026:** the owner boundary, BBR snapshot
+upload, preview and acceptance flow are live. The first snapshot has been
+accepted. The record-level BBR cellar browser and current BBX bid/ask join are
+implemented locally pending migration and deployment. CellarTracker remains
+the next holdings source.
+
 - Upload the current BBR holdings CSV and maintain it in the backend as a
   dated source snapshot. `Parent ID` joins straight to `parent_sku`, so no
   entity resolution is required for matched BBR rows. Preserve each import's

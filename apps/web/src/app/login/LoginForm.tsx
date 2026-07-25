@@ -5,11 +5,12 @@ import { useActionState } from "react";
 import { login } from "./actions";
 import { initialLoginState } from "./state";
 
-export function LoginForm() {
+export function LoginForm({ returnPath }: { returnPath: string }) {
   const [state, action, pending] = useActionState(login, initialLoginState);
 
   return (
     <form action={action} className="space-y-4">
+      <input type="hidden" name="next" value={returnPath} />
       <div>
         <label htmlFor="email" className="mb-1 block text-sm font-medium">
           Email address

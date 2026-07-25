@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { safeReturnPath } from "@/lib/auth/routing";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { LoginState } from "./state";
 
@@ -10,6 +11,7 @@ export async function login(
 ): Promise<LoginState> {
   const email = formData.get("email");
   const password = formData.get("password");
+  const returnPath = safeReturnPath(formData.get("next"));
   if (typeof email !== "string" || typeof password !== "string") {
     return { error: "Enter your email address and password." };
   }
@@ -38,7 +40,7 @@ export async function login(
     return { error: "This account is not authorised to access the cellar." };
   }
 
-  redirect("/cellar/imports/bbr");
+  redirect(returnPath);
 }
 
 export async function logout(): Promise<never> {
