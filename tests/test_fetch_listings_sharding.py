@@ -416,6 +416,43 @@ def test_fetch_biddable_universe_excludes_assortment_mixed_cases(use_fake_index)
     assert all("family_type:'Wines'" in c for c in fake.fetch_calls)
 
 
+def _spy_on_count_and_facets(monkeypatch):
+    """Capture every (filter_clauses, facet_fields) pair passed to
+    _count_and_facets, without needing a full FakeIndex."""
+    calls = []
+
+    def fake_count_and_facets(app_id, key, filter_clauses, facet_fields, index_name=None):
+        calls.append((list(filter_clauses), list(facet_fields)))
+        return 0, {}
+
+    monkeypatch.setattr(fl, "_count_and_facets", fake_count_and_facets)
+    monkeypatch.setattr(fl, "_fetch_sharded", lambda *a, **kw: None)
+    return calls
+
+
+def test_fetch_listings_total_count_requests_a_facet_for_exhaustive_nbhits(monkeypatch):
+    # Live-verified against prod_biddable (2026-07-25): Algolia's nbHits for
+    # a hitsPerPage=0 count is only guaranteed exhaustive (exhaustiveNbHits
+    # response flag) when at least one facet is requested alongside it --
+    # facets=[] returned a ~1.2% inflated, non-exhaustive count. An empty
+    # facet list here would silently reintroduce that overcount.
+    calls = _spy_on_count_and_facets(monkeypatch)
+
+    fetch_listings("app", "key", days_label=None)
+
+    total_count_call = calls[0]
+    assert total_count_call[1] != []
+
+
+def test_fetch_biddable_universe_total_count_requests_a_facet_for_exhaustive_nbhits(monkeypatch):
+    calls = _spy_on_count_and_facets(monkeypatch)
+
+    fetch_biddable_universe("app", "key")
+
+    total_count_call = calls[0]
+    assert total_count_call[1] != []
+
+
 def test_truncated_set_when_shard_dims_exhausted(use_fake_index, caplog):
     """When no shard dimensions remain but hits exceed the cap, truncated is set."""
     records = [{"objectID": str(i), "stock_origin": "BBX", "new_to_bbx": "1 Day"}

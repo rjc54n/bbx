@@ -457,8 +457,15 @@ def fetch_listings(
         and not (d == PRICE_FACET_FIELD and price_bands)
     ]
 
+    # Requesting at least one facet alongside a hitsPerPage=0 count matters:
+    # live-verified against prod_biddable (2026-07-25) that Algolia returns a
+    # non-exhaustive nbHits (here, ~1.2% inflated) for a bare count-only
+    # query, but an exact one -- confirmed via the exhaustiveNbHits response
+    # flag -- once facets are requested too. Reuse the first shard dimension
+    # rather than an empty facet list so this count matches the exhaustive
+    # counts the sharded fetch itself relies on.
     total_index_hits, _ = _count_and_facets(
-        algolia_app_id, algolia_api_key, base_filters, [], index_name,
+        algolia_app_id, algolia_api_key, base_filters, shard_dims[:1], index_name,
     )
 
     truncation_flag = [False]
@@ -496,8 +503,16 @@ def fetch_biddable_universe(
     already scoped to biddable-eligible stock, and stock_origin isn't even a
     configured facet on this index.
     """
+    # See the matching comment in fetch_listings(): a bare hitsPerPage=0 count
+    # with no facets is non-exhaustive on this index -- live-verified
+    # 2026-07-25, filters="family_type:'Wines'" returned nbHits=52109 with
+    # exhaustiveNbHits=False (facets=[]) vs. the exact nbHits=51494 with
+    # exhaustiveNbHits=True (facets=["family_type"]), a stable ~615-hit /
+    # 1.2% overcount that had been misread as the sharded fetch silently
+    # losing records. Reuse the first shard dimension instead of [].
     total_index_hits, _ = _count_and_facets(
-        algolia_app_id, algolia_api_key, BIDDABLE_BASE_FILTERS, [], index_name,
+        algolia_app_id, algolia_api_key, BIDDABLE_BASE_FILTERS,
+        BIDDABLE_SHARD_DIMENSIONS[:1], index_name,
     )
 
     truncation_flag = [False]
