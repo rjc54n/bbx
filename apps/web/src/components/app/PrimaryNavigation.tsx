@@ -29,7 +29,7 @@ const tabs = [
 export function PrimaryNavigation() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname.startsWith("/release-prices")
+  const active = pathname.startsWith("/release-prices") || pathname.startsWith("/cellar/imports/release-offers")
     ? "release-prices"
     : pathname.startsWith("/cellar")
     ? "cellar"

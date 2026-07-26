@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(29);
+SELECT plan(30);
 
 INSERT INTO auth.users (id)
 VALUES
@@ -200,15 +200,37 @@ SELECT is(
 );
 
 SELECT is(
+    (
+        public.stage_release_offer_batch(
+            '31000000-0000-0000-0000-000000000001',
+            jsonb_build_array(jsonb_build_object(
+                'source_row_number', 5,
+                'raw_row', jsonb_build_object('Wine', 'Long historic price list'),
+                'offer_date', '2019-01-03',
+                'source_wine', 'Long historic price list',
+                'source_match_key', 'long historic price list',
+                'source_price_text', repeat('x', 2225),
+                'content_fingerprint', repeat('1', 64),
+                'validation_errors', '[]'::JSONB,
+                'validation_warnings', '[]'::JSONB,
+                'prices', '[]'::JSONB
+            ))
+        )->>'source_row_count'
+    )::INT,
+    4,
+    'a long historic price list does not stop a resumable import'
+);
+
+SELECT is(
     public.finalise_release_offer_import(
-        '31000000-0000-0000-0000-000000000001', 3, 3
+        '31000000-0000-0000-0000-000000000001', 4, 3
     )->>'status',
     'validated',
     'a complete error-free import validates'
 );
 SELECT is((SELECT matched_row_count FROM public.release_offer_imports WHERE id = '31000000-0000-0000-0000-000000000001'), 2, 'exact product identifiers match');
-SELECT is((SELECT unmatched_row_count FROM public.release_offer_imports WHERE id = '31000000-0000-0000-0000-000000000001'), 1, 'unresolved source rows remain visible');
-SELECT is((SELECT count(*)::INT FROM public.release_offer_source_rows WHERE import_id = '31000000-0000-0000-0000-000000000001'), 3, 'duplicate source evidence is preserved');
+SELECT is((SELECT unmatched_row_count FROM public.release_offer_imports WHERE id = '31000000-0000-0000-0000-000000000001'), 2, 'unresolved source rows remain visible');
+SELECT is((SELECT count(*)::INT FROM public.release_offer_source_rows WHERE import_id = '31000000-0000-0000-0000-000000000001'), 4, 'duplicate source evidence is preserved');
 
 SELECT is(public.accept_release_offer_import('31000000-0000-0000-0000-000000000001')->>'status', 'accepted', 'the owner can accept validated evidence');
 SELECT is((SELECT count(*)::INT FROM public.release_offer_prices WHERE publication_status = 'published'), 2, 'only eligible matched price rows are published');

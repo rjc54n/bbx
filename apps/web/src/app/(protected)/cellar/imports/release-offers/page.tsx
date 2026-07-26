@@ -62,7 +62,9 @@ export default async function ReleaseOfferImportsPage({
                     <span className="text-xs font-semibold uppercase text-accent">{item.status}</span>
                   </div>
                   <p className="mt-1 text-xs text-ink-muted">
-                    {dateTime(item.imported_at)} · {item.source_row_count.toLocaleString()} rows · {item.priced_fragment_count.toLocaleString()} price fragments · {item.matched_row_count.toLocaleString()} matched · {item.unmatched_row_count.toLocaleString()} unresolved
+                    {item.status === "staging"
+                      ? `${dateTime(item.imported_at)} · preparation paused, open this import to see the staged row count`
+                      : `${dateTime(item.imported_at)} · ${item.source_row_count.toLocaleString()} rows · ${item.priced_fragment_count.toLocaleString()} price fragments · ${item.matched_row_count.toLocaleString()} matched · ${item.unmatched_row_count.toLocaleString()} unresolved`}
                   </p>
                 </Link>
               ))}

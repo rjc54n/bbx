@@ -1,14 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOwner } from "@/lib/auth/owner";
-import {
-  acceptReleaseOfferImport,
-  resolveReleaseOfferRow,
-} from "../actions";
+import { acceptReleaseOfferImport } from "../actions";
 
 export const dynamic = "force-dynamic";
-
-type Candidate = { parent_sku?: string; name?: string; vintage?: number; similarity?: number };
 
 function dateTime(value: string): string {
   return new Intl.DateTimeFormat("en-GB", {
@@ -16,10 +11,6 @@ function dateTime(value: string): string {
     timeStyle: "short",
     timeZone: "Europe/London",
   }).format(new Date(value));
-}
-
-function candidates(value: unknown): Candidate[] {
-  return Array.isArray(value) ? value.filter((item): item is Candidate => Boolean(item) && typeof item === "object") : [];
 }
 
 export default async function ReleaseOfferImportDetailPage({
@@ -32,35 +23,45 @@ export default async function ReleaseOfferImportDetailPage({
   const { id } = await params;
   const query = await searchParams;
   const { supabase } = await requireOwner();
-  const [
-    { data: importData, error: importError },
-    { data: unresolvedData, error: unresolvedError },
-    { data: priceData, error: priceError },
-  ] = await Promise.all([
-    supabase
-      .from("release_offer_imports")
-      .select("id, source_type, original_filename, content_checksum, byte_size, imported_at, parser_version, status, source_row_count, priced_fragment_count, matched_row_count, unmatched_row_count, warning_row_count, error_row_count, failure_summary, accepted_at")
-      .eq("id", id)
-      .maybeSingle(),
-    supabase
-      .from("release_offer_source_rows")
-      .select("source_row_number, offer_date, source_wine, source_price_text, match_candidates, validation_errors, validation_warnings")
-      .eq("import_id", id)
-      .neq("match_status", "matched")
-      .order("source_row_number")
-      .limit(100),
-    supabase
-      .from("release_offer_prices")
-      .select("source_row_number, fragment_index, raw_price_text, amount_p, format_code, tax_basis, parse_status, publication_status, validation_warnings")
-      .eq("import_id", id)
-      .order("source_row_number")
-      .order("fragment_index")
-      .limit(100),
-  ]);
-  if (importError || unresolvedError || priceError) {
+  const { data: importData, error: importError } = await supabase
+    .from("release_offer_imports")
+    .select("id, source_type, original_filename, content_checksum, byte_size, imported_at, parser_version, status, source_row_count, priced_fragment_count, matched_row_count, unmatched_row_count, warning_row_count, error_row_count, failure_summary, accepted_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (importError) {
     throw new Error("The release-offer import preview could not be loaded.");
   }
   if (!importData) notFound();
+
+  const staging = importData.status === "staging";
+  const [
+    { count: stagedRowCount, error: stagedRowsError },
+    { count: stagedPriceCount, error: stagedPricesError },
+    { data: priceData, error: priceError },
+  ] = await Promise.all([
+    supabase
+      .from("release_offer_source_rows")
+      .select("*", { count: "exact", head: true })
+      .eq("import_id", id),
+    supabase
+      .from("release_offer_prices")
+      .select("*", { count: "exact", head: true })
+      .eq("import_id", id),
+    staging
+      ? Promise.resolve({ data: null, error: null })
+      : supabase
+        .from("release_offer_prices")
+        .select("source_row_number, fragment_index, raw_price_text, amount_p, format_code, tax_basis, parse_status, publication_status, validation_warnings")
+        .eq("import_id", id)
+        .order("source_row_number")
+        .order("fragment_index")
+        .limit(100),
+  ]);
+  if (stagedRowsError || stagedPricesError || priceError) {
+    throw new Error("The release-offer import preview could not be loaded.");
+  }
+  const sourceRowCount = staging ? (stagedRowCount ?? 0) : importData.source_row_count;
+  const priceFragmentCount = staging ? (stagedPriceCount ?? 0) : importData.priced_fragment_count;
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
@@ -98,8 +99,8 @@ export default async function ReleaseOfferImportDetailPage({
 
         <section className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
-            ["Source rows", importData.source_row_count],
-            ["Price fragments", importData.priced_fragment_count],
+            [staging ? "Rows staged" : "Source rows", sourceRowCount],
+            [staging ? "Fragments staged" : "Price fragments", priceFragmentCount],
             ["Matched rows", importData.matched_row_count],
             ["Unresolved rows", importData.unmatched_row_count],
             ["Invalid rows", importData.error_row_count],
@@ -112,38 +113,23 @@ export default async function ReleaseOfferImportDetailPage({
           ))}
         </section>
 
-        {unresolvedData?.length ? (
-          <section className="rounded-lg border border-border bg-background">
-            <div className="border-b border-border px-5 py-3">
-              <h2 className="font-semibold">Unresolved source rows</h2>
-              <p className="mt-1 text-xs text-ink-muted">Showing the first 100. Candidate names are suggestions, not automatic matches.</p>
-            </div>
-            <div className="divide-y divide-border">
-              {unresolvedData.map((row) => (
-                <div key={row.source_row_number} className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_24rem]">
-                  <div>
-                    <p className="font-medium">Row {row.source_row_number}: {row.source_wine}</p>
-                    <p className="mt-1 text-xs text-ink-muted">{row.offer_date} · {row.source_price_text}</p>
-                    {candidates(row.match_candidates).length > 0 && (
-                      <p className="mt-2 text-xs text-ink-muted">
-                        Suggestions: {candidates(row.match_candidates).map((candidate) => `${candidate.parent_sku} ${candidate.name ?? ""}${candidate.vintage ? ` (${candidate.vintage})` : ""}`).join("; ")}
-                      </p>
-                    )}
-                  </div>
-                  <form action={resolveReleaseOfferRow.bind(null, id, row.source_row_number)} className="flex items-end gap-2">
-                    <label className="grid flex-1 gap-1 text-xs text-ink-muted">
-                      Exact Parent ID
-                      <input name="parent_sku" required pattern="[0-9]{5,30}" className="rounded border border-border px-3 py-2 text-sm text-ink" />
-                    </label>
-                    <button type="submit" className="rounded border border-accent px-3 py-2 text-sm font-medium text-accent">Resolve</button>
-                  </form>
-                </div>
-              ))}
-            </div>
+        {staging ? (
+          <section className="rounded-lg border border-border bg-background p-5">
+            <h2 className="font-semibold">Preparation paused</h2>
+            <p className="mt-1 max-w-3xl text-sm text-ink-muted">
+              {sourceRowCount.toLocaleString()} source rows and {priceFragmentCount.toLocaleString()} price fragments are safely staged. This file has not been matched or accepted, so there is nothing for you to resolve yet. Upload the same file again after the database fix to continue from the remaining rows.
+            </p>
           </section>
-        ) : null}
+        ) : (
+          <section className="rounded-lg border border-border bg-background p-5">
+            <h2 className="font-semibold">How archive matching works</h2>
+            <p className="mt-1 max-w-3xl text-sm text-ink-muted">
+              Unmatched historic rows are retained as source evidence, not a bulk data-entry queue. Only exact matches to products in the current BBX catalogue can publish a release-price anchor. The release-prices page is where matched market comparisons are reviewed.
+            </p>
+          </section>
+        )}
 
-        <section className="overflow-hidden rounded-lg border border-border bg-background">
+        {!staging && <section className="overflow-hidden rounded-lg border border-border bg-background">
           <div className="border-b border-border px-5 py-3">
             <h2 className="font-semibold">Price parsing sample</h2>
             <p className="mt-1 text-xs text-ink-muted">First 100 fragments. Publication requires accepted evidence, an exact product and format, and an explicit in-bond price.</p>
@@ -167,7 +153,7 @@ export default async function ReleaseOfferImportDetailPage({
               </tbody>
             </table>
           </div>
-        </section>
+        </section>}
       </div>
     </main>
   );

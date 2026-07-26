@@ -42,12 +42,20 @@ async function stageBatches(
   importId: string,
   rows: ParsedReleaseOfferRow[],
 ): Promise<string | null> {
-  for (const batch of chunks(rows, 50)) {
+  const batches = chunks(rows, 50);
+  for (const [index, batch] of batches.entries()) {
     const { error } = await supabase.rpc("stage_release_offer_batch", {
       p_import_id: importId,
       p_rows: batch,
     });
-    if (error) return "A release-offer batch could not be recorded. Upload the same file again to resume.";
+    if (error) {
+      const firstRow = batch[0]?.source_row_number;
+      const lastRow = batch.at(-1)?.source_row_number;
+      if (error.code === "23514") {
+        return `The source data in rows ${firstRow} to ${lastRow} exceeds a database field limit. Nothing has been lost. Apply the release-offer migration, then upload this same file again to resume.`;
+      }
+      return `Release-offer batch ${index + 1} of ${batches.length} (rows ${firstRow} to ${lastRow}) could not be recorded. Nothing has been lost. Upload the same file again to resume.`;
+    }
   }
 
   const priceCount = rows.reduce((total, row) => total + row.prices.length, 0);
