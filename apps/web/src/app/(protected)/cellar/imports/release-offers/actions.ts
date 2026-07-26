@@ -11,7 +11,6 @@ import {
   ReleaseOfferFileError,
   type ParsedReleaseOfferRow,
 } from "@/lib/releaseOffers/parser";
-import type { ReleaseOfferUploadState } from "./state";
 
 const ACCEPTED_MIME_TYPES = new Set([
   "",
@@ -60,10 +59,9 @@ async function stageBatches(
   return error ? "The release-offer import could not be matched and finalised." : null;
 }
 
-export async function stageReleaseOfferImport(
-  _previousState: ReleaseOfferUploadState,
+export async function processReleaseOfferUpload(
   formData: FormData,
-): Promise<ReleaseOfferUploadState> {
+): Promise<{ error: string } | { redirectTo: string }> {
   const context = await getOwnerContext();
   if (!context) return { error: "Your owner session has expired. Sign in again." };
 
@@ -107,12 +105,12 @@ export async function stageReleaseOfferImport(
   }
 
   if (existing?.id && existing.status !== "staging") {
-    redirect(`/cellar/imports/release-offers/${existing.id}?duplicate=1`);
+    return { redirectTo: `/cellar/imports/release-offers/${existing.id}?duplicate=1` };
   }
   if (existing?.id) {
     const resumeError = await stageBatches(context.supabase, existing.id, rows);
     if (resumeError) return { error: resumeError };
-    redirect(`/cellar/imports/release-offers/${existing.id}?resumed=1`);
+    return { redirectTo: `/cellar/imports/release-offers/${existing.id}?resumed=1` };
   }
 
   const importId = randomUUID();
@@ -154,7 +152,7 @@ export async function stageReleaseOfferImport(
 
   revalidatePath("/cellar/imports");
   revalidatePath("/cellar/imports/release-offers");
-  redirect(`/cellar/imports/release-offers/${resultId}`);
+  return { redirectTo: `/cellar/imports/release-offers/${resultId}` };
 }
 
 export async function acceptReleaseOfferImport(importId: string): Promise<never> {

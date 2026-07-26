@@ -12,7 +12,12 @@ function dateTime(value: string): string {
   }).format(new Date(value));
 }
 
-export default async function ReleaseOfferImportsPage() {
+export default async function ReleaseOfferImportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = await searchParams;
   const { supabase } = await requireOwner();
   const { data, error } = await supabase
     .from("release_offer_imports")
@@ -39,7 +44,9 @@ export default async function ReleaseOfferImportsPage() {
             The source file is kept unchanged. Prices are split by format and remain pending unless the product, format and in-bond basis are exact.
           </p>
         </header>
-        <ReleaseOfferUploadForm />
+        <ReleaseOfferUploadForm
+          error={typeof query.error === "string" ? query.error : undefined}
+        />
         <section className="rounded-lg border border-border bg-background">
           <h2 className="border-b border-border px-5 py-3 font-semibold">Recent imports</h2>
           {data?.length ? (
