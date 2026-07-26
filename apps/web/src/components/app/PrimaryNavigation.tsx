@@ -19,12 +19,19 @@ const tabs = [
     label: "My BBR Cellar",
     href: "/cellar/bbr",
   },
+  {
+    id: "release-prices",
+    label: "Release prices",
+    href: "/release-prices",
+  },
 ] as const;
 
 export function PrimaryNavigation() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname.startsWith("/cellar")
+  const active = pathname.startsWith("/release-prices")
+    ? "release-prices"
+    : pathname.startsWith("/cellar")
     ? "cellar"
     : searchParams.get("mode") === "price-changes"
       ? "price-changes"

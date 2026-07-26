@@ -244,6 +244,12 @@ actual cellar requirement.
 
 ### Phase 7: Release-price connector
 
+**In progress, 2026-07-26:** the owner-only release-offer schema, historic CSV
+parser, import review flow, exact evidence publication, release-price browser
+and current BBX comparison view are implemented. The migrations are live.
+The first historic import, production browser acceptance and weekly Gmail task
+remain rollout work.
+
 Value is in **anchoring bids on purchases**, not in P&L on existing holdings.
 
 - Gmail connector, incremental, replacing the one-off Takeout extraction.
@@ -252,8 +258,9 @@ Value is in **anchoring bids on purchases**, not in P&L on existing holdings.
 - Preserve all source rows, including the 121 exact duplicates in the
   representative file. Deduplicate the normalised offer evidence by content
   fingerprint rather than deleting raw provenance.
-- Algolia resolution at ingest, storing `parent_sku`, a confidence score and
-  the raw name, so unmatched rows stay queryable and can be re-resolved.
+- Match by a resolved BBR product ID first, then unique exact normalised name
+  and vintage. Store up to three trigram candidates for review. Unmatched rows
+  stay queryable and can be resolved manually.
 - Distinguish release from re-offer by offer date versus vintage.
 - Use CellarTracker purchase history as evidence of what we paid. Use release
   emails as evidence of what was offered to the market. Do not collapse those

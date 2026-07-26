@@ -21,17 +21,23 @@ function dateTime(value: string): string {
 
 export default async function ImportsPage() {
   const { supabase } = await requireOwner();
-  const { data, error } = await supabase
-    .from("cellar_imports")
-    .select(
-      "accepted_at, original_filename, source_row_count, status, uploaded_at",
-    )
-    .eq("source_type", "bbr_holdings")
-    .order("uploaded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data, error }, { data: releaseData, error: releaseError }] = await Promise.all([
+    supabase
+      .from("cellar_imports")
+      .select("accepted_at, original_filename, source_row_count, status, uploaded_at")
+      .eq("source_type", "bbr_holdings")
+      .order("uploaded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("release_offer_imports")
+      .select("accepted_at, original_filename, source_row_count, status, imported_at")
+      .order("imported_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  if (error) throw new Error("Import status could not be loaded.");
+  if (error || releaseError) throw new Error("Import status could not be loaded.");
   const latest = data as ImportSummary | null;
 
   return (
@@ -44,8 +50,8 @@ export default async function ImportsPage() {
             </p>
             <h1 className="mt-1 text-2xl font-semibold">Import data</h1>
             <p className="mt-1 text-sm text-ink-muted">
-              Upload and review source snapshots before they become the current
-              cellar record.
+              Upload and review private source data before it supplies cellar
+              records or release-price evidence.
             </p>
           </div>
           <Link
@@ -79,6 +85,29 @@ export default async function ImportsPage() {
               {latest.accepted_at
                 ? ` and accepted ${dateTime(latest.accepted_at)}`
                 : ""}
+            </p>
+          ) : (
+            <p className="mt-4 text-xs text-ink-muted">No upload recorded.</p>
+          )}
+        </Link>
+
+        <Link
+          href="/cellar/imports/release-offers"
+          className="block rounded-lg border border-border bg-background p-5 hover:border-accent"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">BBR release offers</p>
+              <p className="mt-1 text-sm text-ink-muted">
+                Upload historic offer evidence, review product and format matches, and publish exact in-bond prices.
+              </p>
+            </div>
+            <span className="text-sm font-medium text-accent">Manage imports</span>
+          </div>
+          {releaseData ? (
+            <p className="mt-4 text-xs text-ink-muted">
+              Latest: {releaseData.original_filename}, {releaseData.source_row_count} rows, {releaseData.status}, imported {dateTime(releaseData.imported_at)}
+              {releaseData.accepted_at ? ` and accepted ${dateTime(releaseData.accepted_at)}` : ""}
             </p>
           ) : (
             <p className="mt-4 text-xs text-ink-muted">No upload recorded.</p>

@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       _migrations: {
@@ -162,7 +137,49 @@ export type Database = {
             referencedRelation: "cellar_import_rows"
             referencedColumns: ["import_id", "source_row_number"]
           },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "candidate_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "catalogue_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
         ]
+      }
+      bbx_fee_schedule: {
+        Row: {
+          effective_from: string
+          recorded_at: string
+          seller_commission_rate: number
+          source_url: string
+        }
+        Insert: {
+          effective_from: string
+          recorded_at?: string
+          seller_commission_rate: number
+          source_url: string
+        }
+        Update: {
+          effective_from?: string
+          recorded_at?: string
+          seller_commission_rate?: number
+          source_url?: string
+        }
+        Relationships: []
       }
       cellar_import_rows: {
         Row: {
@@ -202,6 +219,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "cellar_imports"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "candidate_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "catalogue_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["parent_sku", "format_code"]
           },
         ]
       }
@@ -505,6 +543,368 @@ export type Database = {
           },
         ]
       }
+      release_offer_imports: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          byte_size: number | null
+          content_checksum: string
+          error_row_count: number
+          failure_summary: string | null
+          id: string
+          imported_at: string
+          imported_by: string
+          matched_row_count: number
+          original_filename: string
+          parser_version: string
+          priced_fragment_count: number
+          source_row_count: number
+          source_type: string
+          status: string
+          storage_object_path: string | null
+          unmatched_row_count: number
+          warning_row_count: number
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          byte_size?: number | null
+          content_checksum: string
+          error_row_count?: number
+          failure_summary?: string | null
+          id: string
+          imported_at?: string
+          imported_by: string
+          matched_row_count?: number
+          original_filename: string
+          parser_version: string
+          priced_fragment_count?: number
+          source_row_count?: number
+          source_type: string
+          status?: string
+          storage_object_path?: string | null
+          unmatched_row_count?: number
+          warning_row_count?: number
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          byte_size?: number | null
+          content_checksum?: string
+          error_row_count?: number
+          failure_summary?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string
+          matched_row_count?: number
+          original_filename?: string
+          parser_version?: string
+          priced_fragment_count?: number
+          source_row_count?: number
+          source_type?: string
+          status?: string
+          storage_object_path?: string | null
+          unmatched_row_count?: number
+          warning_row_count?: number
+        }
+        Relationships: []
+      }
+      release_offer_ingestion_cursors: {
+        Row: {
+          last_import_id: string | null
+          last_successful_message_at: string | null
+          last_successful_message_id: string | null
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          last_import_id?: string | null
+          last_successful_message_at?: string | null
+          last_successful_message_id?: string | null
+          source_type: string
+          updated_at?: string
+        }
+        Update: {
+          last_import_id?: string | null
+          last_successful_message_at?: string | null
+          last_successful_message_id?: string | null
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_ingestion_cursors_last_import_id_fkey"
+            columns: ["last_import_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      release_offer_link_resolutions: {
+        Row: {
+          attempted_at: string
+          final_product_url: string | null
+          source_product_id: string | null
+          status: string
+          tracking_url_sha256: string
+        }
+        Insert: {
+          attempted_at?: string
+          final_product_url?: string | null
+          source_product_id?: string | null
+          status: string
+          tracking_url_sha256: string
+        }
+        Update: {
+          attempted_at?: string
+          final_product_url?: string | null
+          source_product_id?: string | null
+          status?: string
+          tracking_url_sha256?: string
+        }
+        Relationships: []
+      }
+      release_offer_prices: {
+        Row: {
+          amount_p: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          currency: string
+          format_code: string | null
+          fragment_index: number
+          id: number
+          import_id: string
+          parse_status: string
+          price_fingerprint: string
+          publication_status: string
+          raw_price_text: string
+          rejection_reason: string | null
+          source_row_number: number
+          tax_basis: string
+          validation_warnings: Json
+        }
+        Insert: {
+          amount_p?: number | null
+          bottle_volume_ml?: number | null
+          case_size?: number | null
+          currency?: string
+          format_code?: string | null
+          fragment_index: number
+          id?: number
+          import_id: string
+          parse_status: string
+          price_fingerprint: string
+          publication_status?: string
+          raw_price_text: string
+          rejection_reason?: string | null
+          source_row_number: number
+          tax_basis: string
+          validation_warnings?: Json
+        }
+        Update: {
+          amount_p?: number | null
+          bottle_volume_ml?: number | null
+          case_size?: number | null
+          currency?: string
+          format_code?: string | null
+          fragment_index?: number
+          id?: number
+          import_id?: string
+          parse_status?: string
+          price_fingerprint?: string
+          publication_status?: string
+          raw_price_text?: string
+          rejection_reason?: string | null
+          source_row_number?: number
+          tax_basis?: string
+          validation_warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_prices_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: false
+            referencedRelation: "release_offer_evidence_view"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "release_offer_prices_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: false
+            referencedRelation: "release_offer_source_rows"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+        ]
+      }
+      release_offer_source_rows: {
+        Row: {
+          content_fingerprint: string
+          description: string | null
+          import_id: string
+          match_candidates: Json
+          match_method: string | null
+          match_status: string
+          offer_date: string
+          parent_sku: string | null
+          raw_row: Json
+          source_match_key: string
+          source_message_id: string | null
+          source_price_text: string
+          source_product_id: string | null
+          source_product_url: string | null
+          source_row_number: number
+          source_vintage: number | null
+          source_wine: string
+          tasting_notes: string | null
+          validation_errors: Json
+          validation_warnings: Json
+        }
+        Insert: {
+          content_fingerprint: string
+          description?: string | null
+          import_id: string
+          match_candidates?: Json
+          match_method?: string | null
+          match_status?: string
+          offer_date: string
+          parent_sku?: string | null
+          raw_row: Json
+          source_match_key: string
+          source_message_id?: string | null
+          source_price_text: string
+          source_product_id?: string | null
+          source_product_url?: string | null
+          source_row_number: number
+          source_vintage?: number | null
+          source_wine: string
+          tasting_notes?: string | null
+          validation_errors?: Json
+          validation_warnings?: Json
+        }
+        Update: {
+          content_fingerprint?: string
+          description?: string | null
+          import_id?: string
+          match_candidates?: Json
+          match_method?: string | null
+          match_status?: string
+          offer_date?: string
+          parent_sku?: string | null
+          raw_row?: Json
+          source_match_key?: string
+          source_message_id?: string | null
+          source_price_text?: string
+          source_product_id?: string | null
+          source_product_url?: string | null
+          source_row_number?: number
+          source_vintage?: number | null
+          source_wine?: string
+          tasting_notes?: string | null
+          validation_errors?: Json
+          validation_warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_source_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
+      }
+      release_price_anchor_overrides: {
+        Row: {
+          confirmed_at: string
+          confirmed_by: string
+          format_code: string
+          note: string | null
+          parent_sku: string
+          release_offer_price_id: number
+        }
+        Insert: {
+          confirmed_at?: string
+          confirmed_by: string
+          format_code: string
+          note?: string | null
+          parent_sku: string
+          release_offer_price_id: number
+        }
+        Update: {
+          confirmed_at?: string
+          confirmed_by?: string
+          format_code?: string
+          note?: string | null
+          parent_sku?: string
+          release_offer_price_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
+            referencedRelation: "candidate_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
+            referencedRelation: "catalogue_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
+            referencedRelation: "skus"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
+            columns: ["release_offer_price_id"]
+            isOneToOne: true
+            referencedRelation: "release_offer_evidence_view"
+            referencedColumns: ["release_offer_price_id"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
+            columns: ["release_offer_price_id"]
+            isOneToOne: true
+            referencedRelation: "release_offer_prices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
+            columns: ["release_offer_price_id"]
+            isOneToOne: true
+            referencedRelation: "release_price_anchor_view"
+            referencedColumns: ["release_offer_price_id"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
+            columns: ["release_offer_price_id"]
+            isOneToOne: true
+            referencedRelation: "release_price_market_view"
+            referencedColumns: ["release_offer_price_id"]
+          },
+        ]
+      }
       scan_runs: {
         Row: {
           algolia_complete: boolean | null
@@ -676,6 +1076,68 @@ export type Database = {
       }
     }
     Views: {
+      bbr_cellar_market_view: {
+        Row: {
+          bottle_volume_ml: number | null
+          case_size: number | null
+          catalogue_name: string | null
+          colour: string | null
+          confirmed_at: string | null
+          country: string | null
+          current_status: string | null
+          description: string | null
+          drinking_window_from: number | null
+          drinking_window_to: number | null
+          eligible_for_bbx: boolean | null
+          format_code: string | null
+          highest_bid_p: number | null
+          import_id: string | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          lowest_ask_p: number | null
+          market_price_p: number | null
+          maturity: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_code: string | null
+          product_url: string | null
+          purchase_price_per_case_p: number | null
+          quantity_bottles: number | null
+          region: string | null
+          source_row_number: number | null
+          vintage: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bbr_holding_evidence_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "cellar_import_rows"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "candidate_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "catalogue_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+        ]
+      }
       candidate_view: {
         Row: {
           bottle_volume_ml: number | null
@@ -721,39 +1183,6 @@ export type Database = {
             referencedColumns: ["parent_sku"]
           },
         ]
-      }
-      bbr_cellar_market_view: {
-        Row: {
-          bottle_volume_ml: number | null
-          case_size: number | null
-          catalogue_name: string | null
-          colour: string | null
-          confirmed_at: string | null
-          country: string | null
-          current_status: string | null
-          description: string | null
-          drinking_window_from: number | null
-          drinking_window_to: number | null
-          eligible_for_bbx: boolean | null
-          format_code: string | null
-          highest_bid_p: number | null
-          import_id: string | null
-          is_listed: boolean | null
-          last_rest_checked_at: string | null
-          lowest_ask_p: number | null
-          market_price_p: number | null
-          maturity: string | null
-          parent_sku: string | null
-          producer: string | null
-          product_code: string | null
-          product_url: string | null
-          purchase_price_per_case_p: number | null
-          quantity_bottles: number | null
-          region: string | null
-          source_row_number: number | null
-          vintage: number | null
-        }
-        Relationships: []
       }
       catalogue_view: {
         Row: {
@@ -835,7 +1264,36 @@ export type Database = {
           vintage: number | null
           wine_searcher_lowest_list_price_p: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bbr_holding_evidence_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "cellar_import_rows"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "candidate_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "catalogue_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+        ]
       }
       facet_ranges_view: {
         Row: {
@@ -1000,6 +1458,125 @@ export type Database = {
         }
         Relationships: []
       }
+      release_offer_evidence_view: {
+        Row: {
+          bottle_volume_ml: number | null
+          case_size: number | null
+          content_fingerprint: string | null
+          duplicate_rank: number | null
+          format_code: string | null
+          import_id: string | null
+          match_method: string | null
+          offer_date: string | null
+          parent_sku: string | null
+          release_offer_price_id: number | null
+          release_price_p: number | null
+          source_message_id: string | null
+          source_product_url: string | null
+          source_row_number: number | null
+          source_wine: string | null
+          tax_basis: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_source_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
+      }
+      release_price_anchor_view: {
+        Row: {
+          anchor_status: string | null
+          format_code: string | null
+          offer_date: string | null
+          parent_sku: string | null
+          release_offer_price_id: number | null
+          release_price_p: number | null
+          source_product_url: string | null
+          source_wine: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
+      }
+      release_price_market_view: {
+        Row: {
+          anchor_status: string | null
+          ask_vs_release_p: number | null
+          ask_vs_release_pct: number | null
+          bid_vs_release_p: number | null
+          bid_vs_release_pct: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          format_code: string | null
+          highest_bid_p: number | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          lowest_ask_p: number | null
+          market_price_p: number | null
+          name: string | null
+          offer_date: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_url: string | null
+          recoup_bid_p: number | null
+          region: string | null
+          release_offer_price_id: number | null
+          release_price_p: number | null
+          seller_commission_rate: number | null
+          seller_net_highest_bid_p: number | null
+          source_product_url: string | null
+          source_wine: string | null
+          vintage: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
+      }
       scan_health_view: {
         Row: {
           algolia_complete: boolean | null
@@ -1056,8 +1633,41 @@ export type Database = {
       }
     }
     Functions: {
-      accept_bbr_import: {
+      accept_bbr_import: { Args: { p_import_id: string }; Returns: Json }
+      accept_release_offer_import: {
         Args: { p_import_id: string }
+        Returns: Json
+      }
+      begin_release_offer_import: {
+        Args: {
+          p_byte_size: number
+          p_content_checksum: string
+          p_import_id: string
+          p_original_filename: string
+          p_parser_version: string
+          p_source_type: string
+          p_storage_object_path: string
+        }
+        Returns: Json
+      }
+      confirm_release_price_anchor: {
+        Args: { p_note?: string; p_release_offer_price_id: number }
+        Returns: Json
+      }
+      finalise_release_offer_import: {
+        Args: {
+          p_expected_price_fragments: number
+          p_expected_source_rows: number
+          p_import_id: string
+        }
+        Returns: Json
+      }
+      resolve_release_offer_row: {
+        Args: {
+          p_import_id: string
+          p_parent_sku: string
+          p_source_row_number: number
+        }
         Returns: Json
       }
       search_producers: {
@@ -1067,6 +1677,8 @@ export type Database = {
           producer: string
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       stage_bbr_import: {
         Args: {
           p_byte_size: number
@@ -1079,8 +1691,10 @@ export type Database = {
         }
         Returns: Json
       }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
+      stage_release_offer_batch: {
+        Args: { p_import_id: string; p_rows: Json }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
@@ -1209,9 +1823,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
