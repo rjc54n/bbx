@@ -27,6 +27,30 @@ function csv(...rows: string[]): string {
   return ["Date,Wine,Case Price,JSON_Data", ...rows].join("\n");
 }
 
+function csvRowWithParentSku(overrides: Partial<Record<string, string>> = {}): string {
+  const values = {
+    Date: "19/05/2010",
+    Wine: "Château Poujeaux 2009",
+    "Case Price": "£210 per case 12 Bottles",
+    JSON_Data: JSON.stringify({
+      date: "2010-05-19",
+      wine: "Château Poujeaux 2009",
+      description: "Offer description",
+      tasting_notes: "Tasting note",
+    }),
+    parent_sku: "12345678901",
+    BBR_URL: "https://www.bbr.com/products-12345678901-chateau-poujeaux",
+    ...overrides,
+  };
+  return ["Date", "Wine", "Case Price", "JSON_Data", "parent_sku", "BBR_URL"]
+    .map((header) => `"${values[header as keyof typeof values].replaceAll('"', '""')}"`)
+    .join(",");
+}
+
+function csvWithParentSku(...rows: string[]): string {
+  return ["Date,Wine,Case Price,JSON_Data,parent_sku,BBR_URL", ...rows].join("\n");
+}
+
 describe("release-offer CSV parser", () => {
   it("preserves the source row and extracts each format-specific price", () => {
     const [row] = parseReleaseOfferCsv(csv(csvRow()));
@@ -114,5 +138,89 @@ describe("release wine match key", () => {
   it("removes accents, punctuation and a vintage", () => {
     expect(releaseWineMatchKey("2007 Le Musigny, Grand Cru, Domaine J-F Mugnier"))
       .toBe("le musigny grand cru domaine j f mugnier");
+  });
+});
+
+describe("the six-column parent_sku source contract", () => {
+  it("accepts the new header alongside the legacy four-column header", () => {
+    const [row] = parseReleaseOfferCsv(csvWithParentSku(csvRowWithParentSku()));
+    expect(row.source_product_id).toBe("12345678901");
+    expect(row.source_product_url).toBe("https://www.bbr.com/products-12345678901-chateau-poujeaux");
+  });
+
+  it("prefers the CSV parent_sku column over JSON_Data.source_product_id and a scraped link", () => {
+    const [row] = parseReleaseOfferCsv(csvWithParentSku(csvRowWithParentSku({
+      parent_sku: "10000000001",
+      JSON_Data: JSON.stringify({
+        date: "2010-05-19",
+        wine: "Château Poujeaux 2009",
+        description: "See https://www.bbr.com/products-99999999999-chateau-poujeaux",
+        tasting_notes: "",
+        source_product_id: "20000000002",
+      }),
+    })));
+    expect(row.source_product_id).toBe("10000000001");
+  });
+
+  it("falls back to JSON_Data.source_product_id when parent_sku is not a valid numeric ID", () => {
+    const [row] = parseReleaseOfferCsv(csvWithParentSku(csvRowWithParentSku({
+      parent_sku: "not-a-number",
+      JSON_Data: JSON.stringify({
+        date: "2010-05-19",
+        wine: "Château Poujeaux 2009",
+        description: "",
+        tasting_notes: "",
+        source_product_id: "20000000002",
+      }),
+    })));
+    expect(row.source_product_id).toBe("20000000002");
+    expect(row.validation_warnings).toContain(
+      "The parent_sku column is not a supported numeric BBR Parent ID.",
+    );
+  });
+
+  it("falls back to a scraped bbr.com link when parent_sku and JSON_Data.source_product_id are both absent", () => {
+    const [row] = parseReleaseOfferCsv(csvWithParentSku(csvRowWithParentSku({
+      parent_sku: "",
+      BBR_URL: "",
+      JSON_Data: JSON.stringify({
+        date: "2010-05-19",
+        wine: "Château Poujeaux 2009",
+        description: "See https://www.bbr.com/products-30000000003-chateau-poujeaux",
+        tasting_notes: "",
+      }),
+    })));
+    expect(row.source_product_id).toBe("30000000003");
+  });
+
+  it("rejects a BBR_URL whose host is not bbr.com and does not store it", () => {
+    const [row] = parseReleaseOfferCsv(csvWithParentSku(csvRowWithParentSku({
+      parent_sku: "",
+      BBR_URL: "https://example.com/products-12345678901-chateau-poujeaux",
+      JSON_Data: JSON.stringify({
+        date: "2010-05-19",
+        wine: "Château Poujeaux 2009",
+        description: "",
+        tasting_notes: "",
+      }),
+    })));
+    expect(row.source_product_url).toBeNull();
+    expect(row.source_product_id).toBeNull();
+    expect(row.validation_warnings).toContain("BBR_URL is not a valid bbr.com product link.");
+  });
+
+  it("stores a bbr.com BBR_URL as source_product_url even without a resolvable product ID", () => {
+    const [row] = parseReleaseOfferCsv(csvWithParentSku(csvRowWithParentSku({
+      parent_sku: "",
+      BBR_URL: "https://www.bbr.com/offers/current-en-primeur",
+      JSON_Data: JSON.stringify({
+        date: "2010-05-19",
+        wine: "Château Poujeaux 2009",
+        description: "",
+        tasting_notes: "",
+      }),
+    })));
+    expect(row.source_product_url).toBe("https://www.bbr.com/offers/current-en-primeur");
+    expect(row.source_product_id).toBeNull();
   });
 });

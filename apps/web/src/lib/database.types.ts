@@ -812,20 +812,6 @@ export type Database = {
             referencedRelation: "release_offer_imports"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["parent_sku"]
-          },
         ]
       }
       release_price_anchor_overrides: {
@@ -1485,20 +1471,6 @@ export type Database = {
             referencedRelation: "release_offer_imports"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["parent_sku"]
-          },
         ]
       }
       release_price_anchor_view: {
@@ -1512,22 +1484,7 @@ export type Database = {
           source_product_url: string | null
           source_wine: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["parent_sku"]
-          },
-        ]
+        Relationships: []
       }
       release_price_market_view: {
         Row: {
@@ -1560,22 +1517,7 @@ export type Database = {
           source_wine: string | null
           vintage: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "release_offer_source_rows_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["parent_sku"]
-          },
-        ]
+        Relationships: []
       }
       scan_health_view: {
         Row: {

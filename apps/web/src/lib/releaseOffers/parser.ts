@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { parse } from "csv-parse/sync";
 
-export const RELEASE_OFFER_PARSER_VERSION = "release-offers-v1";
+export const RELEASE_OFFER_PARSER_VERSION = "release-offers-v2";
 export const RELEASE_OFFER_MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const RELEASE_OFFER_MAX_ROWS = 10_000;
 
@@ -10,6 +10,15 @@ export const RELEASE_OFFER_HEADERS = [
   "Wine",
   "Case Price",
   "JSON_Data",
+] as const;
+
+export const RELEASE_OFFER_HEADERS_WITH_PARENT_SKU = [
+  "Date",
+  "Wine",
+  "Case Price",
+  "JSON_Data",
+  "parent_sku",
+  "BBR_URL",
 ] as const;
 
 type RawRow = Record<string, string>;
@@ -235,6 +244,22 @@ function directBbrProductLink(values: Array<string | null>): {
   return { url: null, productId: null };
 }
 
+function parseBbrUrlColumn(value: string | null): {
+  url: string | null;
+  productId: string | null;
+} {
+  if (!value) return { url: null, productId: null };
+  try {
+    const url = new URL(value.replace(/[.,;:]+$/, ""));
+    if (!/^https?:$/i.test(url.protocol)) return { url: null, productId: null };
+    if (!/(^|\.)bbr\.com$/i.test(url.hostname)) return { url: null, productId: null };
+    const productId = url.pathname.match(/\/products?-([0-9]{5,30})(?:\b|[-/])/i)?.[1] ?? null;
+    return { url: url.toString(), productId };
+  } catch {
+    return { url: null, productId: null };
+  }
+}
+
 function parseRow(raw: RawRow, sourceRowNumber: number): ParsedReleaseOfferRow {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -271,10 +296,36 @@ function parseRow(raw: RawRow, sourceRowNumber: number): ParsedReleaseOfferRow {
 
   const explicitUrl = nullableText(sourceJson.source_product_url);
   const directLink = directBbrProductLink([explicitUrl, description, tastingNotes]);
-  const sourceProductId = nullableText(sourceJson.source_product_id) ?? directLink.productId;
-  if (sourceProductId && !/^\d{5,30}$/.test(sourceProductId)) {
-    warnings.push("The source product ID is not a supported numeric BBR Parent ID.");
+  const csvBbrUrlText = nullableText(raw.BBR_URL);
+  const csvBbrUrl = parseBbrUrlColumn(csvBbrUrlText);
+  if (csvBbrUrlText && !csvBbrUrl.url) {
+    warnings.push("BBR_URL is not a valid bbr.com product link.");
   }
+
+  // Precedence for the tier-1 direct match key: CSV parent_sku, then
+  // JSON_Data.source_product_id, then a resolved bbr.com link (the CSV
+  // BBR_URL column first, falling back to a link scraped from JSON_Data).
+  const csvParentSku = nullableText(raw.parent_sku);
+  let sourceProductId: string | null = null;
+  if (csvParentSku) {
+    if (/^\d{5,30}$/.test(csvParentSku)) {
+      sourceProductId = csvParentSku;
+    } else {
+      warnings.push("The parent_sku column is not a supported numeric BBR Parent ID.");
+    }
+  }
+  if (!sourceProductId) {
+    const jsonProductId = nullableText(sourceJson.source_product_id);
+    if (jsonProductId) {
+      if (/^\d{5,30}$/.test(jsonProductId)) {
+        sourceProductId = jsonProductId;
+      } else {
+        warnings.push("The source product ID is not a supported numeric BBR Parent ID.");
+      }
+    }
+  }
+  if (!sourceProductId) sourceProductId = csvBbrUrl.productId ?? directLink.productId;
+  const sourceProductUrl = csvBbrUrl.url ?? directLink.url;
 
   const fingerprint = sha256([
     offerDate ?? dateText,
@@ -300,10 +351,8 @@ function parseRow(raw: RawRow, sourceRowNumber: number): ParsedReleaseOfferRow {
     description,
     tasting_notes: tastingNotes,
     source_message_id: nullableText(sourceJson.source_message_id),
-    source_product_url: directLink.url,
-    source_product_id: sourceProductId && /^\d{5,30}$/.test(sourceProductId)
-      ? sourceProductId
-      : null,
+    source_product_url: sourceProductUrl,
+    source_product_id: sourceProductId,
     content_fingerprint: fingerprint,
     validation_errors: errors,
     validation_warnings: warnings,
@@ -317,9 +366,12 @@ export function parseReleaseOfferCsv(csvText: string): ParsedReleaseOfferRow[] {
     records = parse(csvText, {
       bom: true,
       columns: (headers: string[]) => {
-        if (JSON.stringify(headers) !== JSON.stringify(RELEASE_OFFER_HEADERS)) {
+        const isLegacy = JSON.stringify(headers) === JSON.stringify(RELEASE_OFFER_HEADERS);
+        const isCurrent = JSON.stringify(headers) === JSON.stringify(RELEASE_OFFER_HEADERS_WITH_PARENT_SKU);
+        if (!isLegacy && !isCurrent) {
           throw new ReleaseOfferFileError(
-            `Unexpected headers. Expected: ${RELEASE_OFFER_HEADERS.join(", ")}.`,
+            `Unexpected headers. Expected: ${RELEASE_OFFER_HEADERS.join(", ")} `
+              + `or ${RELEASE_OFFER_HEADERS_WITH_PARENT_SKU.join(", ")}.`,
           );
         }
         return headers;
