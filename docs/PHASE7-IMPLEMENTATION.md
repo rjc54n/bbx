@@ -22,38 +22,21 @@ must say this beside the result.
 original private Storage object. Gmail ingestion is not part of this workflow.
 
 `release_offer_source_rows` preserves every source row, including duplicates.
-`release_offer_product_resolutions` stores link, ignore and manual decisions.
+After approval, every source row is visible in the Release offers tab. A
+catalogue link is not a publication condition.
 
 `release_offer_prices` stores one record per GBP price fragment. The parser
-records amount, case size, bottle volume, tax basis and warnings. A fragment is
-published only after the import is accepted and all these conditions hold:
+records amount, case size, bottle volume, tax basis and warnings. Raw price
+fragments remain attached to their source row. They are not converted or
+guessed.
 
-- the product match is exact or manually confirmed;
-- the case size and bottle volume map to an existing BBX format;
-- the amount is explicit; and
-- the price states that it is in bond.
+## Deferred matching
 
-Duty-paid, incomplete and ambiguous prices remain pending evidence. They are
-not converted or guessed.
-
-The analytical evidence view removes duplicates at product, format, offer
-date and amount grain. It never deletes the underlying source rows.
-
-## Matching
-
-Matching order is:
-
-1. a numeric Parent ID obtained from a source or resolved BBR product URL;
-2. one unique catalogue product with the same vintage and normalised name;
-3. manual confirmation using the Parent ID; or
-4. unresolved, with up to three trigram candidates shown for review.
-
-Candidate similarity is a review aid. It never publishes evidence.
-
-Personalised promotion links may be followed when needed to resolve a product.
-The job follows a unique link once, applies a request delay, accepts only known
-BBR or mail-tracking hosts and requires the final URL to be on `bbr.com`.
-Tokens remain confined to raw evidence and are excluded from logs and reports.
+Matching, manual links, ignored records and re-matching belong on a future
+whole-dataset Match page. It must operate across all accepted imports, never
+one import at a time. The initial matching sequence remains supplied BBR Parent
+ID, then unique exact name and vintage, then unresolved. Probabilistic matching
+is out of scope.
 
 ## Anchors and comparisons
 
@@ -74,25 +57,22 @@ ceil(release_price_p / 90) * 100
 
 ## Web workflow
 
-The protected application has a fourth primary tab, `Release prices`.
-It provides URL-backed filters for wine, region, vintage, format, anchor state,
-listing state, current bid and an ask below release. The history page shows all
-accepted exact evidence and supports confirming an anchor.
+The protected application has a `Release offers` tab. It lists every accepted
+source record, its original price text, parsed-fragment counts and any existing
+link state. The page is paginated past the Data API response cap.
 
-`Import data` links to the release-offer import. The upload flow validates the
-four-column UTF-8 CSV, stores the source privately, stages batches safely,
-shows unresolved rows and parsing samples, and requires explicit acceptance.
+`Import offers` links to the release-offer import. The upload flow validates
+the UTF-8 CSV, stores the source privately, stages batches safely, shows
+parsing samples and requires explicit acceptance.
 Uploading the same checksum and parser version returns the existing import.
 An interrupted staging import resumes idempotently when the same file is sent
 again.
 
-## Reset and matching
+## Reset
 
 Delete an import to remove its source rows, parsed fragments and product-link
 decisions. The private Storage object is removed first, so a Storage failure
-leaves the import available for retry. Match staged or accepted imports at any
-time: supplied BBR ID, then unique exact name and vintage, then unresolved.
-Manual links and ignored rows override later automatic runs.
+leaves the import available for retry.
 
 ## Security and tests
 
@@ -106,9 +86,7 @@ Acceptance requires:
 - the production build passes;
 - the migration chain replays on clean PostgreSQL;
 - pgTAP covers owner, non-owner and anonymous access, import staging,
-  publication gates, deduplication, current-market joins, recoup maths,
-  resolution and anchor confirmation;
+  accepted-offer visibility and import deletion;
 - the representative 3,288-row file can be uploaded twice without duplicated
   evidence; and
-- production counts and the first Gmail backfill are reviewed before the
-  weekly task is enabled.
+- production accepted-offer counts are checked after import.

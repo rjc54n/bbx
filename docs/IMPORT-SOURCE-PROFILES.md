@@ -127,17 +127,10 @@ retain the original price text and JSON beside any parsed amount, case size,
 bottle volume and currency.
 
 These records prove that a wine was offered at the stated price. They do not
-prove that it was purchased. Product matching uses vintage plus the source
-name, retains unresolved rows and records the matching method and confidence.
-Direct numeric BBR product identifiers take precedence when a source or
-resolved promotion URL supplies one.
-
-Personalised BBR promotion links may be followed when more information is
-needed. Automated ingestion follows each unique link at most once, accepts
-only known BBR or mail-tracking hosts, rate-limits requests and requires the
-final destination to be on `bbr.com`. Tracking tokens are never logged or
-stored outside the immutable raw source evidence. The resolved public BBR
-product URL and numeric product ID are stored separately for matching.
+prove that it was purchased. Accepted records remain visible without a product
+link. A later Match page will link the complete accepted dataset to the
+catalogue. Direct numeric BBR product identifiers will take precedence over a
+unique exact name and vintage match.
 
 ## Import boundary
 

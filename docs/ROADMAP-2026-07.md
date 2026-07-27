@@ -244,23 +244,20 @@ actual cellar requirement.
 
 ### Phase 7: Release-price connector
 
-**In progress, 2026-07-26:** the owner-only release-offer schema, historic CSV
-parser, import review flow, exact evidence publication, release-price browser
-and current BBX comparison view are implemented. The migrations are live.
-The first historic import, production browser acceptance and weekly Gmail task
-remain rollout work.
+**In progress, 2026-07-27:** the owner-only release-offer schema, manual CSV
+parser and import review flow are live. Accepted source records are visible
+before catalogue matching. Gmail ingestion is removed.
 
 Value is in **anchoring bids on purchases**, not in P&L on existing holdings.
 
-- Gmail connector, incremental, replacing the one-off Takeout extraction.
 - Extract one row per `(offer_date, wine, format)`. 696 of 3,288 rows price
   multiple formats in one string and that content is the format-premium signal.
 - Preserve all source rows, including the 121 exact duplicates in the
   representative file. Deduplicate the normalised offer evidence by content
   fingerprint rather than deleting raw provenance.
-- Match by a resolved BBR product ID first, then unique exact normalised name
-  and vintage. Store up to three trigram candidates for review. Unmatched rows
-  stay queryable and can be resolved manually.
+- Build a Match page for the complete accepted-offer dataset. It will manage
+  resolved BBR Parent IDs, exact name and vintage matches, manual links and
+  ignored records without requiring users to revisit each import.
 - Distinguish release from re-offer by offer date versus vintage.
 - Use CellarTracker purchase history as evidence of what we paid. Use release
   emails as evidence of what was offered to the market. Do not collapse those
