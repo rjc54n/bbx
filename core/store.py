@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from core.db import is_postgres, placeholder, placeholders, _adapt_array_param, _parse_array_column
 from core.models import ObservationEvent, Offer, Product, Sku, _now_utc, _uuid
@@ -49,7 +49,9 @@ def start_run(conn, *, scope: str, run_date: str) -> Optional[str]:
     return run_id
 
 
-def get_last_completed_run_finished_at(conn, *, scope: str) -> Optional[str]:
+def get_last_completed_run_finished_at(
+    conn, *, scope: str
+) -> Optional[Union[str, datetime]]:
     """Most recent completed run's finished_at for this scope, or None if
     there isn't one yet (e.g. the very first run). Phase 4 wave pricing uses
     this as the baseline for index_last_update delta selection -- with no

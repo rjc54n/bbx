@@ -11,7 +11,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from core.db import bootstrap_schema
 from core.fetch_listings import FetchResult, fetch_biddable_universe
@@ -88,17 +88,20 @@ def parse_index_last_update(raw: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _parse_run_finished_at(raw: Optional[str]) -> Optional[datetime]:
-    """Parse scan_runs.finished_at (an ISO8601 string from _now_utc(), always
-    UTC-aware) into a naive datetime comparable with parse_index_last_update's
-    output. index_last_update carries no timezone info at all, so this is
-    necessarily an approximate comparison (off by up to an hour around BST
-    transitions) -- acceptable for delta selection, which only needs
-    "roughly since last time", not a hard audit boundary.
+def _parse_run_finished_at(
+    raw: Optional[Union[str, datetime]],
+) -> Optional[datetime]:
+    """Normalise scan_runs.finished_at into a naive UTC datetime.
+
+    SQLite returns the stored ISO8601 text, while psycopg2 decodes Postgres
+    TIMESTAMPTZ columns to timezone-aware datetime objects. index_last_update
+    carries no timezone info at all, so the comparison remains approximate
+    around BST transitions. That is acceptable for delta selection, which
+    only needs "roughly since last time", not a hard audit boundary.
     """
     if not raw:
         return None
-    dt = datetime.fromisoformat(raw)
+    dt = raw if isinstance(raw, datetime) else datetime.fromisoformat(raw)
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt

@@ -1,6 +1,6 @@
 """Integration tests for core.sweep — daily sweep orchestration against SQLite."""
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -18,6 +18,7 @@ from core.sweep import (
     _extract_products,
     _extract_skus,
     _known_format_codes_by_sku,
+    _parse_run_finished_at,
     _sku_rotation_bucket,
     parse_index_last_update,
     rotation_bucket_for_date,
@@ -329,6 +330,26 @@ def _biddable_hit(parent_sku, index_last_update=None):
     return {"parent_sku": parent_sku, "index_last_update": index_last_update}
 
 
+class TestParseRunFinishedAt:
+    def test_parses_sqlite_iso8601_string(self):
+        assert _parse_run_finished_at("2026-07-26T06:00:00+01:00") == datetime(
+            2026, 7, 26, 5, 0,
+        )
+
+    def test_accepts_postgres_datetime(self):
+        postgres_value = datetime(
+            2026, 7, 26, 6, 0,
+            tzinfo=timezone(timedelta(hours=1)),
+        )
+
+        assert _parse_run_finished_at(postgres_value) == datetime(
+            2026, 7, 26, 5, 0,
+        )
+
+    def test_none_stays_none(self):
+        assert _parse_run_finished_at(None) is None
+
+
 class TestSelectBiddableRestPricing:
     def test_delta_disabled_by_default_prices_rotation_only(self):
         # SKU2's index_last_update is after last_run, so delta WOULD select
@@ -520,6 +541,31 @@ class TestRunDailySweep:
         offer = list(offers.values())[0]
         assert offer["parent_sku"] == "SKU1"
         assert offer["price_per_case_p"] == 25000
+
+    def test_postgres_datetime_baseline_does_not_crash(self, conn, monkeypatch):
+        hits = [_hit("SKU1")]
+        rest = _rest_entries("SKU1")
+        _patch_fetchers(monkeypatch, hits, rest)
+        monkeypatch.setattr(
+            sweep,
+            "get_last_completed_run_finished_at",
+            lambda *args, **kwargs: datetime(
+                2026, 7, 26, 6, 0, tzinfo=timezone.utc,
+            ),
+        )
+
+        run_id = run_daily_sweep(
+            conn,
+            algolia_app_id="app",
+            algolia_api_key="key",
+            run_date="2026-07-27",
+        )
+
+        assert run_id is not None
+        row = conn.execute(
+            "SELECT status FROM scan_runs WHERE id = ?", (run_id,),
+        ).fetchone()
+        assert row["status"] == "completed"
 
     def test_completed_run_blocks_second(self, conn, monkeypatch):
         hits = [_hit("SKU1")]
