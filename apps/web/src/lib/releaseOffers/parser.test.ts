@@ -224,3 +224,30 @@ describe("the six-column parent_sku source contract", () => {
     expect(row.source_product_id).toBeNull();
   });
 });
+
+describe("malformed rows", () => {
+  it("quarantines a flattened offer table by its header signature", () => {
+    const [row] = parseReleaseOfferCsv(csv(csvRow({
+      Wine: "VintageWineCase sizeBottle SizeAvailable CasesPrice per case IB2005Château Batailley, Pauillac, Bordeaux1275cl6",
+      "Case Price": "£6002005Château Branaire-Ducru, St Julien1275cl2£3,2522005Château Haut-Brion, Pessac1275cl1",
+    })));
+    expect(row.prices).toEqual([]);
+    expect(row.validation_errors).toEqual([]);
+    expect(row.validation_warnings.some((w) => /flattened offer table/i.test(w))).toBe(true);
+  });
+
+  it("quarantines a row whose price overflows int4, without the header signature", () => {
+    const [row] = parseReleaseOfferCsv(csv(csvRow({
+      Wine: "Château Haut-Brion 2005",
+      "Case Price": "£3,2522005 in bond",
+    })));
+    expect(row.prices).toEqual([]);
+    expect(row.validation_warnings.some((w) => /flattened offer table/i.test(w))).toBe(true);
+  });
+
+  it("still extracts prices from a normal multi-format row", () => {
+    const [row] = parseReleaseOfferCsv(csv(csvRow()));
+    expect(row.prices.length).toBeGreaterThan(0);
+    expect(row.prices.every((p) => p.amount_p === null || p.amount_p <= 2_147_483_647)).toBe(true);
+  });
+});

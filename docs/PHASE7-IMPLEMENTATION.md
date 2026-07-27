@@ -1,7 +1,6 @@
 # Phase 7 implementation: BBR release prices
 
-**Status:** backend and web workflow implemented and database migrations
-applied on 2026-07-26; first historic import and weekly Gmail task pending
+**Status:** manual CSV import and independent product linking.
 **Source contract:** `IMPORT-SOURCE-PROFILES.md`
 
 ## Outcome
@@ -19,14 +18,11 @@ must say this beside the result.
 
 ## Evidence and publication
 
-`release_offer_imports` records historic CSV and Gmail batches. Historic CSV
-imports retain the original private Storage object. Gmail imports retain the
-complete source message fields in raw source-row evidence and do not invent a
-file object.
+`release_offer_imports` records manual historic CSV imports and retains the
+original private Storage object. Gmail ingestion is not part of this workflow.
 
 `release_offer_source_rows` preserves every source row, including duplicates.
-It stores the raw row, offer date, source wine, embedded description and
-tasting notes, message identity, source product link and matching result.
+`release_offer_product_resolutions` stores link, ignore and manual decisions.
 
 `release_offer_prices` stores one record per GBP price fragment. The parser
 records amount, case size, bottle volume, tax basis and warnings. A fragment is
@@ -90,27 +86,13 @@ Uploading the same checksum and parser version returns the existing import.
 An interrupted staging import resumes idempotently when the same file is sent
 again.
 
-## Gmail ingestion
+## Reset and matching
 
-The weekly job uses the Gmail and Supabase connectors. Its search is:
-
-```text
-label:Wine from:bbr.com -in:trash -in:spam
-```
-
-The job uses a high-water mark with a two-day overlap and paginates to the end.
-It advances the high-water mark only after the database batch has been
-verified. Exact evidence may be accepted. Ambiguous products, formats or tax
-bases remain pending.
-
-`release_offer_ingestion_cursors` stores the successful Gmail high-water mark.
-`release_offer_link_resolutions` stores only a SHA-256 digest of each tracking
-URL plus its public final product URL or failure state. This prevents repeated
-clicks without copying personalised tokens into operational state.
-
-The first job is a manual backfill after the historic file's final date,
-2026-05-11. The proposed recurring time is Monday at 08:30 Europe/London.
-Review the first three weekly runs before treating the job as unattended.
+Delete an import to remove its source rows, parsed fragments and product-link
+decisions. The private Storage object is removed first, so a Storage failure
+leaves the import available for retry. Match staged or accepted imports at any
+time: supplied BBR ID, then unique exact name and vintage, then unresolved.
+Manual links and ignored rows override later automatic runs.
 
 ## Security and tests
 

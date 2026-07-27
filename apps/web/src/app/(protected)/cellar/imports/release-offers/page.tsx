@@ -12,16 +12,11 @@ function dateTime(value: string): string {
   }).format(new Date(value));
 }
 
-export default async function ReleaseOfferImportsPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const query = await searchParams;
+export default async function ReleaseOfferImportsPage() {
   const { supabase } = await requireOwner();
   const { data, error } = await supabase
     .from("release_offer_imports")
-    .select("id, original_filename, imported_at, status, source_row_count, priced_fragment_count, matched_row_count, unmatched_row_count")
+    .select("id, original_filename, imported_at, status, source_row_count, priced_fragment_count")
     .order("imported_at", { ascending: false })
     .limit(20);
   if (error) throw new Error("Release-offer imports could not be loaded.");
@@ -41,12 +36,10 @@ export default async function ReleaseOfferImportsPage({
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Release-price evidence</p>
           <h1 className="mt-1 text-2xl font-semibold">Import BBR offers</h1>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-            The source file is kept unchanged. Prices are split by format and remain pending unless the product, format and in-bond basis are exact.
+            Manual CSV imports only. Source rows and parsed price fragments remain separate from product links.
           </p>
         </header>
-        <ReleaseOfferUploadForm
-          error={typeof query.error === "string" ? query.error : undefined}
-        />
+        <ReleaseOfferUploadForm />
         <section className="rounded-lg border border-border bg-background">
           <h2 className="border-b border-border px-5 py-3 font-semibold">Recent imports</h2>
           {data?.length ? (
@@ -63,8 +56,10 @@ export default async function ReleaseOfferImportsPage({
                   </div>
                   <p className="mt-1 text-xs text-ink-muted">
                     {item.status === "staging"
-                      ? `${dateTime(item.imported_at)} · preparation paused, open this import to see the staged row count`
-                      : `${dateTime(item.imported_at)} · ${item.source_row_count.toLocaleString()} rows · ${item.priced_fragment_count.toLocaleString()} price fragments · ${item.matched_row_count.toLocaleString()} matched · ${item.unmatched_row_count.toLocaleString()} unresolved`}
+                      ? `${dateTime(item.imported_at)} · staging in progress, open this import to see the staged row count`
+                      : item.status === "staged"
+                        ? `${dateTime(item.imported_at)} · ${item.source_row_count.toLocaleString()} rows staged, awaiting matching`
+                        : `${dateTime(item.imported_at)} · ${item.source_row_count.toLocaleString()} source rows · ${item.priced_fragment_count.toLocaleString()} price fragments`}
                   </p>
                 </Link>
               ))}

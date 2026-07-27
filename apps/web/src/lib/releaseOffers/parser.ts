@@ -2,8 +2,15 @@ import { createHash } from "node:crypto";
 import { parse } from "csv-parse/sync";
 
 export const RELEASE_OFFER_PARSER_VERSION = "release-offers-v2";
-export const RELEASE_OFFER_MAX_FILE_BYTES = 4 * 1024 * 1024;
+export const RELEASE_OFFER_MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const RELEASE_OFFER_MAX_ROWS = 10_000;
+
+// PostgreSQL int4 ceiling for release_offer_prices.amount_p (pence). Any parsed
+// amount above this is never a real case price: it comes from a flattened offer
+// table where a price runs straight into the following vintage (e.g. the token
+// "£3,2522005" -> 3,252,200,500p). Guarding the value here stops one malformed
+// row from aborting the entire staged batch at the integer column.
+const INT4_MAX_PENCE = 2_147_483_647;
 
 export const RELEASE_OFFER_HEADERS = [
   "Date",
@@ -183,12 +190,17 @@ function formatCode(caseSize: number | null, bottleVolumeMl: number | null): str
   return `${String(caseSize).padStart(2, "0")}-${String(bottleVolumeMl).padStart(5, "0")}`;
 }
 
+function rawAmountPence(fragment: string): number | null {
+  const money = fragment.match(/£\s*([\d,]+(?:\.\d{1,2})?)/);
+  if (!money) return null;
+  const value = Math.round(Number(money[1].replaceAll(",", "")) * 100);
+  return Number.isFinite(value) ? value : null;
+}
+
 function parsePrice(fragment: string, index: number, rowFingerprint: string): ReleaseOfferPrice {
   const warnings: string[] = [];
-  const money = fragment.match(/£\s*([\d,]+(?:\.\d{1,2})?)/);
-  const amountP = money
-    ? Math.round(Number(money[1].replaceAll(",", "")) * 100)
-    : null;
+  const raw = rawAmountPence(fragment);
+  const amountP = raw !== null && raw <= INT4_MAX_PENCE ? raw : null;
   const { caseSize, bottleVolumeMl } = inferFormat(fragment);
   const lower = fragment.toLowerCase();
   const taxBasis = /\b(?:in|under)\s+bond\b|\bib\b/.test(lower)
@@ -336,9 +348,26 @@ function parseRow(raw: RawRow, sourceRowNumber: number): ParsedReleaseOfferRow {
     nullableText(sourceJson.source_message_id) ?? "",
   ].join("\u001f"));
   const fragments = priceFragments(sourcePriceText);
-  if (fragments.length === 0 && sourcePriceText) {
+  // A flattened offer table (several wines concatenated into the Case Price
+  // cell with no delimiter) makes every extracted fragment nonsense -- prices
+  // run straight into the following vintage. Quarantine the whole row: keep it
+  // as raw evidence, extract no prices, and flag it, rather than staging dozens
+  // of fabricated amounts (or overflowing amount_p). A single over-int4 amount
+  // is a reliable tell even when the header signature is absent.
+  const looksFlattened =
+    /vintage\s*wine\s*case\s*size/i.test(wine)
+    || fragments.some((fragment) => (rawAmountPence(fragment) ?? 0) > INT4_MAX_PENCE);
+  if (looksFlattened) {
+    warnings.push(
+      "The Case Price column looks like a flattened offer table (several wines run together), "
+        + "so no prices were extracted. The row is kept as raw evidence for manual review.",
+    );
+  } else if (fragments.length === 0 && sourcePriceText) {
     warnings.push("No GBP price fragment was found.");
   }
+  const prices = looksFlattened
+    ? []
+    : fragments.map((fragment, index) => parsePrice(fragment, index + 1, fingerprint));
 
   return {
     source_row_number: sourceRowNumber,
@@ -356,7 +385,7 @@ function parseRow(raw: RawRow, sourceRowNumber: number): ParsedReleaseOfferRow {
     content_fingerprint: fingerprint,
     validation_errors: errors,
     validation_warnings: warnings,
-    prices: fragments.map((fragment, index) => parsePrice(fragment, index + 1, fingerprint)),
+    prices,
   };
 }
 

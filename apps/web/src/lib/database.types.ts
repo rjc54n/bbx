@@ -547,121 +547,56 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
-          byte_size: number | null
+          byte_size: number
           content_checksum: string
           error_row_count: number
           failure_summary: string | null
           id: string
           imported_at: string
           imported_by: string
-          matched_row_count: number
           original_filename: string
           parser_version: string
           priced_fragment_count: number
           source_row_count: number
-          source_type: string
           status: string
-          storage_object_path: string | null
-          unmatched_row_count: number
+          storage_object_path: string
           warning_row_count: number
         }
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
-          byte_size?: number | null
+          byte_size: number
           content_checksum: string
           error_row_count?: number
           failure_summary?: string | null
           id: string
           imported_at?: string
           imported_by: string
-          matched_row_count?: number
           original_filename: string
           parser_version: string
           priced_fragment_count?: number
           source_row_count?: number
-          source_type: string
           status?: string
-          storage_object_path?: string | null
-          unmatched_row_count?: number
+          storage_object_path: string
           warning_row_count?: number
         }
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
-          byte_size?: number | null
+          byte_size?: number
           content_checksum?: string
           error_row_count?: number
           failure_summary?: string | null
           id?: string
           imported_at?: string
           imported_by?: string
-          matched_row_count?: number
           original_filename?: string
           parser_version?: string
           priced_fragment_count?: number
           source_row_count?: number
-          source_type?: string
           status?: string
-          storage_object_path?: string | null
-          unmatched_row_count?: number
+          storage_object_path?: string
           warning_row_count?: number
-        }
-        Relationships: []
-      }
-      release_offer_ingestion_cursors: {
-        Row: {
-          last_import_id: string | null
-          last_successful_message_at: string | null
-          last_successful_message_id: string | null
-          source_type: string
-          updated_at: string
-        }
-        Insert: {
-          last_import_id?: string | null
-          last_successful_message_at?: string | null
-          last_successful_message_id?: string | null
-          source_type: string
-          updated_at?: string
-        }
-        Update: {
-          last_import_id?: string | null
-          last_successful_message_at?: string | null
-          last_successful_message_id?: string | null
-          source_type?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "release_offer_ingestion_cursors_last_import_id_fkey"
-            columns: ["last_import_id"]
-            isOneToOne: false
-            referencedRelation: "release_offer_imports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      release_offer_link_resolutions: {
-        Row: {
-          attempted_at: string
-          final_product_url: string | null
-          source_product_id: string | null
-          status: string
-          tracking_url_sha256: string
-        }
-        Insert: {
-          attempted_at?: string
-          final_product_url?: string | null
-          source_product_id?: string | null
-          status: string
-          tracking_url_sha256: string
-        }
-        Update: {
-          attempted_at?: string
-          final_product_url?: string | null
-          source_product_id?: string | null
-          status?: string
-          tracking_url_sha256?: string
         }
         Relationships: []
       }
@@ -677,9 +612,7 @@ export type Database = {
           import_id: string
           parse_status: string
           price_fingerprint: string
-          publication_status: string
           raw_price_text: string
-          rejection_reason: string | null
           source_row_number: number
           tax_basis: string
           validation_warnings: Json
@@ -695,9 +628,7 @@ export type Database = {
           import_id: string
           parse_status: string
           price_fingerprint: string
-          publication_status?: string
           raw_price_text: string
-          rejection_reason?: string | null
           source_row_number: number
           tax_basis: string
           validation_warnings?: Json
@@ -713,9 +644,7 @@ export type Database = {
           import_id?: string
           parse_status?: string
           price_fingerprint?: string
-          publication_status?: string
           raw_price_text?: string
-          rejection_reason?: string | null
           source_row_number?: number
           tax_basis?: string
           validation_warnings?: Json
@@ -737,16 +666,57 @@ export type Database = {
           },
         ]
       }
+      release_offer_product_resolutions: {
+        Row: {
+          import_id: string
+          match_method: string | null
+          parent_sku: string | null
+          resolved_at: string
+          resolved_by: string | null
+          source_row_number: number
+          status: string
+        }
+        Insert: {
+          import_id: string
+          match_method?: string | null
+          parent_sku?: string | null
+          resolved_at?: string
+          resolved_by?: string | null
+          source_row_number: number
+          status: string
+        }
+        Update: {
+          import_id?: string
+          match_method?: string | null
+          parent_sku?: string | null
+          resolved_at?: string
+          resolved_by?: string | null
+          source_row_number?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_product_resoluti_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "release_offer_evidence_view"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "release_offer_product_resoluti_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "release_offer_source_rows"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+        ]
+      }
       release_offer_source_rows: {
         Row: {
           content_fingerprint: string
           description: string | null
           import_id: string
-          match_candidates: Json
-          match_method: string | null
-          match_status: string
           offer_date: string
-          parent_sku: string | null
           raw_row: Json
           source_match_key: string
           source_message_id: string | null
@@ -764,11 +734,7 @@ export type Database = {
           content_fingerprint: string
           description?: string | null
           import_id: string
-          match_candidates?: Json
-          match_method?: string | null
-          match_status?: string
           offer_date: string
-          parent_sku?: string | null
           raw_row: Json
           source_match_key: string
           source_message_id?: string | null
@@ -786,11 +752,7 @@ export type Database = {
           content_fingerprint?: string
           description?: string | null
           import_id?: string
-          match_candidates?: Json
-          match_method?: string | null
-          match_status?: string
           offer_date?: string
-          parent_sku?: string | null
           raw_row?: Json
           source_match_key?: string
           source_message_id?: string | null
@@ -1587,16 +1549,27 @@ export type Database = {
           p_import_id: string
           p_original_filename: string
           p_parser_version: string
-          p_source_type: string
           p_storage_object_path: string
         }
+        Returns: Json
+      }
+      clear_release_offer_product_resolution: {
+        Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
       }
       confirm_release_price_anchor: {
         Args: { p_note?: string; p_release_offer_price_id: number }
         Returns: Json
       }
-      finalise_release_offer_import: {
+      delete_release_offer_import: {
+        Args: { p_import_id: string }
+        Returns: Json
+      }
+      ignore_release_offer_row: {
+        Args: { p_import_id: string; p_source_row_number: number }
+        Returns: Json
+      }
+      mark_release_offer_import_staged: {
         Args: {
           p_expected_price_fragments: number
           p_expected_source_rows: number
@@ -1604,12 +1577,8 @@ export type Database = {
         }
         Returns: Json
       }
-      resolve_release_offer_row: {
-        Args: {
-          p_import_id: string
-          p_parent_sku: string
-          p_source_row_number: number
-        }
+      run_release_offer_matching: {
+        Args: { p_import_id: string }
         Returns: Json
       }
       search_producers: {
@@ -1618,6 +1587,14 @@ export type Database = {
           n: number
           producer: string
         }[]
+      }
+      set_release_offer_product_resolution: {
+        Args: {
+          p_import_id: string
+          p_parent_sku: string
+          p_source_row_number: number
+        }
+        Returns: Json
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

@@ -152,3 +152,11 @@ The three sources must not be merged into one undifferentiated cellar table:
 
 Every accepted projection points back to its import and source row. Conflicts
 remain visible. No source silently overwrites another source's evidence.
+
+## Release-offer reset, 27 July 2026
+
+Release offers now use manual CSV imports only. Existing release-offer imports,
+Gmail cursor history and matching state were removed before the new workflow.
+The clean historic CSV keeps the 3,288-row base and the later enriched
+129-row increment. It must stage 3,417 source rows and 5,412 price fragments.
+The earlier un-enriched 129-row increment is excluded.
