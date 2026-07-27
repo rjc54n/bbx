@@ -86,7 +86,7 @@ export function ReleasePriceBrowser({ rows }: { rows: ReleasePriceRow[] }) {
           <h1 className="mt-1 text-2xl font-semibold">Release price against current BBX</h1>
           <p className="mt-1 text-sm text-ink-muted">Provisional anchors use the oldest accepted exact-format in-bond offer. Current bids and asks come from the scanner.</p>
         </div>
-        <Link href="/cellar/imports/release-offers" className="rounded border border-accent px-3 py-2 text-sm font-medium text-accent hover:bg-background">Import offers</Link>
+        <Link href="/cellar/imports" className="rounded border border-accent px-3 py-2 text-sm font-medium text-accent hover:bg-background">Import data</Link>
       </div>
       <div className="mt-4 flex flex-wrap gap-3 text-sm">
         <span className="rounded border border-border bg-background px-3 py-2"><strong>{rows.length.toLocaleString()}</strong> product formats</span>
