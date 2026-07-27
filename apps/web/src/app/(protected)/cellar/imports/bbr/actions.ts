@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getOwnerContext } from "@/lib/auth/owner";
+import { createSignedUploadTarget, type UploadTarget } from "@/lib/imports/uploadTarget";
 import {
   BBR_MAX_FILE_BYTES,
   BBR_PARSER_VERSION,
@@ -12,15 +13,6 @@ import {
   parseBbrCsv,
   type CatalogueFormat,
 } from "@/lib/cellar/bbrParser";
-import type { BbrUploadState } from "./state";
-
-const ACCEPTED_MIME_TYPES = new Set([
-  "",
-  "text/csv",
-  "application/csv",
-  "application/vnd.ms-excel",
-  "text/plain",
-]);
 
 function safeFilename(filename: string): string {
   const basename = filename.split(/[\\/]/).at(-1) ?? "bbr-holdings.csv";
@@ -55,29 +47,63 @@ async function fetchCatalogueFormats(
   return formats;
 }
 
-export async function stageBbrImport(
-  _previousState: BbrUploadState,
-  formData: FormData,
-): Promise<BbrUploadState> {
+export async function createBbrUploadTarget(
+  fileName: string,
+  fileSize: number,
+): Promise<UploadTarget | { error: string }> {
   const context = await getOwnerContext();
   if (!context) return { error: "Your owner session has expired. Sign in again." };
-
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
+  if (!Number.isFinite(fileSize) || fileSize <= 0) {
     return { error: "Choose a non-empty BBR CSV file." };
   }
-  if (file.size > BBR_MAX_FILE_BYTES) {
+  if (fileSize > BBR_MAX_FILE_BYTES) {
     return { error: "The file exceeds the 4 MB import limit." };
   }
-  if (!ACCEPTED_MIME_TYPES.has(file.type) || !file.name.toLowerCase().endsWith(".csv")) {
+  if (!fileName.toLowerCase().endsWith(".csv")) {
     return { error: "Choose a CSV file exported from BBR My Cellar." };
   }
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const importId = randomUUID();
+  const result = await createSignedUploadTarget(context.supabase, context.userId, importId, "source.csv");
+  if ("error" in result) return result;
+  return result.target;
+}
+
+export async function processBbrUpload(input: {
+  importId: string;
+  objectPath: string;
+  originalFilename: string;
+}): Promise<{ error: string } | { redirectTo: string }> {
+  const context = await getOwnerContext();
+  if (!context) return { error: "Your owner session has expired. Sign in again." };
+
+  const expectedPrefix = `${context.userId}/${input.importId}/`;
+  if (!input.objectPath.startsWith(expectedPrefix)) {
+    return { error: "The uploaded file reference is invalid." };
+  }
+
+  const { data: fileBlob, error: downloadError } = await context.supabase.storage
+    .from("cellar-imports")
+    .download(input.objectPath);
+  if (downloadError || !fileBlob) {
+    return { error: "The uploaded file could not be read from storage." };
+  }
+
+  const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+  if (bytes.byteLength === 0) {
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
+    return { error: "Choose a non-empty BBR CSV file." };
+  }
+  if (bytes.byteLength > BBR_MAX_FILE_BYTES) {
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
+    return { error: "The file exceeds the 4 MB import limit." };
+  }
+
   let csvText: string;
   try {
     csvText = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
     return { error: "The BBR file is not valid UTF-8 text." };
   }
 
@@ -90,16 +116,19 @@ export async function stageBbrImport(
     .eq("parser_version", BBR_PARSER_VERSION)
     .maybeSingle();
   if (duplicateError) {
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
     return { error: "The cellar import backend is not ready or could not be reached." };
   }
   if (existing?.id) {
-    redirect(`/cellar/imports/bbr/${existing.id}?duplicate=1`);
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
+    return { redirectTo: `/cellar/imports/bbr/${existing.id}?duplicate=1` };
   }
 
   let parsedRows;
   try {
     parsedRows = parseBbrCsv(csvText);
   } catch (error) {
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
     if (error instanceof BbrFileError) return { error: error.message };
     return { error: "The BBR CSV could not be parsed." };
   }
@@ -114,53 +143,42 @@ export async function stageBbrImport(
   try {
     catalogueFormats = await fetchCatalogueFormats(context.supabase, parentIds);
   } catch {
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
     return { error: "The BBX catalogue could not be checked before import." };
   }
   const matchedRows = matchBbrRows(parsedRows, catalogueFormats);
 
-  const importId = randomUUID();
-  const objectPath = `${context.userId}/${importId}/source.csv`;
-  const { error: storageError } = await context.supabase.storage
-    .from("cellar-imports")
-    .upload(objectPath, bytes, {
-      contentType: "text/csv",
-      upsert: false,
-    });
-  if (storageError) {
-    return { error: "The private source file could not be stored." };
-  }
-
   const { data: staged, error: stageError } = await context.supabase.rpc(
     "stage_bbr_import",
     {
-      p_import_id: importId,
+      p_import_id: input.importId,
       p_content_checksum: checksum,
-      p_original_filename: safeFilename(file.name),
-      p_byte_size: file.size,
-      p_storage_object_path: objectPath,
+      p_original_filename: safeFilename(input.originalFilename),
+      p_byte_size: bytes.byteLength,
+      p_storage_object_path: input.objectPath,
       p_parser_version: BBR_PARSER_VERSION,
       p_rows: matchedRows,
     },
   );
 
   if (stageError) {
-    await context.supabase.storage.from("cellar-imports").remove([objectPath]);
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
     return { error: "The parsed import could not be recorded atomically." };
   }
 
   const result = staged as { import_id?: string; duplicate?: boolean } | null;
   const resultId = result?.import_id;
   if (!resultId) {
-    await context.supabase.storage.from("cellar-imports").remove([objectPath]);
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
     return { error: "The import backend returned an incomplete result." };
   }
   if (result.duplicate) {
-    await context.supabase.storage.from("cellar-imports").remove([objectPath]);
+    await context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
   }
 
   revalidatePath("/cellar/imports/bbr");
   revalidatePath("/cellar/imports");
-  redirect(`/cellar/imports/bbr/${resultId}${result.duplicate ? "?duplicate=1" : ""}`);
+  return { redirectTo: `/cellar/imports/bbr/${resultId}${result.duplicate ? "?duplicate=1" : ""}` };
 }
 
 export async function acceptBbrImport(importId: string): Promise<never> {

@@ -12,6 +12,8 @@ export function uploadFileWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", signedUrl, true);
     xhr.setRequestHeader("x-upsert", "false");
+    xhr.setRequestHeader("cache-control", "3600");
+    xhr.setRequestHeader("content-type", file.type || "text/csv");
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (anonKey) xhr.setRequestHeader("apikey", anonKey);
 
@@ -29,9 +31,6 @@ export function uploadFileWithProgress(
     xhr.onerror = () => reject(new Error("The upload failed."));
     xhr.onabort = () => reject(new Error("The upload was cancelled."));
 
-    const body = new FormData();
-    body.append("cacheControl", "3600");
-    body.append("", file);
-    xhr.send(body);
+    xhr.send(file);
   });
 }
