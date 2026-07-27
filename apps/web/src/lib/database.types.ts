@@ -661,6 +661,13 @@ export type Database = {
             foreignKeyName: "release_offer_prices_import_id_source_row_number_fkey"
             columns: ["import_id", "source_row_number"]
             isOneToOne: false
+            referencedRelation: "release_offer_review_view"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "release_offer_prices_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: false
             referencedRelation: "release_offer_source_rows"
             referencedColumns: ["import_id", "source_row_number"]
           },
@@ -700,6 +707,13 @@ export type Database = {
             columns: ["import_id", "source_row_number"]
             isOneToOne: true
             referencedRelation: "release_offer_evidence_view"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "release_offer_product_resoluti_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "release_offer_review_view"
             referencedColumns: ["import_id", "source_row_number"]
           },
           {
@@ -1435,6 +1449,32 @@ export type Database = {
           },
         ]
       }
+      release_offer_review_view: {
+        Row: {
+          import_id: string | null
+          link_status: string | null
+          match_method: string | null
+          offer_date: string | null
+          parent_sku: string | null
+          price_fragment_count: number | null
+          source_price_text: string | null
+          source_product_id: string | null
+          source_product_url: string | null
+          source_row_number: number | null
+          source_vintage: number | null
+          source_wine: string | null
+          valid_in_bond_fragment_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_source_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       release_price_anchor_view: {
         Row: {
           anchor_status: string | null
@@ -1746,3 +1786,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
