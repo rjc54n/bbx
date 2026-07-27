@@ -5,7 +5,16 @@ export const dynamic = "force-dynamic";
 
 export default async function ReleasePricesPage() {
   const { supabase } = await requireOwner();
-  const { data, error } = await supabase.from("release_offer_review_view").select("*").order("offer_date", { ascending: false }).order("source_row_number", { ascending: true }).limit(10_000);
-  if (error) throw new Error("Accepted release-offer records could not be loaded.");
-  return <AcceptedOfferBrowser rows={(data ?? []) as AcceptedOfferRow[]} />;
+  const rows: AcceptedOfferRow[] = [];
+  const pageSize = 1_000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("release_offer_review_view").select("*")
+      .order("offer_date", { ascending: false }).order("source_row_number", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error("Accepted release-offer records could not be loaded.");
+    const page = (data ?? []) as AcceptedOfferRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return <AcceptedOfferBrowser rows={rows} />;
 }
