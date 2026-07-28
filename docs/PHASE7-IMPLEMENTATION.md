@@ -1,6 +1,6 @@
 # Phase 7 implementation: BBR release prices
 
-**Status:** manual CSV import and independent product linking.
+**Status:** manual CSV import and whole-dataset product linking.
 **Source contract:** `IMPORT-SOURCE-PROFILES.md`
 
 ## Outcome
@@ -30,13 +30,22 @@ records amount, case size, bottle volume, tax basis and warnings. Raw price
 fragments remain attached to their source row. They are not converted or
 guessed.
 
-## Deferred matching
+## Product matching
 
-Matching, manual links, ignored records and re-matching belong on a future
-whole-dataset Match page. It must operate across all accepted imports, never
-one import at a time. The initial matching sequence remains supplied BBR Parent
-ID, then unique exact name and vintage, then unresolved. Probabilistic matching
-is out of scope.
+The Match page operates across every accepted import. A supplied BBR Parent ID
+links first, followed by a unique exact local name and vintage. Remaining wine
+and vintage groups are searched against BBR's full `prod_product` Algolia
+index. This can find stocked BBR products that are absent from the
+`prod_biddable` BBX-eligible universe.
+
+A unique, exhaustively checked Algolia name and vintage result links
+automatically. Non-exact Algolia results remain suggestions until the owner
+confirms one. Algolia rank is not stored or displayed as a probability.
+
+Matching runs are manual, batched and resumable. Existing links and suppressed
+records are excluded from retries. Resolution changes have an append-only
+audit history. Confirming a group applies only to unresolved source records
+with the same normalised wine name and vintage.
 
 ## Anchors and comparisons
 
@@ -59,7 +68,9 @@ ceil(release_price_p / 90) * 100
 
 The protected application has a `Release offers` tab. It lists every accepted
 source record, its original price text, parsed-fragment counts and any existing
-link state. The page is paginated past the Data API response cap.
+link state. The whole-dataset Match page groups repeated source identities,
+shows local and wider-catalogue status, and supports confirmation, manual
+search, editing, unlinking, suppression and restoration.
 
 `Import offers` links to the release-offer import. The upload flow validates
 the UTF-8 CSV, stores the source privately, stages batches safely, shows
@@ -86,7 +97,8 @@ Acceptance requires:
 - the production build passes;
 - the migration chain replays on clean PostgreSQL;
 - pgTAP covers owner, non-owner and anonymous access, import staging,
-  accepted-offer visibility and import deletion;
+  deterministic matching, provisional Algolia suggestions, exact Algolia
+  links, group decisions, resumable errors and audit history;
 - the representative 3,288-row file can be uploaded twice without duplicated
   evidence; and
 - production accepted-offer counts are checked after import.

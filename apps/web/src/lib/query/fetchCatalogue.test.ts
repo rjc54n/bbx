@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAGE_SIZE, buildSearchOrFilter, paginationRange } from "./fetchCatalogue";
+import { PAGE_SIZE, buildSearchOrFilter, mergeReleasePrices, paginationRange } from "./fetchCatalogue";
 
 describe("buildSearchOrFilter", () => {
   it("builds an ilike-across-name-and-producer clause", () => {
@@ -38,5 +38,23 @@ describe("paginationRange", () => {
 
   it("respects a custom page size", () => {
     expect(paginationRange(2, 10)).toEqual({ from: 20, to: 29 });
+  });
+});
+
+describe("mergeReleasePrices", () => {
+  it("adds an exact Parent SKU and format release-price anchor to a catalogue row", () => {
+    const rows = [{ parent_sku: "12345678901", format_code: "06-00750", name: "Test wine" }];
+    const merged = mergeReleasePrices(rows as never, [{
+      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500,
+    }]);
+    expect(merged[0].release_price_p).toBe(12500);
+  });
+
+  it("does not apply an anchor from another format", () => {
+    const rows = [{ parent_sku: "12345678901", format_code: "12-00750", name: "Test wine" }];
+    const merged = mergeReleasePrices(rows as never, [{
+      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500,
+    }]);
+    expect(merged[0].release_price_p).toBeNull();
   });
 });

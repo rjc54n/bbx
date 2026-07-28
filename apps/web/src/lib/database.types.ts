@@ -600,6 +600,169 @@ export type Database = {
         }
         Relationships: []
       }
+      release_offer_match_run_groups: {
+        Row: {
+          error_message: string | null
+          match_group_key: string
+          processed_at: string | null
+          run_id: string
+          source_match_key: string
+          source_row_count: number
+          source_vintage: number | null
+          source_wine: string
+          status: string
+        }
+        Insert: {
+          error_message?: string | null
+          match_group_key: string
+          processed_at?: string | null
+          run_id: string
+          source_match_key: string
+          source_row_count: number
+          source_vintage?: number | null
+          source_wine: string
+          status?: string
+        }
+        Update: {
+          error_message?: string | null
+          match_group_key?: string
+          processed_at?: string | null
+          run_id?: string
+          source_match_key?: string
+          source_row_count?: number
+          source_vintage?: number | null
+          source_wine?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_match_run_groups_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      release_offer_match_runs: {
+        Row: {
+          algorithm_version: string
+          algolia_exact_link_count: number
+          algolia_observed_at: string | null
+          catalogue_index: string
+          error_group_count: number
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          local_exact_link_count: number
+          processed_group_count: number
+          remaining_group_count: number
+          started_at: string
+          started_by: string
+          status: string
+          supplied_id_link_count: number
+          total_group_count: number
+        }
+        Insert: {
+          algorithm_version?: string
+          algolia_exact_link_count?: number
+          algolia_observed_at?: string | null
+          catalogue_index?: string
+          error_group_count?: number
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          local_exact_link_count?: number
+          processed_group_count?: number
+          remaining_group_count?: number
+          started_at?: string
+          started_by: string
+          status?: string
+          supplied_id_link_count?: number
+          total_group_count?: number
+        }
+        Update: {
+          algorithm_version?: string
+          algolia_exact_link_count?: number
+          algolia_observed_at?: string | null
+          catalogue_index?: string
+          error_group_count?: number
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          local_exact_link_count?: number
+          processed_group_count?: number
+          remaining_group_count?: number
+          started_at?: string
+          started_by?: string
+          status?: string
+          supplied_id_link_count?: number
+          total_group_count?: number
+        }
+        Relationships: []
+      }
+      release_offer_match_suggestions: {
+        Row: {
+          match_group_key: string
+          matched_words: string[]
+          name: string
+          observed_at: string
+          parent_sku: string
+          producer: string | null
+          product_url: string | null
+          purchase_mode: string | null
+          rank: number
+          region: string | null
+          source_run_id: string
+          stock_origin: string | null
+          typo_count: number | null
+          vintage: number | null
+          was_biddable_at_observation: boolean
+        }
+        Insert: {
+          match_group_key: string
+          matched_words?: string[]
+          name: string
+          observed_at: string
+          parent_sku: string
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank: number
+          region?: string | null
+          source_run_id: string
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
+          was_biddable_at_observation: boolean
+        }
+        Update: {
+          match_group_key?: string
+          matched_words?: string[]
+          name?: string
+          observed_at?: string
+          parent_sku?: string
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank?: number
+          region?: string | null
+          source_run_id?: string
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
+          was_biddable_at_observation?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_match_suggestions_source_run_id_fkey"
+            columns: ["source_run_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       release_offer_prices: {
         Row: {
           amount_p: number | null
@@ -677,6 +840,7 @@ export type Database = {
         Row: {
           import_id: string
           match_method: string | null
+          match_run_id: string | null
           parent_sku: string | null
           resolved_at: string
           resolved_by: string | null
@@ -686,6 +850,7 @@ export type Database = {
         Insert: {
           import_id: string
           match_method?: string | null
+          match_run_id?: string | null
           parent_sku?: string | null
           resolved_at?: string
           resolved_by?: string | null
@@ -695,6 +860,7 @@ export type Database = {
         Update: {
           import_id?: string
           match_method?: string | null
+          match_run_id?: string | null
           parent_sku?: string | null
           resolved_at?: string
           resolved_by?: string | null
@@ -725,11 +891,68 @@ export type Database = {
           },
         ]
       }
+      release_offer_resolution_events: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          event_type: string
+          id: number
+          import_id: string
+          match_run_id: string | null
+          new_match_method: string | null
+          new_parent_sku: string | null
+          new_status: string | null
+          previous_match_method: string | null
+          previous_parent_sku: string | null
+          previous_status: string | null
+          source_row_number: number
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          event_type: string
+          id?: number
+          import_id: string
+          match_run_id?: string | null
+          new_match_method?: string | null
+          new_parent_sku?: string | null
+          new_status?: string | null
+          previous_match_method?: string | null
+          previous_parent_sku?: string | null
+          previous_status?: string | null
+          source_row_number: number
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          event_type?: string
+          id?: number
+          import_id?: string
+          match_run_id?: string | null
+          new_match_method?: string | null
+          new_parent_sku?: string | null
+          new_status?: string | null
+          previous_match_method?: string | null
+          previous_parent_sku?: string | null
+          previous_status?: string | null
+          source_row_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_resolution_events_match_run_id_fkey"
+            columns: ["match_run_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       release_offer_source_rows: {
         Row: {
           content_fingerprint: string
           description: string | null
           import_id: string
+          match_group_key: string
           offer_date: string
           raw_row: Json
           source_match_key: string
@@ -748,6 +971,7 @@ export type Database = {
           content_fingerprint: string
           description?: string | null
           import_id: string
+          match_group_key?: never
           offer_date: string
           raw_row: Json
           source_match_key: string
@@ -766,6 +990,7 @@ export type Database = {
           content_fingerprint?: string
           description?: string | null
           import_id?: string
+          match_group_key?: never
           offer_date?: string
           raw_row?: Json
           source_match_key?: string
@@ -1449,6 +1674,53 @@ export type Database = {
           },
         ]
       }
+      release_offer_match_review_view: {
+        Row: {
+          earliest_offer_date: string | null
+          is_biddable: boolean | null
+          latest_offer_date: string | null
+          linked_row_count: number | null
+          match_group_key: string | null
+          match_method: string | null
+          parent_sku: string | null
+          source_row_count: number | null
+          source_vintage: number | null
+          source_wine: string | null
+          suggestion_count: number | null
+          suggestions_observed_at: string | null
+          suppressed_row_count: number | null
+          unresolved_row_count: number | null
+        }
+        Relationships: []
+      }
+      release_offer_match_suggestion_view: {
+        Row: {
+          is_biddable: boolean | null
+          match_group_key: string | null
+          matched_words: string[] | null
+          name: string | null
+          observed_at: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_url: string | null
+          purchase_mode: string | null
+          rank: number | null
+          region: string | null
+          source_run_id: string | null
+          stock_origin: string | null
+          typo_count: number | null
+          vintage: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_offer_match_suggestions_source_run_id_fkey"
+            columns: ["source_run_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       release_offer_review_view: {
         Row: {
           import_id: string | null
@@ -1593,6 +1865,7 @@ export type Database = {
         }
         Returns: Json
       }
+      begin_release_offer_match_run: { Args: never; Returns: Json }
       clear_release_offer_product_resolution: {
         Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
@@ -1601,12 +1874,28 @@ export type Database = {
         Args: { p_note?: string; p_release_offer_price_id: number }
         Returns: Json
       }
+      confirm_release_offer_match_group: {
+        Args: {
+          p_match_group_key: string
+          p_method?: string
+          p_parent_sku: string
+        }
+        Returns: Json
+      }
       delete_release_offer_import: {
         Args: { p_import_id: string }
         Returns: Json
       }
+      delete_release_offer_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
       ignore_release_offer_row: {
         Args: { p_import_id: string; p_source_row_number: number }
+        Returns: Json
+      }
+      edit_release_offer_match_group: {
+        Args: { p_match_group_key: string; p_parent_sku: string }
         Returns: Json
       }
       mark_release_offer_import_staged: {
@@ -1617,8 +1906,27 @@ export type Database = {
         }
         Returns: Json
       }
-      run_release_offer_matching: {
-        Args: { p_import_id: string }
+      record_release_offer_algolia_error: {
+        Args: {
+          p_error_message: string
+          p_match_group_key: string
+          p_run_id: string
+        }
+        Returns: Json
+      }
+      record_release_offer_algolia_result: {
+        Args: {
+          p_candidates: Json
+          p_exact_parent_skus: string[]
+          p_exhaustive: boolean
+          p_match_group_key: string
+          p_observed_at: string
+          p_run_id: string
+        }
+        Returns: Json
+      }
+      restore_release_offer_match_group: {
+        Args: { p_match_group_key: string }
         Returns: Json
       }
       search_producers: {
@@ -1634,6 +1942,14 @@ export type Database = {
           p_parent_sku: string
           p_source_row_number: number
         }
+        Returns: Json
+      }
+      suppress_release_offer_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      unlink_release_offer_match_group: {
+        Args: { p_match_group_key: string }
         Returns: Json
       }
       show_limit: { Args: never; Returns: number }
@@ -1786,4 +2102,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

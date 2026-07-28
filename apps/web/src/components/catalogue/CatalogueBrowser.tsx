@@ -17,7 +17,7 @@ import type { CatalogueRow, PriceChangeRow } from "@/lib/query/rows";
 import { startingPointFor } from "@/lib/query/startingPoints";
 import type { CatalogueFilter, QueryState } from "@/lib/query/types";
 import { parse, serialize } from "@/lib/query/url";
-import { CATALOGUE_COLUMNS, PRICE_CHANGE_COLUMNS, withFormatAdjustedColumns, withListedColumn } from "./columns";
+import { CATALOGUE_COLUMNS, PRICE_CHANGE_COLUMNS, withFormatAdjustedColumns } from "./columns";
 import { DataHonestyHeader } from "./DataHonestyHeader";
 import { DataTable } from "./DataTable";
 import { FilterChips } from "./FilterChips";
@@ -174,8 +174,8 @@ export function CatalogueBrowser() {
   const onlyListed = !isPriceChanges && getFilter(queryState.filters, "is_listed")?.value === true;
 
   const visibleCatalogueColumns = useMemo(
-    () => withListedColumn(withFormatAdjustedColumns(CATALOGUE_COLUMNS, showFormatAdjusted), !onlyListed),
-    [showFormatAdjusted, onlyListed],
+    () => withFormatAdjustedColumns(CATALOGUE_COLUMNS, showFormatAdjusted),
+    [showFormatAdjusted],
   );
 
   return (

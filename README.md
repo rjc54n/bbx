@@ -60,6 +60,9 @@ bbx/
 - `ALGOLIA_API_KEY`
 
 Streamlit reads these from `.streamlit/secrets.toml`; the bot reads environment variables.
+The Next.js application also reads them from its server environment for the
+owner-only historic-offer Match page. Do not prefix either variable with
+`NEXT_PUBLIC_`.
 
 ### Slack (bot only)
 

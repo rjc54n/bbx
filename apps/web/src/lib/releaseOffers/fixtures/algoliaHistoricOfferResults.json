@@ -1,0 +1,27 @@
+{
+  "offBiddableExact": {
+    "parent_sku": "20258330552",
+    "name": "2025 Txakoli, Rezabal, Getariako Txakolina, Spain",
+    "vintage": 2025,
+    "producer": "Rezabal",
+    "region": "Getariako Txakolina",
+    "stock_origin": "BBR",
+    "purchase_mode": "Delivery"
+  },
+  "adjacentVintage": {
+    "parent_sku": "20248330552",
+    "name": "2024 Txakoli, Rezabal, Getariako Txakolina, Spain",
+    "vintage": 2024,
+    "producer": "Rezabal",
+    "region": "Getariako Txakolina",
+    "stock_origin": "BBR",
+    "purchase_mode": "Delivery"
+  },
+  "typoCandidate": {
+    "parent_sku": "20180000003",
+    "name": "2018 Test Wine",
+    "vintage": 2018,
+    "_rankingInfo": { "nbTypos": 1 },
+    "_highlightResult": { "name": { "matchedWords": ["test", "wine"] } }
+  }
+}

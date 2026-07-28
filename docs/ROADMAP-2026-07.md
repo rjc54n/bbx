@@ -255,9 +255,11 @@ Value is in **anchoring bids on purchases**, not in P&L on existing holdings.
 - Preserve all source rows, including the 121 exact duplicates in the
   representative file. Deduplicate the normalised offer evidence by content
   fingerprint rather than deleting raw provenance.
-- Build a Match page for the complete accepted-offer dataset. It will manage
-  resolved BBR Parent IDs, exact name and vintage matches, manual links and
-  ignored records without requiring users to revisit each import.
+- The Match page covers the complete accepted-offer dataset. It manages
+  supplied BBR Parent IDs, exact local matches, full `prod_product` Algolia
+  suggestions, manual links and suppressed records without requiring users to
+  revisit each import. Catalogue identity remains separate from current BBX
+  eligibility.
 - Distinguish release from re-offer by offer date versus vintage.
 - Use CellarTracker purchase history as evidence of what we paid. Use release
   emails as evidence of what was offered to the market. Do not collapse those

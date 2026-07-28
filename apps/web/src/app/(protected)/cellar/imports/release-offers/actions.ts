@@ -199,18 +199,6 @@ export async function processReleaseOfferUpload(input: {
   return { redirectTo: `/cellar/imports/release-offers/${resultId}` };
 }
 
-export async function runReleaseOfferMatching(importId: string): Promise<never> {
-  const context = await getOwnerContext();
-  if (!context) redirect("/login");
-  const { error } = await context.supabase.rpc("run_release_offer_matching", {
-    p_import_id: importId,
-  });
-  if (error) redirect(`/cellar/imports/release-offers/${importId}?match_error=1`);
-
-  revalidateReleaseOfferPaths(importId);
-  redirect(`/cellar/imports/release-offers/${importId}?matched=1`);
-}
-
 function revalidateReleaseOfferPaths(importId: string) {
   revalidatePath("/release-prices");
   revalidatePath("/cellar/imports");

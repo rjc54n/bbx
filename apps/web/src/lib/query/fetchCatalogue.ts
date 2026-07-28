@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 import { recentListedRange } from "./freshness";
 import type { CatalogueQueryState, PriceChangeQueryState } from "./types";
 import type { CatalogueRow, PriceChangeRow } from "./rows";
@@ -9,6 +10,31 @@ export interface FetchResult<Row> {
   rows: Row[];
   count: number;
 }
+
+type ReleasePriceAnchorRow = {
+  parent_sku: string | null;
+  format_code: string | null;
+  release_price_p: number | null;
+};
+
+export function mergeReleasePrices(
+  rows: DatabaseCatalogueRow[],
+  anchors: ReleasePriceAnchorRow[],
+): CatalogueRow[] {
+  const prices = new Map(
+    anchors
+      .filter((anchor): anchor is ReleasePriceAnchorRow & { parent_sku: string; format_code: string } =>
+        anchor.parent_sku !== null && anchor.format_code !== null,
+      )
+      .map((anchor) => [`${anchor.parent_sku}|${anchor.format_code}`, anchor.release_price_p]),
+  );
+  return rows.map((row) => ({
+    ...row,
+    release_price_p: prices.get(`${row.parent_sku}|${row.format_code}`) ?? null,
+  }));
+}
+
+type DatabaseCatalogueRow = Database["public"]["Views"]["catalogue_view"]["Row"];
 
 // PostgREST's or() takes a raw filter-syntax string, not a parameterised
 // value -- a search term containing "," or "(" would otherwise be parsed as
@@ -83,7 +109,21 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
 
   const { data, count, error } = await query;
   if (error) throw error;
-  return { rows: data ?? [], count: count ?? 0 };
+  const rows = (data ?? []) as DatabaseCatalogueRow[];
+  const parentSkus = [...new Set(rows.flatMap((row) => row.parent_sku ? [row.parent_sku] : []))];
+  if (parentSkus.length === 0) return { rows: mergeReleasePrices(rows, []), count: count ?? 0 };
+  const { data: anchorData, error: anchorError } = await supabase
+    .from("release_price_anchor_view")
+    .select("parent_sku, format_code, release_price_p")
+    .in("parent_sku", parentSkus);
+  // Release evidence enriches the catalogue, but it must never suppress the
+  // primary result set if the secondary read is unavailable or its RLS session
+  // has not refreshed yet in the browser.
+  if (anchorError) return { rows: mergeReleasePrices(rows, []), count: count ?? 0 };
+  return {
+    rows: mergeReleasePrices(rows, (anchorData ?? []) as ReleasePriceAnchorRow[]),
+    count: count ?? 0,
+  };
 }
 
 // Read recent_price_change_view for the price-changes mode. No filters of

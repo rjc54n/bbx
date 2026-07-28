@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_COLUMNS, FORMAT_ADJUSTED_COLUMN_IDS, withFormatAdjustedColumns } from "./columns";
 
+it("shows Bid and Release price instead of Listed and Per litre", () => {
+  const ids = CATALOGUE_COLUMNS.map((column) => column.id);
+  expect(ids).toContain("highest_bid_p");
+  expect(ids).toContain("release_price_p");
+  expect(ids).not.toContain("is_listed");
+  expect(ids).not.toContain("price_per_litre_p");
+});
+
 describe("withFormatAdjustedColumns", () => {
   it("hides adjusted_guide_p and price_vs_adjusted_guide_pct by default", () => {
     const ids = withFormatAdjustedColumns(CATALOGUE_COLUMNS, false).map((c) => c.id);
