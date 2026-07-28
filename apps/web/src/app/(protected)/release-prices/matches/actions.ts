@@ -35,7 +35,9 @@ type MatchRunRow = {
 };
 
 function safeReturnPath(value: string) {
-  return value.startsWith("/release-prices") ? value : MATCH_PATH;
+  if (value === MATCH_PATH || value.startsWith(`${MATCH_PATH}?`)) return value;
+  if (/^\/release-prices\/offers\/[0-9a-f-]{36}\/\d+(?:\?.*)?$/i.test(value)) return value;
+  return MATCH_PATH;
 }
 
 async function loadProgress(

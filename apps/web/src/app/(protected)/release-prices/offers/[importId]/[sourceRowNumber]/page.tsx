@@ -111,7 +111,7 @@ export default async function ReleaseOfferDetailPage({
     : { data: [], error: null };
   if (catalogueError) throw new Error("Current catalogue data could not be loaded.");
   const catalogue = (catalogueData ?? []) as CatalogueRow[];
-  const returnPath = `/release-prices/${importId}/${rowNumber}`;
+  const returnPath = `/release-prices/offers/${importId}/${rowNumber}`;
   const unresolved = !resolution;
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">

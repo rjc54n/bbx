@@ -4,7 +4,7 @@ import { requireOwner } from "@/lib/auth/owner";
 export const dynamic = "force-dynamic";
 
 export default async function ReleasePricesPage() {
-  const { supabase } = await requireOwner();
+  const { supabase, userId } = await requireOwner();
   const rows: AcceptedOfferRow[] = [];
   const pageSize = 1_000;
   for (let from = 0; ; from += pageSize) {
@@ -16,5 +16,14 @@ export default async function ReleasePricesPage() {
     rows.push(...page);
     if (page.length < pageSize) break;
   }
-  return <AcceptedOfferBrowser rows={rows} />;
+  const { data: favouriteRows, error: favouriteError } = await supabase
+    .from("release_price_favourites")
+    .select("parent_sku")
+    .eq("user_id", userId);
+  if (favouriteError) throw new Error("Release-price favourites could not be loaded.");
+
+  return <AcceptedOfferBrowser
+    rows={rows}
+    favouriteParentSkus={(favouriteRows ?? []).map((row) => row.parent_sku)}
+  />;
 }

@@ -1092,6 +1092,24 @@ export type Database = {
           },
         ]
       }
+      release_price_favourites: {
+        Row: {
+          created_at: string
+          parent_sku: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          parent_sku: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          parent_sku?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       scan_runs: {
         Row: {
           algolia_complete: boolean | null
