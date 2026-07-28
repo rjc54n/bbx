@@ -12,6 +12,7 @@ export type CellarSortField =
   | "purchase_price_per_case_p"
   | "highest_bid_p"
   | "lowest_ask_p"
+  | "ask_premium_p"
   | "last_rest_checked_at";
 
 export type CellarQuery = {
@@ -39,6 +40,7 @@ const SORT_FIELDS = new Set<CellarSortField>([
   "purchase_price_per_case_p",
   "highest_bid_p",
   "lowest_ask_p",
+  "ask_premium_p",
   "last_rest_checked_at",
 ]);
 
@@ -145,6 +147,8 @@ function sortValue(
       return row.highest_bid_p;
     case "lowest_ask_p":
       return row.lowest_ask_p;
+    case "ask_premium_p":
+      return askPremiumP(row);
     case "last_rest_checked_at":
       return row.last_rest_checked_at;
   }
@@ -207,4 +211,13 @@ export function lowestAskLabel(row: BbrCellarRow): string | null {
   if (row.is_listed === null) return "Market unavailable";
   if (row.lowest_ask_p === null) return "Price unavailable";
   return null;
+}
+
+/** Lowest ask minus original purchase case price; negative means a discount
+ * to the owner's own purchase price. */
+export function askPremiumP(row: BbrCellarRow): number | null {
+  if (row.lowest_ask_p === null || row.purchase_price_per_case_p === null) {
+    return null;
+  }
+  return row.lowest_ask_p - row.purchase_price_per_case_p;
 }

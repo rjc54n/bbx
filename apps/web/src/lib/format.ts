@@ -19,6 +19,13 @@ export function formatSignedPct(p: number | null): string {
   return `${p > 0 ? "+" : ""}${p.toFixed(1)}%`;
 }
 
+export function formatSignedPence(p: number | null): string {
+  if (p === null || p === undefined) return "–";
+  const pounds = p / 100;
+  if (pounds === 0) return "£0.00";
+  return `${pounds > 0 ? "+" : "-"}£${Math.abs(pounds).toFixed(2)}`;
+}
+
 export function signedPctDirection(p: number | null): "down" | "up" | "flat" | null {
   if (p === null || p === undefined) return null;
   if (p < 0) return "down";

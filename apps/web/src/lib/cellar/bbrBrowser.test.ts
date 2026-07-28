@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  askPremiumP,
   filterAndSortCellarRows,
   lowestAskLabel,
   parseCellarQuery,
@@ -132,5 +133,19 @@ describe("lowestAskLabel", () => {
     expect(lowestAskLabel(row({ is_listed: null, lowest_ask_p: null })))
       .toBe("Market unavailable");
     expect(lowestAskLabel(row())).toBeNull();
+  });
+});
+
+describe("askPremiumP", () => {
+  it("is lowest ask minus purchase case price, negative when a discount", () => {
+    expect(askPremiumP(row({ lowest_ask_p: 40000, purchase_price_per_case_p: 25000 })))
+      .toBe(15000);
+    expect(askPremiumP(row({ lowest_ask_p: 20000, purchase_price_per_case_p: 25000 })))
+      .toBe(-5000);
+  });
+
+  it("is null when either side is unavailable", () => {
+    expect(askPremiumP(row({ lowest_ask_p: null }))).toBeNull();
+    expect(askPremiumP(row({ purchase_price_per_case_p: null }))).toBeNull();
   });
 });

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { type FormEvent, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { formatDateTime, formatFormat, formatPence } from "@/lib/format";
+import { formatDateTime, formatFormat, formatPence, formatSignedPence } from "@/lib/format";
 import { bbrProductUrl } from "@/lib/listingLinks";
 import {
+  askPremiumP,
   filterAndSortCellarRows,
   lowestAskLabel,
   parseCellarQuery,
@@ -35,6 +36,7 @@ const sortableColumns: SortColumn[] = [
   { field: "purchase_price_per_case_p", label: "Purchase case", align: "right" },
   { field: "highest_bid_p", label: "Highest bid", align: "right" },
   { field: "lowest_ask_p", label: "Lowest ask", align: "right" },
+  { field: "ask_premium_p", label: "Ask premium", align: "right" },
   { field: "last_rest_checked_at", label: "Market checked" },
 ];
 
@@ -329,16 +331,13 @@ export function BbrCellarBrowser({
                   </button>
                 </th>
               ))}
-              <th className="whitespace-nowrap px-3 py-2 text-left font-medium text-ink-muted">
-                BBX eligible
-              </th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={sortableColumns.length + 1}
+                  colSpan={sortableColumns.length}
                   className="px-3 py-10 text-center text-ink-muted"
                 >
                   No BBR holdings match these filters.
@@ -347,6 +346,7 @@ export function BbrCellarBrowser({
             ) : filteredRows.map((row) => {
               const productUrl = bbrProductUrl(row.product_url);
               const askLabel = lowestAskLabel(row);
+              const premium = askPremiumP(row);
               return (
                 <tr
                   key={`${row.parent_sku}|${row.format_code}`}
@@ -401,15 +401,23 @@ export function BbrCellarBrowser({
                       ? <span className="text-ink-muted">{askLabel}</span>
                       : formatPence(row.lowest_ask_p)}
                   </td>
+                  <td
+                    className={`px-3 py-2 text-right align-top tabular-nums ${
+                      premium === null
+                        ? ""
+                        : premium < 0
+                          ? "text-green-700"
+                          : premium > 0
+                            ? "text-red-700"
+                            : ""
+                    }`}
+                  >
+                    {askLabel
+                      ? <span className="text-ink-muted">{askLabel}</span>
+                      : formatSignedPence(premium)}
+                  </td>
                   <td className="px-3 py-2 align-top tabular-nums">
                     {formatDateTime(row.last_rest_checked_at)}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    {row.eligible_for_bbx === true
-                      ? "Eligible"
-                      : row.eligible_for_bbx === false
-                        ? "Not eligible"
-                        : "–"}
                   </td>
                 </tr>
               );
