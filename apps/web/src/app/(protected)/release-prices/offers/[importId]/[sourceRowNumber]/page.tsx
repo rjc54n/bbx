@@ -101,10 +101,13 @@ function json(value: unknown) {
 
 export default async function ReleaseOfferDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ importId: string; sourceRowNumber: string }>;
+  searchParams: Promise<{ delete_error?: string }>;
 }) {
   const { importId, sourceRowNumber } = await params;
+  const { delete_error: deleteError } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(importId) || !/^\d+$/.test(sourceRowNumber)) notFound();
   const rowNumber = Number(sourceRowNumber);
   const { supabase } = await requireOwner();
@@ -142,6 +145,8 @@ export default async function ReleaseOfferDetailPage({
         <div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Release offer record</p><h1 className="mt-1 text-2xl font-semibold">{source.source_wine}</h1><p className="mt-1 text-sm text-ink-muted">Offer date {formatDate(source.offer_date)} · source row {source.source_row_number}</p></div>
         <Link href="/release-prices" className="rounded border border-accent px-3 py-2 text-sm text-accent">All accepted offers</Link>
       </header>
+
+      {deleteError === "1" && <p role="alert" className="rounded border border-red-700/30 bg-background p-3 text-sm text-red-800">The record was not deleted. It remains in the accepted offers list.</p>}
 
       <section aria-labelledby="offer-evidence" className="rounded-lg border border-border bg-background p-5">
         <h2 id="offer-evidence" className="text-lg font-semibold">Imported offer evidence</h2>
