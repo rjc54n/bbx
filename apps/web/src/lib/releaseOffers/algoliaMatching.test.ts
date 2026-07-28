@@ -24,6 +24,29 @@ describe("historic-offer Algolia matching", () => {
     ])).toEqual(["20180000001", "20180000002"]);
   });
 
+  it("recognises an exact name when only the candidate's trailing country label differs", () => {
+    expect(exactParentSkus({
+      match_group_key: "2021|tignanello antinori tuscany",
+      source_match_key: "tignanello antinori tuscany",
+      source_vintage: 2021,
+      source_wine: "2021 Tignanello, Antinori, Tuscany",
+    }, [{
+      parent_sku: "20218007313",
+      name: "2021 Tignanello, Antinori, Tuscany, Italy",
+      vintage: 2021,
+      country: "Italy",
+    }])).toEqual(["20218007313"]);
+  });
+
+  it("does not ignore a country word which is not the candidate's own country", () => {
+    expect(exactParentSkus(group, [{
+      parent_sku: "20180000001",
+      name: "2018 Test Wine, Italy",
+      vintage: 2018,
+      country: "France",
+    }])).toEqual([]);
+  });
+
   it("never treats a missing-vintage group as exact", () => {
     expect(exactParentSkus({ ...group, source_vintage: null }, [
       { parent_sku: "20180000001", name: "2018 Test Wine", vintage: 2018 },

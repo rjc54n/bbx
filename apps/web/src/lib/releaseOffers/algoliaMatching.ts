@@ -13,6 +13,7 @@ export type AlgoliaWineHit = {
   vintage?: unknown;
   producer?: unknown;
   region?: unknown;
+  country?: unknown;
   stock_origin?: unknown;
   purchase_mode?: unknown;
   product_url?: unknown;
@@ -78,10 +79,17 @@ export function exactParentSkus(
   return [...new Set(hits.flatMap((hit) => {
     const candidate = toHistoricOfferCandidate(hit, 1);
     if (!candidate || candidate.vintage !== group.source_vintage) return [];
-    return releaseWineMatchKey(candidate.name) === group.source_match_key
+    return comparableMatchKey(candidate.name, hit.country) === comparableMatchKey(group.source_wine, hit.country)
       ? [candidate.parent_sku]
       : [];
   }))];
+}
+
+function comparableMatchKey(name: string, country: unknown): string {
+  const key = releaseWineMatchKey(name);
+  const countryKey = text(country) ? releaseWineMatchKey(text(country)!) : "";
+  if (!countryKey || key === countryKey || !key.endsWith(` ${countryKey}`)) return key;
+  return key.slice(0, -(countryKey.length + 1));
 }
 
 export function topHistoricOfferCandidates(hits: AlgoliaWineHit[], limit = 5) {

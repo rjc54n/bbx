@@ -49,7 +49,7 @@ function searchParams(group: HistoricOfferMatchGroup, hitsPerPage: number, page 
     hitsPerPage: String(hitsPerPage),
     page: String(page),
     facetFilters: JSON.stringify(facetFilters),
-    attributesToRetrieve: "parent_sku,name,vintage,producer,region,stock_origin,purchase_mode,product_url,url",
+    attributesToRetrieve: "parent_sku,name,vintage,producer,region,country,stock_origin,purchase_mode,product_url,url",
     attributesToHighlight: "name",
     getRankingInfo: "true",
   }).toString();

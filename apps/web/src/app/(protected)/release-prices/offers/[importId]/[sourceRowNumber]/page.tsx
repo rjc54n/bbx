@@ -5,6 +5,7 @@ import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
 import { DeleteHistoricOfferRecordForm } from "@/components/releaseOffers/DeleteHistoricOfferRecordForm";
 import {
+  confirmHistoricOfferCandidate,
   confirmManualHistoricOfferMatch,
   restoreHistoricOfferGroup,
   suppressHistoricOfferGroup,
@@ -70,6 +71,19 @@ type CatalogueRow = {
   is_listed: boolean | null;
 };
 
+type ProvisionalCandidate = {
+  parent_sku: string;
+  rank: number;
+  name: string;
+  vintage: number | null;
+  producer: string | null;
+  region: string | null;
+  stock_origin: string | null;
+  purchase_mode: string | null;
+  typo_count: number | null;
+  is_biddable: boolean;
+};
+
 function methodLabel(value: string | null) {
   const labels: Record<string, string> = {
     supplied_id: "Supplied Parent ID",
@@ -107,6 +121,13 @@ export default async function ReleaseOfferDetailPage({
   const source = sourceData as SourceRow;
   const prices = (priceData ?? []) as PriceFragment[];
   const resolution = resolutionData as Resolution | null;
+  const { data: candidateData, error: candidateError } = await supabase
+    .from("release_offer_match_suggestion_view")
+    .select("parent_sku, rank, name, vintage, producer, region, stock_origin, purchase_mode, typo_count, is_biddable")
+    .eq("match_group_key", source.match_group_key)
+    .order("rank");
+  if (candidateError) throw new Error("Historic-offer candidates could not be loaded.");
+  const candidates = (candidateData ?? []) as ProvisionalCandidate[];
   const { data: catalogueData, error: catalogueError } = resolution?.parent_sku
     ? await supabase.from("catalogue_view").select("parent_sku, name, vintage, producer, country, region, subregion, colour, product_url, format_code, case_size, bottle_volume_ml, ask, highest_bid_p, market_price_p, is_listed").eq("parent_sku", resolution.parent_sku).order("format_code")
     : { data: [], error: null };
@@ -144,7 +165,43 @@ export default async function ReleaseOfferDetailPage({
       <section aria-labelledby="product-link" className="rounded-lg border border-border bg-background p-5">
         <h2 id="product-link" className="text-lg font-semibold">Product link</h2>
         <p className="mt-1 text-sm text-ink-muted">A decision on this wine and vintage applies to every unresolved record in the same group.</p>
-        <p className="mt-3 text-sm"><span className="text-ink-muted">Current status: </span>{resolution?.status === "linked" ? `Linked to Parent ${resolution.parent_sku} by ${methodLabel(resolution.match_method)}` : resolution?.status === "ignored" ? "Rejected and suppressed" : "Unlinked"}</p>
+        <p className="mt-3 text-sm">
+          <span className="text-ink-muted">Current status: </span>
+          {resolution?.status === "linked"
+            ? `Linked to Parent ${resolution.parent_sku} by ${methodLabel(resolution.match_method)}`
+            : resolution?.status === "ignored"
+              ? "Rejected and suppressed"
+              : candidates.length > 0
+                ? "Provisional candidates available, not linked"
+                : "Unlinked"}
+        </p>
+        {unresolved && candidates.length > 0 && (
+          <section aria-labelledby="provisional-candidates" className="mt-4 rounded border border-border bg-accent-soft/40 p-4">
+            <h3 id="provisional-candidates" className="font-medium">Provisional candidates</h3>
+            <p className="mt-1 text-sm text-ink-muted">
+              These are Algolia suggestions. Confirming one links every unresolved record in this wine-and-vintage group.
+            </p>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {candidates.map((candidate) => (
+                <article key={candidate.parent_sku} className="flex items-start justify-between gap-3 rounded border border-border bg-background p-3 text-sm">
+                  <div>
+                    <p className="font-medium">#{candidate.rank} {candidate.name}</p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"}
+                    </p>
+                    <p className="text-xs text-ink-muted">
+                      {candidate.stock_origin ?? "Stock origin unavailable"} · {candidate.purchase_mode ?? "Purchase mode unavailable"} · {candidate.is_biddable ? "BBX-eligible" : "Found in BBR catalogue, not currently BBX-eligible"}
+                      {candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}
+                    </p>
+                  </div>
+                  <form action={confirmHistoricOfferCandidate.bind(null, source.match_group_key, candidate.parent_sku, returnPath)}>
+                    <button className="rounded border border-accent px-2 py-1 text-xs text-accent">Confirm group</button>
+                  </form>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
         {unresolved && <div className="mt-4 flex flex-wrap gap-3"><form action={confirmManualHistoricOfferMatch.bind(null, source.match_group_key, returnPath)} className="flex gap-2"><label className="sr-only" htmlFor="parent-sku">Parent ID</label><input id="parent-sku" name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-sm" required /><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Link manually</button></form><form action={suppressHistoricOfferGroup.bind(null, source.match_group_key, returnPath)}><button className="rounded border border-border px-3 py-1.5 text-sm">Reject and suppress group</button></form></div>}
         {resolution?.status === "linked" && <form action={unlinkHistoricOfferGroup.bind(null, source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Unlink group and retry later</button></form>}
         {resolution?.status === "ignored" && <form action={restoreHistoricOfferGroup.bind(null, source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-border px-3 py-1.5 text-sm">Restore group to unmatched</button></form>}
