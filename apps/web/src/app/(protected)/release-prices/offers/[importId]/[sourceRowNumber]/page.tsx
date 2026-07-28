@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireOwner } from "@/lib/auth/owner";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
+import { DeleteHistoricOfferRecordForm } from "@/components/releaseOffers/DeleteHistoricOfferRecordForm";
 import {
   confirmManualHistoricOfferMatch,
   restoreHistoricOfferGroup,
@@ -148,6 +149,12 @@ export default async function ReleaseOfferDetailPage({
         {resolution?.status === "linked" && <form action={unlinkHistoricOfferGroup.bind(null, source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Unlink group and retry later</button></form>}
         {resolution?.status === "ignored" && <form action={restoreHistoricOfferGroup.bind(null, source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-border px-3 py-1.5 text-sm">Restore group to unmatched</button></form>}
         {unresolved && <CatalogueCandidateSearch matchGroupKey={source.match_group_key} sourceWine={source.source_wine} sourceVintage={source.source_vintage} returnPath={returnPath} />}
+      </section>
+
+      <section aria-labelledby="delete-record" className="rounded-lg border border-red-700/30 bg-background p-5">
+        <h2 id="delete-record" className="text-lg font-semibold">Delete record</h2>
+        <p className="mt-1 text-sm text-ink-muted">This removes only this accepted offer record and its parsed price fragments. Other records in the same match group are retained.</p>
+        <div className="mt-4"><DeleteHistoricOfferRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
       </section>
 
       {resolution?.parent_sku && <section aria-labelledby="catalogue-card" className="rounded-lg border border-border bg-background p-5"><h2 id="catalogue-card" className="text-lg font-semibold">Current BBX catalogue card</h2>{catalogue.length === 0 ? <p className="mt-3 text-sm text-ink-muted">This Parent ID is saved, but it is not currently in the BBX-eligible catalogue.</p> : <div className="mt-4 space-y-4">{catalogue.map((product) => <article key={product.format_code} className="rounded border border-border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{product.name}</h3><p className="mt-1 text-sm text-ink-muted">Parent {product.parent_sku} · {product.vintage ?? "Vintage unavailable"} · {product.producer ?? "Producer unavailable"}</p></div>{product.product_url && <a className="text-sm text-accent underline-offset-2 hover:underline" href={product.product_url}>Open BBR product</a>}</div><dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-3"><div><dt className="text-xs uppercase text-ink-muted">Region</dt><dd>{[product.country, product.region, product.subregion].filter(Boolean).join(" · ") || "Unavailable"}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Format</dt><dd>{formatFormat(product.case_size, product.bottle_volume_ml)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Listing status</dt><dd>{product.is_listed ? "Listed" : "Unlisted"}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Lowest ask</dt><dd>{formatPence(product.ask)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Highest bid</dt><dd>{formatPence(product.highest_bid_p)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Market price</dt><dd>{formatPence(product.market_price_p)}</dd></div></dl></article>)}</div>}</section>}

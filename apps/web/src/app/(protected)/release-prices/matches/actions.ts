@@ -178,6 +178,21 @@ export async function deleteHistoricOfferGroup(matchGroupKey: string, returnPath
   return mutateGroup("delete_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
 }
 
+export async function deleteHistoricOfferRecord(importId: string, sourceRowNumber: number): Promise<never> {
+  if (!/^[0-9a-f-]{36}$/i.test(importId) || !Number.isSafeInteger(sourceRowNumber) || sourceRowNumber <= 0) {
+    redirect("/release-prices");
+  }
+  const context = await getOwnerContext();
+  if (!context) redirect("/login");
+  const { error } = await context.supabase.rpc("delete_release_offer_record", {
+    p_import_id: importId,
+    p_source_row_number: sourceRowNumber,
+  });
+  revalidatePath(MATCH_PATH);
+  revalidatePath("/release-prices");
+  redirect(error ? `/release-prices/offers/${importId}/${sourceRowNumber}?delete_error=1` : "/release-prices?deleted=1");
+}
+
 export async function editHistoricOfferGroup(
   matchGroupKey: string,
   returnPath: string,

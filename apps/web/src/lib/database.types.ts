@@ -1908,6 +1908,10 @@ export type Database = {
         Args: { p_match_group_key: string }
         Returns: Json
       }
+      delete_release_offer_record: {
+        Args: { p_import_id: string; p_source_row_number: number }
+        Returns: Json
+      }
       ignore_release_offer_row: {
         Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
