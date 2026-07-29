@@ -14,21 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _migrations: {
-        Row: {
-          applied_at: string
-          name: string
-        }
-        Insert: {
-          applied_at?: string
-          name: string
-        }
-        Update: {
-          applied_at?: string
-          name?: string
-        }
-        Relationships: []
-      }
       app_owners: {
         Row: {
           created_at: string
@@ -151,13 +136,6 @@ export type Database = {
             referencedRelation: "catalogue_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "skus"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
         ]
       }
       bbx_fee_schedule: {
@@ -234,13 +212,6 @@ export type Database = {
             referencedRelation: "catalogue_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
-          {
-            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "skus"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
         ]
       }
       cellar_imports: {
@@ -308,240 +279,6 @@ export type Database = {
           warning_row_count?: number
         }
         Relationships: []
-      }
-      observation_events: {
-        Row: {
-          entity_key: string
-          entity_type: string
-          event_type: string
-          field_name: string
-          id: number
-          metadata: Json | null
-          new_value_raw: string | null
-          observed_at: string
-          old_value_raw: string | null
-          scan_run_id: string
-        }
-        Insert: {
-          entity_key: string
-          entity_type: string
-          event_type: string
-          field_name?: string
-          id?: number
-          metadata?: Json | null
-          new_value_raw?: string | null
-          observed_at: string
-          old_value_raw?: string | null
-          scan_run_id: string
-        }
-        Update: {
-          entity_key?: string
-          entity_type?: string
-          event_type?: string
-          field_name?: string
-          id?: number
-          metadata?: Json | null
-          new_value_raw?: string | null
-          observed_at?: string
-          old_value_raw?: string | null
-          scan_run_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "observation_events_scan_run_id_fkey"
-            columns: ["scan_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "observation_events_scan_run_id_fkey"
-            columns: ["scan_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      offers: {
-        Row: {
-          bbx_listing_id: string
-          bottle_volume_ml: number | null
-          case_size: number | null
-          consecutive_misses: number
-          first_seen_at: string
-          first_seen_run_id: string | null
-          format_code: string | null
-          gone_since: string | null
-          last_seen_at: string
-          last_seen_run_id: string | null
-          match_confidence: string | null
-          parent_sku: string
-          price_per_case_p: number
-        }
-        Insert: {
-          bbx_listing_id: string
-          bottle_volume_ml?: number | null
-          case_size?: number | null
-          consecutive_misses?: number
-          first_seen_at: string
-          first_seen_run_id?: string | null
-          format_code?: string | null
-          gone_since?: string | null
-          last_seen_at: string
-          last_seen_run_id?: string | null
-          match_confidence?: string | null
-          parent_sku: string
-          price_per_case_p: number
-        }
-        Update: {
-          bbx_listing_id?: string
-          bottle_volume_ml?: number | null
-          case_size?: number | null
-          consecutive_misses?: number
-          first_seen_at?: string
-          first_seen_run_id?: string | null
-          format_code?: string | null
-          gone_since?: string | null
-          last_seen_at?: string
-          last_seen_run_id?: string | null
-          match_confidence?: string | null
-          parent_sku?: string
-          price_per_case_p?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "offers_first_seen_run_id_fkey"
-            columns: ["first_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "offers_first_seen_run_id_fkey"
-            columns: ["first_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "offers_last_seen_run_id_fkey"
-            columns: ["last_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "offers_last_seen_run_id_fkey"
-            columns: ["last_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "offers_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "offers_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["parent_sku"]
-          },
-        ]
-      }
-      products: {
-        Row: {
-          colour: string | null
-          consecutive_misses: number
-          country: string | null
-          first_seen_at: string
-          first_seen_run_id: string | null
-          gone_since: string | null
-          grape_varieties: string[] | null
-          last_rest_checked_at: string | null
-          last_seen_at: string
-          last_seen_run_id: string | null
-          name: string | null
-          parent_sku: string
-          producer: string | null
-          product_url: string | null
-          region: string | null
-          subregion: string | null
-          vintage: number | null
-        }
-        Insert: {
-          colour?: string | null
-          consecutive_misses?: number
-          country?: string | null
-          first_seen_at: string
-          first_seen_run_id?: string | null
-          gone_since?: string | null
-          grape_varieties?: string[] | null
-          last_rest_checked_at?: string | null
-          last_seen_at: string
-          last_seen_run_id?: string | null
-          name?: string | null
-          parent_sku: string
-          producer?: string | null
-          product_url?: string | null
-          region?: string | null
-          subregion?: string | null
-          vintage?: number | null
-        }
-        Update: {
-          colour?: string | null
-          consecutive_misses?: number
-          country?: string | null
-          first_seen_at?: string
-          first_seen_run_id?: string | null
-          gone_since?: string | null
-          grape_varieties?: string[] | null
-          last_rest_checked_at?: string | null
-          last_seen_at?: string
-          last_seen_run_id?: string | null
-          name?: string | null
-          parent_sku?: string
-          producer?: string | null
-          product_url?: string | null
-          region?: string | null
-          subregion?: string | null
-          vintage?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "products_first_seen_run_id_fkey"
-            columns: ["first_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "products_first_seen_run_id_fkey"
-            columns: ["first_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_last_seen_run_id_fkey"
-            columns: ["last_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "products_last_seen_run_id_fkey"
-            columns: ["last_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       release_offer_imports: {
         Row: {
@@ -1056,13 +793,6 @@ export type Database = {
             referencedColumns: ["parent_sku", "format_code"]
           },
           {
-            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: true
-            referencedRelation: "skus"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
             foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
             columns: ["release_offer_price_id"]
             isOneToOne: true
@@ -1109,175 +839,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      scan_runs: {
-        Row: {
-          algolia_complete: boolean | null
-          algolia_hits_collected: number | null
-          algolia_hits_expected: number | null
-          error_message: string | null
-          finished_at: string | null
-          id: string
-          rest_failed_skus: string[] | null
-          rest_skus_expected: number | null
-          rest_skus_failed: number | null
-          rest_skus_priced: number | null
-          run_date: string
-          scope: string
-          started_at: string
-          status: string
-          wave_delta_changed_count: number | null
-          wave_delta_enabled: boolean | null
-          wave_priced_count: number | null
-          wave_rotation_count: number | null
-          wave_shadow_only_count: number | null
-        }
-        Insert: {
-          algolia_complete?: boolean | null
-          algolia_hits_collected?: number | null
-          algolia_hits_expected?: number | null
-          error_message?: string | null
-          finished_at?: string | null
-          id: string
-          rest_failed_skus?: string[] | null
-          rest_skus_expected?: number | null
-          rest_skus_failed?: number | null
-          rest_skus_priced?: number | null
-          run_date: string
-          scope: string
-          started_at: string
-          status?: string
-          wave_delta_changed_count?: number | null
-          wave_delta_enabled?: boolean | null
-          wave_priced_count?: number | null
-          wave_rotation_count?: number | null
-          wave_shadow_only_count?: number | null
-        }
-        Update: {
-          algolia_complete?: boolean | null
-          algolia_hits_collected?: number | null
-          algolia_hits_expected?: number | null
-          error_message?: string | null
-          finished_at?: string | null
-          id?: string
-          rest_failed_skus?: string[] | null
-          rest_skus_expected?: number | null
-          rest_skus_failed?: number | null
-          rest_skus_priced?: number | null
-          run_date?: string
-          scope?: string
-          started_at?: string
-          status?: string
-          wave_delta_changed_count?: number | null
-          wave_delta_enabled?: boolean | null
-          wave_priced_count?: number | null
-          wave_rotation_count?: number | null
-          wave_shadow_only_count?: number | null
-        }
-        Relationships: []
-      }
-      skus: {
-        Row: {
-          bottle_volume_ml: number | null
-          case_size: number | null
-          consecutive_misses: number
-          first_seen_at: string
-          first_seen_run_id: string | null
-          format_code: string
-          gone_since: string | null
-          highest_bid_p: number | null
-          is_listed: boolean
-          last_seen_at: string
-          last_seen_run_id: string | null
-          last_transaction_p: number | null
-          least_listing_price_p: number | null
-          market_price_p: number | null
-          parent_sku: string
-          qty_available: number | null
-          source_agreement: string | null
-        }
-        Insert: {
-          bottle_volume_ml?: number | null
-          case_size?: number | null
-          consecutive_misses?: number
-          first_seen_at: string
-          first_seen_run_id?: string | null
-          format_code: string
-          gone_since?: string | null
-          highest_bid_p?: number | null
-          is_listed?: boolean
-          last_seen_at: string
-          last_seen_run_id?: string | null
-          last_transaction_p?: number | null
-          least_listing_price_p?: number | null
-          market_price_p?: number | null
-          parent_sku: string
-          qty_available?: number | null
-          source_agreement?: string | null
-        }
-        Update: {
-          bottle_volume_ml?: number | null
-          case_size?: number | null
-          consecutive_misses?: number
-          first_seen_at?: string
-          first_seen_run_id?: string | null
-          format_code?: string
-          gone_since?: string | null
-          highest_bid_p?: number | null
-          is_listed?: boolean
-          last_seen_at?: string
-          last_seen_run_id?: string | null
-          last_transaction_p?: number | null
-          least_listing_price_p?: number | null
-          market_price_p?: number | null
-          parent_sku?: string
-          qty_available?: number | null
-          source_agreement?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "skus_first_seen_run_id_fkey"
-            columns: ["first_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "skus_first_seen_run_id_fkey"
-            columns: ["first_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "skus_last_seen_run_id_fkey"
-            columns: ["last_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "skus_last_seen_run_id_fkey"
-            columns: ["last_seen_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "skus_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "skus_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["parent_sku"]
-          },
-        ]
       }
     }
     Views: {
@@ -1334,13 +895,6 @@ export type Database = {
             referencedRelation: "catalogue_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "skus"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
         ]
       }
       candidate_view: {
@@ -1378,13 +932,6 @@ export type Database = {
             columns: ["parent_sku"]
             isOneToOne: false
             referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "skus_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
             referencedColumns: ["parent_sku"]
           },
         ]
@@ -1429,13 +976,6 @@ export type Database = {
             columns: ["parent_sku"]
             isOneToOne: false
             referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-          {
-            foreignKeyName: "skus_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "products"
             referencedColumns: ["parent_sku"]
           },
         ]
@@ -1489,13 +1029,6 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
             referencedRelation: "catalogue_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "skus"
             referencedColumns: ["parent_sku", "format_code"]
           },
         ]
@@ -1575,13 +1108,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "scan_health_view"
             referencedColumns: ["run_id"]
-          },
-          {
-            foreignKeyName: "observation_events_scan_run_id_fkey"
-            columns: ["scan_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_runs"
-            referencedColumns: ["id"]
           },
         ]
       }

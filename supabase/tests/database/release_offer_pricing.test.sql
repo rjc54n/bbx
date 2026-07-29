@@ -5,9 +5,9 @@ INSERT INTO auth.users (id) VALUES
     ('11000000-0000-0000-0000-000000000001'),
     ('11000000-0000-0000-0000-000000000002');
 INSERT INTO public.app_owners (user_id) VALUES ('11000000-0000-0000-0000-000000000001');
-INSERT INTO public.scan_runs (id, scope, run_date, status, started_at)
+INSERT INTO private.scan_runs (id, scope, run_date, status, started_at)
 VALUES ('21000000-0000-0000-0000-000000000001', 'release-test', DATE '2026-07-28', 'completed', now());
-INSERT INTO public.products (
+INSERT INTO private.products (
     parent_sku, name, vintage, region, colour, producer, product_url,
     first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at, last_rest_checked_at
 ) VALUES (
@@ -16,7 +16,7 @@ INSERT INTO public.products (
     '21000000-0000-0000-0000-000000000001', now(),
     '21000000-0000-0000-0000-000000000001', now(), now()
 );
-INSERT INTO public.skus (
+INSERT INTO private.skus (
     parent_sku, format_code, case_size, bottle_volume_ml,
     least_listing_price_p, market_price_p, highest_bid_p, is_listed,
     first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at

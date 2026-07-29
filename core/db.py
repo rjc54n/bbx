@@ -38,6 +38,7 @@ def get_connection():
             cursor_factory=psycopg2.extras.RealDictCursor,
         )
         try:
+            _configure_postgres_search_path(conn)
             yield conn
         except BaseException:
             conn.rollback()
@@ -57,6 +58,30 @@ def get_connection():
             raise
         finally:
             conn.close()
+
+
+def _configure_postgres_search_path(conn) -> None:
+    """Select the deployed scan-store schema without creating a second ledger."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT "
+            "to_regclass('private.scan_runs') IS NOT NULL AS private_scan_store, "
+            "to_regclass('private._migrations') IS NOT NULL AS private_migration_ledger"
+        )
+        row = cur.fetchone()
+        private_scan_store = row["private_scan_store"]
+        private_migration_ledger = row["private_migration_ledger"]
+
+        if private_scan_store != private_migration_ledger:
+            raise RuntimeError(
+                "Postgres scan-store schema is inconsistent: private.scan_runs "
+                "and private._migrations must either both exist or both be absent"
+            )
+        if private_scan_store:
+            cur.execute("SET search_path TO private, public, extensions")
+    finally:
+        cur.close()
 
 
 def placeholder() -> str:

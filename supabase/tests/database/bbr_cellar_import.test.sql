@@ -10,7 +10,7 @@ VALUES
 INSERT INTO public.app_owners (user_id)
 VALUES ('10000000-0000-0000-0000-000000000001');
 
-INSERT INTO public.scan_runs (
+INSERT INTO private.scan_runs (
     id,
     scope,
     run_date,
@@ -25,7 +25,7 @@ VALUES (
     now()
 );
 
-INSERT INTO public.products (
+INSERT INTO private.products (
     parent_sku,
     name,
     vintage,
@@ -54,7 +54,7 @@ VALUES (
     '2026-07-25 12:00:00+00'
 );
 
-INSERT INTO public.skus (
+INSERT INTO private.skus (
     parent_sku,
     format_code,
     case_size,
@@ -306,7 +306,7 @@ SELECT is(
 );
 
 RESET ROLE;
-UPDATE public.skus
+UPDATE private.skus
 SET highest_bid_p = 33000
 WHERE parent_sku = '20000000001'
   AND format_code = '06-00750';
@@ -322,7 +322,7 @@ SELECT is(
 );
 
 RESET ROLE;
-UPDATE public.skus
+UPDATE private.skus
 SET gone_since = now()
 WHERE parent_sku = '20000000001'
   AND format_code = '06-00750';

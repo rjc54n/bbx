@@ -9,6 +9,7 @@ from core.db import (
     placeholder,
     placeholders,
     _adapt_array_param,
+    _configure_postgres_search_path,
     _parse_array_column,
 )
 
@@ -42,6 +43,65 @@ class TestPlaceholders:
 
     def test_sqlite_placeholders(self):
         assert placeholders(3) == "?, ?, ?"
+
+
+class FakePostgresCursor:
+    def __init__(self, private_scan_store, private_migration_ledger):
+        self.private_scan_store = private_scan_store
+        self.private_migration_ledger = private_migration_ledger
+        self.executed = []
+        self.closed = False
+
+    def execute(self, sql):
+        self.executed.append(sql)
+
+    def fetchone(self):
+        return {
+            "private_scan_store": self.private_scan_store,
+            "private_migration_ledger": self.private_migration_ledger,
+        }
+
+    def close(self):
+        self.closed = True
+
+
+class FakePostgresConnection:
+    def __init__(self, private_scan_store, private_migration_ledger):
+        self.cursor_instance = FakePostgresCursor(
+            private_scan_store, private_migration_ledger
+        )
+
+    def cursor(self):
+        return self.cursor_instance
+
+
+class TestPostgresSearchPath:
+    def test_legacy_public_store_keeps_existing_search_path(self):
+        conn = FakePostgresConnection(False, False)
+
+        _configure_postgres_search_path(conn)
+
+        assert len(conn.cursor_instance.executed) == 1
+        assert conn.cursor_instance.closed
+
+    def test_private_store_sets_private_first(self):
+        conn = FakePostgresConnection(True, True)
+
+        _configure_postgres_search_path(conn)
+
+        assert conn.cursor_instance.executed[-1] == (
+            "SET search_path TO private, public, extensions"
+        )
+        assert conn.cursor_instance.closed
+
+    @pytest.mark.parametrize("scan_store,ledger", [(True, False), (False, True)])
+    def test_inconsistent_private_store_fails_closed(self, scan_store, ledger):
+        conn = FakePostgresConnection(scan_store, ledger)
+
+        with pytest.raises(RuntimeError, match="schema is inconsistent"):
+            _configure_postgres_search_path(conn)
+
+        assert conn.cursor_instance.closed
 
 
 class TestBootstrap:
