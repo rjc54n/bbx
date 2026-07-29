@@ -1,4 +1,4 @@
-# Roadmap: revised 24 July 2026
+# Roadmap: revised 29 July 2026
 
 ## Purpose
 
@@ -180,6 +180,9 @@ competing price anchor. This is where the guide being wrong actually pays.
 
 ### Phase 5: Cellar holdings and history
 
+**Backlog:** an owner-only BBR/CellarTracker reconciliation tool that compares
+accepted snapshots and shows disagreements without changing either source.
+
 The point of the whole exercise.
 
 **Product decision, 25 July 2026:** BBX is a single-owner, single-cellar
@@ -188,12 +191,12 @@ but does not support registration, separate user cellars, invitations or
 sharing. Personal tables do not carry unused tenant columns. See
 `ADR-001-single-owner-application.md` and `PHASE5-IMPLEMENTATION.md`.
 
-**Implementation status, 25 July 2026:** the owner boundary, BBR snapshot
-upload, preview and acceptance flow are live. The first snapshot has been
-accepted. The record-level BBR cellar browser and current BBX bid/ask join are
-deployed and passed owner browser acceptance. Supabase owner authentication is
-now the stable production domain's application gate. CellarTracker remains the
-next holdings source.
+**Implementation status, 29 July 2026:** the owner boundary and BBR snapshot
+workflow are live. CellarTracker full-snapshot import, repair, acceptance,
+current-and-consumed browser and whole-dataset catalogue matching are
+implemented. Its database schema is deployed. Catalogue matching uses unique
+local exact identity first, then bounded `prod_product` Algolia searches with
+provisional candidate confirmation.
 
 - Upload the current BBR holdings CSV and maintain it in the backend as a
   dated source snapshot. `Parent ID` joins straight to `parent_sku`, so no
@@ -201,7 +204,8 @@ next holdings source.
   source file, imported-at time and row-level provenance rather than replacing
   the previous upload without an audit trail.
 - Upload the CellarTracker My Cellar summary as a dated inventory source. The
-  representative file records current `Quantity` and `Pending` totals plus
+  representative file records current home `Quantity` and BBR-held `Pending`
+  totals plus
   zero-total rows. Treat a zero-total row as a wine-level `fully_consumed`
   state. It does not contain purchase, movement, location or bottle-level
   consumption events. Preserve unmatched source rows so they can be resolved
@@ -214,9 +218,10 @@ next holdings source.
   one overwrite another.
 - Maintain a backend current-holdings projection from the imported evidence,
   with source, location, quantity, format and last-confirmed time visible.
-  Repeated uploads must be idempotent and must report additions, removals,
-  quantity changes, unmatched rows and source conflicts before updating the
-  current view.
+  Exact repeated uploads must be idempotent. A changed full report creates a
+  new immutable snapshot and the latest acceptance time selects the active
+  view. Additions, removals and quantity changes remain informational and must
+  not block acceptance.
 - Drinking windows, maturity, per-region and per-vintage concentration.
 - **Drink-now view:** what is at best or closing, how many bottles, and what is
   under-drunk relative to its window.
@@ -306,8 +311,10 @@ becoming the source of truth or gaining authority to trade.
 
 ## Backlog (not blocking current work)
 
-*(none currently — the `prod_biddable` sharded-discovery undercount tracked
-here was root-caused and fixed 2026-07-25; see Phase 4 above.)*
+- Owner-only BBR/CellarTracker reconciliation view. This compares accepted
+  snapshots without changing either source.
+- Informational additions, removals and quantity-change summary at
+  CellarTracker acceptance.
 
 ## Standing constraints
 

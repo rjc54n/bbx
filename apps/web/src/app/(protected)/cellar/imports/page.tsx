@@ -21,7 +21,7 @@ function dateTime(value: string): string {
 
 export default async function ImportsPage() {
   const { supabase } = await requireOwner();
-  const [{ data, error }, { data: releaseData, error: releaseError }] = await Promise.all([
+  const [{ data, error }, { data: releaseData, error: releaseError }, { data: cellarTrackerData, error: cellarTrackerError }] = await Promise.all([
     supabase
       .from("cellar_imports")
       .select("accepted_at, original_filename, source_row_count, status, uploaded_at")
@@ -35,9 +35,10 @@ export default async function ImportsPage() {
       .order("imported_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("cellar_imports").select("accepted_at, original_filename, source_row_count, status, uploaded_at").eq("source_type", "cellartracker_inventory").order("uploaded_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
-  if (error || releaseError) throw new Error("Import status could not be loaded.");
+  if (error || releaseError || cellarTrackerError) throw new Error("Import status could not be loaded.");
   const latest = data as ImportSummary | null;
 
   return (
@@ -89,6 +90,11 @@ export default async function ImportsPage() {
           ) : (
             <p className="mt-4 text-xs text-ink-muted">No upload recorded.</p>
           )}
+        </Link>
+
+        <Link href="/cellar/imports/cellartracker" className="block rounded-lg border border-border bg-background p-5 hover:border-accent">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">CellarTracker</p><p className="mt-1 text-sm text-ink-muted">Upload and accept a complete My Cellar snapshot.</p></div><span className="text-sm font-medium text-accent">Manage imports</span></div>
+          {cellarTrackerData ? <p className="mt-4 text-xs text-ink-muted">Latest: {cellarTrackerData.original_filename}, {cellarTrackerData.source_row_count} rows, {cellarTrackerData.status}</p> : <p className="mt-4 text-xs text-ink-muted">No upload recorded.</p>}
         </Link>
 
         <Link

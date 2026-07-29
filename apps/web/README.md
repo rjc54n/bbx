@@ -26,7 +26,16 @@ npm run dev
 ```
 
 The public catalogue is at `http://localhost:3000`. The owner login is at
-`http://localhost:3000/login`.
+`http://localhost:3000/login`. Owner data routes include:
+
+- `/cellar/bbr` for the accepted BBR cellar;
+- `/cellartracker` for the latest accepted CellarTracker snapshot;
+- `/cellartracker/matches` for CellarTracker catalogue matching;
+- `/release-prices` for accepted historic release offers; and
+- `/cellar/imports` for all private import workflows.
+
+`ALGOLIA_APP_ID` and `ALGOLIA_API_KEY` are server-only variables used by the
+two matching pages. Do not expose them through `NEXT_PUBLIC_` variables.
 
 Password setup and recovery use Supabase's standard implicit recovery flow:
 

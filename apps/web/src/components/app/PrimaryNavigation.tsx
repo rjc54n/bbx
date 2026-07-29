@@ -19,6 +19,7 @@ const tabs = [
     label: "My BBR Cellar",
     href: "/cellar/bbr",
   },
+  { id: "cellartracker", label: "My CellarTracker", href: "/cellartracker" },
   {
     id: "release-prices",
     label: "Release prices",
@@ -31,6 +32,8 @@ export function PrimaryNavigation() {
   const searchParams = useSearchParams();
   const active = pathname.startsWith("/release-prices") || pathname.startsWith("/cellar/imports/release-offers")
     ? "release-prices"
+    : pathname.startsWith("/cellartracker") || pathname.startsWith("/cellar/imports/cellartracker")
+    ? "cellartracker"
     : pathname.startsWith("/cellar")
     ? "cellar"
     : searchParams.get("mode") === "price-changes"

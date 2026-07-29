@@ -1,6 +1,6 @@
 # Import source profiles
 
-**Profile date:** 2026-07-25
+**Profile date:** 2026-07-29
 **Data handling:** source files are private and remain outside Git
 
 This document records the contracts observed in the three representative CSV
@@ -67,6 +67,11 @@ All 201 positive rows have size `750ml`. All 404 zero-total rows have size
 `CScore` is blank throughout. `BeginConsume` is `9999` on 584 rows and
 `EndConsume` is `9999` on 567 rows.
 
+`Price` is a GBP per-bottle source value. Nine positive rows use four decimal
+places because CellarTracker has divided a case cost; the parser normalises any
+numeric GBP source price by rounding it to the nearest penny before validation
+or storage of the comparison value.
+
 This is a wine-level summary, not an all-time transaction export. It has no
 purchase date, consumed quantity, consumption date, movement, location, bin or
 source record ID.
@@ -84,20 +89,39 @@ It does not support bottle-level consumption history or a lifetime purchase
 and movement ledger. Those would require a separate CellarTracker transaction
 or bottle export.
 
-`Pending` agrees closely with the BBR snapshot, but it is not a location field.
-After allowing for name ordering and producer aliases, 114 of the 116 BBR rows
-have a same-vintage CellarTracker counterpart. Of those, 112 have the same BBR
-quantity and CellarTracker `Pending` quantity. The two quantity conflicts are
-retained for review. Pintia 2017 and Tignanello 2023 occur in BBR but not in
+`Pending` agrees closely with the BBR snapshot. After allowing for name
+ordering and producer aliases, 114 of the 116 BBR rows have a same-vintage
+CellarTracker counterpart. Of those, 112 have the same BBR quantity and
+CellarTracker `Pending` quantity. The two quantity conflicts are retained for
+future reconciliation. Pintia 2017 and Tignanello 2023 occur in BBR but not in
 this CellarTracker file. CellarTracker also has a pending 2021 Domaine de
 Thalabert row absent from the BBR file.
 
-This evidence is strong enough to use `Pending` as a reconciliation signal.
-It is not sufficient to label every pending bottle as BBR-held. The accepted
-BBR snapshot remains authoritative for that location. `Quantity` can be
-labelled `home` only after the owner confirms that no other physical location
-is represented by this export. Until then its location is
-`cellartracker_unspecified`.
+**Product decision, 29 July 2026:** `Quantity` is the owner-confirmed home-held
+position and `Pending` is the owner-confirmed BBR-held position. This resolves
+the previous provisional location caveat. The source remains a periodic
+summary, not a movement ledger.
+
+Each upload is a complete snapshot. SHA-256 plus parser version identifies an
+exact re-upload. A changed full report creates new immutable evidence. The
+latest accepted import by acceptance time supplies the active CellarTracker
+view; earlier accepted imports remain source history. No source-embedded date
+guard is applied.
+
+Matching is separate from import acceptance. It groups the latest snapshot by
+normalised wine name and vintage, then uses a unique exact local Parent ID when
+available. Remaining groups query BBR's full `prod_product` Algolia index. A
+leading CellarTracker `Producer` value is removed from the search query when it
+also prefixes `Wine`, because BBR commonly places the producer later in its
+product name. This affects candidate retrieval only. Automatic linking still
+requires one exhaustive exact Parent ID; other results remain provisional
+suggestions for confirmation.
+
+Links are stored at `parent_sku` grain and remain valid when the wine is absent
+from the current BBX-eligible catalogue. CellarTracker has no case-size field.
+For market comparison, the application selects the smallest available
+`case_size` for the linked Parent ID and divides ask and highest bid by that
+case size. The displayed per-bottle comparison is an approximation.
 
 ## Historic BBR offers
 
@@ -128,9 +152,9 @@ bottle volume and currency.
 
 These records prove that a wine was offered at the stated price. They do not
 prove that it was purchased. Accepted records remain visible without a product
-link. A later Match page will link the complete accepted dataset to the
-catalogue. Direct numeric BBR product identifiers will take precedence over a
-unique exact name and vintage match.
+link. The Match page links the complete accepted dataset to the catalogue.
+Direct numeric BBR product identifiers take precedence over a unique exact
+name and vintage match.
 
 ## Import boundary
 

@@ -5,6 +5,7 @@ export type HistoricOfferMatchGroup = {
   source_match_key: string;
   source_vintage: number | null;
   source_wine: string;
+  catalogue_query?: string;
 };
 
 export type AlgoliaWineHit = {

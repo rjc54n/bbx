@@ -1,9 +1,12 @@
 # BBX Arbitrage Tools
 
-Tools for finding below-market fine wine on the BBX (Berry Bros. & Rudd) trading exchange:
+Tools for finding below-market fine wine on the BBX (Berry Bros. & Rudd)
+trading exchange and managing private cellar evidence:
 
 1. **Streamlit Web App** — interactive dashboard for exploring listings, applying discount thresholds, and viewing opportunities.
 2. **Automated Arbitrage Scanner (GitHub Actions)** — headless batch process that runs hourly, evaluates BBX listings, and sends a Slack notification with opportunities. Uses S3 to persist notification state so the same alert is not sent repeatedly.
+3. **Next.js and Supabase application** — the current catalogue reader plus
+   owner-only BBR cellar, CellarTracker and historic release-price datasets.
 
 Both are thin wrappers over a single shared pipeline (`core/pipeline.py`), so behaviour is identical across UI, CLI, and CI.
 
@@ -36,6 +39,7 @@ bbx/
   apps/
     streamlit_app/streamlit_app.py   # UI wrapper
     arbitrage_bot/run_arbitrage.py   # CLI/CI wrapper + Slack + dedup
+    web/                             # Next.js catalogue and private cellar app
   core/
     pipeline.py            # shared 3-phase scan funnel (ScanConfig, run_scan)
     fetch_listings.py      # Algolia fetch helper
@@ -46,7 +50,11 @@ bbx/
     payload.json           # GraphQL payload template
   tests/                   # pytest unit tests (dedup, discount maths, sharding)
   docs/
-    PHASE1.md              # plain-language explainer for the planned scan store
+    ROADMAP-2026-07.md               # current product roadmap
+    CELLARTRACKER-IMPLEMENTATION.md  # fourth dataset implementation
+  supabase/
+    migrations/                      # deployed database schema history
+    tests/                           # database access and behaviour tests
   .github/workflows/arbitrage.yml
 ```
 
@@ -61,8 +69,8 @@ bbx/
 
 Streamlit reads these from `.streamlit/secrets.toml`; the bot reads environment variables.
 The Next.js application also reads them from its server environment for the
-owner-only historic-offer Match page. Do not prefix either variable with
-`NEXT_PUBLIC_`.
+owner-only release-price and CellarTracker matching pages. Do not prefix either
+variable with `NEXT_PUBLIC_`.
 
 ### Slack (bot only)
 
@@ -86,6 +94,11 @@ streamlit run apps/streamlit_app/streamlit_app.py
 
 Requires `.streamlit/secrets.toml`.
 
+### Next.js application
+
+See [`apps/web/README.md`](apps/web/README.md) for environment variables,
+owner bootstrap, local development and release checks.
+
 ### Arbitrage scanner (CLI)
 
 ```bash
@@ -106,6 +119,15 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
+The Next.js checks run separately:
+
+```bash
+cd apps/web
+npm run lint
+npm test
+npm run build
+```
+
 ---
 
 ## Deduplication logic
@@ -121,46 +143,15 @@ Implemented in `core/notification_state.py`:
 
 ## Roadmap
 
-- **Phase 0 (done)** — shared pipeline, dead-code removal, tests, hardened CI.
-- **Phase 0.5 (done)** — facet-sharded fetch so full-book scans get past
-  Algolia's 1,000-hit cap (prerequisite for the full-book sweep below).
-- **Phase 0.75 (done)** — reliability pass: notification state is persisted only
-  after a confirmed Slack send (dry runs never persist; storage errors fail the
-  job); three-way order-book classification (sole / competing / unavailable, with
-  ties counted as zero headroom); scan-coverage metrics + REST retries with a
-  coverage floor that fails the run rather than alerting on partial data; sharding
-  complement always queried (safe for multi-valued facets); hourly cron moved off
-  `:00`.
-- **Phase 1A (initial validation done)** — entity model validated against
-  captured real API responses (fixtures under `tests/fixtures/`, contract tests
-  in `tests/test_fixtures_contract.py`). Findings, in full, in
-  [`docs/PHASE1A-entity-model.md`](docs/PHASE1A-entity-model.md):
-  - **Three entities** — product → SKU → offer, where **format** (case size ×
-    bottle volume) is part of the SKU key. REST prices *per format*, so the
-    priced line is `(parent_sku, format)`, not `parent_sku`.
-  - **Offer identity exists in both endpoints** — Algolia
-    `purchase_options[].bbx_listing_id` ≡ GraphQL `variants[].product.listing_id`
-    — a *strong candidate* durable offer id (longitudinal durability still to be
-    proven in 1B).
-  - **Offer-level data is available full-book from Algolia** (not GraphQL-only as
-    earlier assumed): each object's `purchase_options[]` lists every live offer.
-    So **full-book scans need no GraphQL**; GraphQL is retained only for
-    candidate depth verification (it is the sole *live* source of the
-    second-lowest price the `pct_next` check needs), pending a concordance study.
-  - Longitudinal validation (id durability, broad Algolia coverage, the GraphQL
-    concordance study) remains **open** — hence "initial validation", not "done".
-  - Still includes the GraphQL order-book parse hardening (partial parse →
-    unavailable end-to-end, already done via `order_book_readable`).
-- **Phase 1B (planned)** — persistent scan store: an append-only **changelog**
-  (`observation_events`) plus `scan_runs` metadata (so "unchanged" is
-  distinguishable from "not observed"), `current_state`, and `products`. Backend:
-  free-tier **Supabase (Postgres)** via the Supavisor pooler, with local
-  **SQLite** for dev/tests only. **Prerequisite:** `fetch_listings` must expose
-  **discovery completeness** — a storage-producing full sweep has to raise (or
-  return `discovery_complete=False`) when shard dimensions are exhausted above
-  the 1,000-hit cap, and compare root `nbHits` to the unique records collected.
-  Discovery completeness and REST pricing coverage are **separate** fields; only
-  a complete discovery scan may advance missing-SKU / `gone` counters. See
-  [`docs/PHASE1.md`](docs/PHASE1.md).
-- **Phase 2 (planned)** — rewrite the web app as a fast reader over the store,
-  with saved searches, watchlists, and per-wine detail/history pages.
+The dated implementation roadmap is
+[`docs/ROADMAP-2026-07.md`](docs/ROADMAP-2026-07.md). Current implementation
+notes include:
+
+- [`docs/PHASE3-4-IMPLEMENTATION.md`](docs/PHASE3-4-IMPLEMENTATION.md) for the
+  persistent catalogue and scanner;
+- [`docs/PHASE5-IMPLEMENTATION.md`](docs/PHASE5-IMPLEMENTATION.md) for private
+  cellar holdings;
+- [`docs/PHASE7-IMPLEMENTATION.md`](docs/PHASE7-IMPLEMENTATION.md) for historic
+  release prices; and
+- [`docs/CELLARTRACKER-IMPLEMENTATION.md`](docs/CELLARTRACKER-IMPLEMENTATION.md)
+  for CellarTracker import, matching and comparison.

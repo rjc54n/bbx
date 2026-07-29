@@ -1,8 +1,8 @@
 # Phase 5 implementation: cellar holdings and history
 
-**Status:** BBR import backend, first accepted snapshot, cellar browser and
-full-app authentication deployed and manually accepted on 2026-07-25;
-CellarTracker and MFA remain
+**Status:** BBR and CellarTracker snapshot imports, owner cellar views and
+whole-dataset catalogue matching implemented; CellarTracker schema deployed on
+2026-07-29
 **Decision authority:** `ADR-001-single-owner-application.md`
 **Sources:** BBR current holdings CSV and CellarTracker My Cellar summary
 **Source contracts:** `IMPORT-SOURCE-PROFILES.md`
@@ -19,9 +19,9 @@ The supplied CellarTracker file does not contain purchase, movement or
 bottle-level consumption events. A zero-total row is treated as
 `fully_consumed`, but it must not generate synthetic bottle counts or dates.
 
-The first implementation is single-owner. It must preserve original source
-evidence, make repeated uploads idempotent and keep unresolved rows available
-for later matching.
+The implementation is single-owner. It preserves original source evidence,
+makes exact repeated uploads idempotent and keeps unresolved rows available for
+later matching.
 
 ## Preconditions
 
@@ -42,9 +42,9 @@ Backend schema and local import parsing may be developed before items 4–5.
 Nothing that accepts an upload over the public internet may be deployed before
 they are complete.
 
-## BBR implementation state
+## Implementation state
 
-The local implementation now includes:
+The implementation now includes:
 
 - the single-owner allowlist and owner-check function;
 - owner-only RLS for personal tables and the private import bucket;
@@ -60,6 +60,27 @@ The local implementation now includes:
 - an owner-only BBR cellar browser with URL-backed filters and current BBX bid
   and ask values; and
 - parser tests plus database permission and import-behaviour tests.
+
+CellarTracker adds:
+
+- Windows-1252 decoding and the documented 25-column source contract;
+- full-snapshot staging, raw-row retention, checksum deduplication and explicit
+  acceptance;
+- rounding of numeric source prices to the nearest penny before validation;
+- editable invalid rows, row discard and whole-import deletion before
+  acceptance;
+- a latest-accepted snapshot view containing current and fully consumed wines;
+- owner-confirmed home and BBR-held quantities;
+- whole-snapshot Parent ID matching through unique local exact matches and
+  bounded, resumable `prod_product` Algolia searches;
+- provisional candidate review, manual link, edit, unlink, suppress, restore
+  and group deletion controls with resolution events; and
+- approximate per-bottle BBX comparisons using the smallest available case
+  size for a linked Parent ID.
+
+The web routes are `/cellartracker`, `/cellartracker/matches` and
+`/cellar/imports/cellartracker`. The imports hub links to the source-specific
+history and upload page.
 
 The representative BBR file has 116 rows. A live catalogue read on 2026-07-25
 found an exact product-format match for all 116 rows. The file has since been
@@ -81,17 +102,20 @@ the source headers and parsing edge cases.
 BBR is authoritative for the current position held with BBR at the snapshot
 time. The supplied CellarTracker file is a dated wine-level summary. It
 contains current `Quantity` and `Pending` totals plus zero-total historical
-rows, but no purchase, movement, location or bottle-level consumption events.
-By product decision, a zero-total row means the wine is `fully_consumed`.
+rows, but no purchase, movement or bottle-level consumption events. By product
+decision, `Quantity` is home-held, `Pending` is BBR-held and a zero-total row
+means the wine is `fully_consumed`.
 
 Overlapping source records are reconciled. They are not added together without
 evidence and neither source silently overwrites the other.
 
 `Parent ID` is the preferred BBR match to `products.parent_sku`. Missing or
-invalid identifiers remain unmatched source rows. CellarTracker matching rules
-use vintage plus the source wine identity and must retain the source wine name
-even after a match is accepted. `Pending` is a reconciliation signal, not
-proof of a BBR location. See `IMPORT-SOURCE-PROFILES.md`.
+invalid identifiers remain unmatched source rows. CellarTracker matching uses
+vintage plus the source wine identity and retains the source name after a match
+is accepted. A producer-prefixed source name may use its remaining wine name as
+the Algolia query, but this never turns a non-exact result into an automatic
+link. See `IMPORT-SOURCE-PROFILES.md` and
+`CELLARTRACKER-IMPLEMENTATION.md`.
 
 ## Import evidence model
 
@@ -159,12 +183,12 @@ zero-total row may set the wine-level `fully_consumed` state.
 4. Store the original file in the private import bucket.
 5. Parse into immutable staging rows with a versioned source parser.
 6. Validate headers, required values, dates, quantities and source invariants.
-7. Match products and formats without discarding unresolved rows.
-8. Present additions, removals, quantity changes, conflicts, warnings and
-   unmatched rows.
-9. Accept the import explicitly.
-10. In one database transaction, activate the accepted evidence and refresh
+7. Present validation errors, warnings and repair or deletion controls.
+8. Accept the import explicitly.
+9. In one database transaction, activate the accepted evidence and refresh
     the current-holdings projection.
+10. Run catalogue matching separately against the consolidated accepted
+    dataset.
 
 A parsing, matching or projection failure leaves the previous accepted cellar
 unchanged. Acceptance is repeatable and records its actor.
@@ -210,13 +234,13 @@ unchanged. Acceptance is repeatable and records its actor.
 
 ### Slice 5D: CellarTracker inventory summary
 
-- Implement the profiled Windows-1252 CellarTracker summary contract.
-- Import current quantities and the `fully_consumed` state without inventing
-  bottle events.
-- Retain unresolved source wine identities.
-- Reconcile overlap with accepted BBR snapshots.
-- Keep physical location unspecified until the owner confirms that `Quantity`
-  represents only the home cellar.
+- **Shipped 2026-07-29.** The Windows-1252 summary contract, full-snapshot
+  import, current and consumed view, and separate catalogue matching page are
+  implemented.
+- `Quantity` is home-held and `Pending` is BBR-held by final owner decision.
+- The BBR/CellarTracker reconciliation tool remains a separate backlog item.
+- Multi-format CellarTracker support is intentionally excluded because size is
+  recorded at bottle rather than wine grain.
 
 ### Slice 5E: cellar views
 
@@ -238,7 +262,8 @@ acceptance. Profile the source before adding event tables or projections.
 - Private source objects cannot be listed or downloaded without the owner
   session.
 - A duplicate file checksum creates no duplicate import or evidence.
-- A changed file produces a new snapshot and an accurate difference.
+- A changed file produces a new snapshot. Acceptance selects the latest by
+  acceptance time.
 - Invalid headers, oversized files and excessive row counts fail before
   activation.
 - A failed parse or projection leaves the accepted cellar unchanged.
@@ -253,9 +278,9 @@ acceptance. Profile the source before adding event tables or projections.
 
 ## Acceptance
 
-The holdings portion of Phase 5 is accepted when the two representative
-snapshot exports can be uploaded twice without duplication, their unmatched
-and conflicting rows are visible, an accepted import produces the same current
-holdings on replay, and an anonymous client cannot retrieve any file, staging
-row or holding. Bottle-level history remains optional and requires a
-representative event export before implementation.
+The BBR and CellarTracker holdings imports are implemented. CellarTracker's
+acceptance-time additions, removals and quantity-change summary is not yet
+shown in the interface; it remains informational and must not block acceptance.
+The separate BBR/CellarTracker reconciliation tool is backlog work. Bottle-level
+history remains optional and requires a representative event export before
+implementation.

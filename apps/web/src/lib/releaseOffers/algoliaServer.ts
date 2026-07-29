@@ -45,7 +45,7 @@ function searchParams(group: HistoricOfferMatchGroup, hitsPerPage: number, page 
   const facetFilters = ["family_type:Wines"];
   if (group.source_vintage !== null) facetFilters.push(`vintage:${group.source_vintage}`);
   return new URLSearchParams({
-    query: group.source_wine,
+    query: group.catalogue_query ?? group.source_wine,
     hitsPerPage: String(hitsPerPage),
     page: String(page),
     facetFilters: JSON.stringify(facetFilters),
