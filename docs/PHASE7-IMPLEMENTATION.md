@@ -39,8 +39,20 @@ index. This can find stocked BBR products that are absent from the
 `prod_biddable` BBX-eligible universe.
 
 A unique, exhaustively checked Algolia name and vintage result links
-automatically. Non-exact Algolia results remain suggestions until the owner
-confirms one. Algolia rank is not stored or displayed as a probability.
+automatically. The exact-match comparison drops trailing comma segments that
+the candidate itself declares as its country, region or subregion, not only a
+trailing country label. Roughly a third of catalogue names carry a geographic
+tail two or more segments deep, so a source name that stopped at the country
+previously failed to match a candidate whose tail also named the region or
+subregion.
+
+Non-exact Algolia results remain suggestions until the owner confirms one.
+Suggestions are ordered by how much of the source identity each candidate
+accounts for, with Algolia's own rank breaking ties, and each suggestion
+stores that score. Word order is still significant here: unlike CellarTracker,
+both the release-offer source and the BBR catalogue already share BBR's
+ordering, so no order-independent comparison is applied. Algolia rank alone is
+not stored or displayed as a probability.
 
 Matching runs are manual, batched and resumable. Existing links and suppressed
 records are excluded from retries. Resolution changes have an append-only

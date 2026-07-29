@@ -3,12 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getOwnerContext } from "@/lib/auth/owner";
-import { cellarTrackerCatalogueQuery } from "@/lib/cellar/cellartrackerMatching";
-import { searchBbrCatalogue, searchHistoricOfferGroups } from "@/lib/releaseOffers/algoliaServer";
-import type { HistoricOfferMatchGroup } from "@/lib/releaseOffers/algoliaMatching";
+import { rankCellarTrackerCandidates, type CellarTrackerMatchGroup } from "@/lib/cellar/cellartrackerMatching";
+import { searchBbrCatalogue, searchCellarTrackerGroups } from "@/lib/releaseOffers/algoliaServer";
 
 const MATCH_PATH = "/cellartracker/matches";
-const MATCH_BATCH_SIZE = 25;
+const MATCH_BATCH_SIZE = 20;
 
 export type CellarTrackerMatchProgress = {
   runId: string;
@@ -75,21 +74,20 @@ export async function processCellarTrackerMatchBatch(runId: string): Promise<Cel
   if (!/^[0-9a-f-]{36}$/i.test(runId)) throw new Error("The match run reference is invalid.");
 
   const { data, error } = await context.supabase.from("cellartracker_match_run_groups")
-    .select("match_group_key,source_match_key,source_vintage,source_wine,source_producer")
+    .select("match_group_key,source_wine,source_producer,source_vintage")
     .eq("run_id", runId).eq("status", "pending")
     .order("match_group_key").limit(MATCH_BATCH_SIZE);
   if (error) throw new Error("The next CellarTracker match batch could not be loaded.");
   const groups = (data ?? []).map((row) => ({
     match_group_key: row.match_group_key,
-    source_match_key: row.source_match_key,
-    source_vintage: row.source_vintage,
     source_wine: row.source_wine,
-    catalogue_query: cellarTrackerCatalogueQuery(row.source_wine, row.source_producer),
-  })) satisfies HistoricOfferMatchGroup[];
+    source_producer: row.source_producer,
+    source_vintage: row.source_vintage,
+  })) satisfies CellarTrackerMatchGroup[];
   if (groups.length === 0) return loadProgress(context, runId);
 
   try {
-    const results = await searchHistoricOfferGroups(groups);
+    const results = await searchCellarTrackerGroups(groups);
     await Promise.all(results.map(async (result) => {
       if (result.error) {
         const { error: recordError } = await context.supabase.rpc("record_cellartracker_algolia_error", {
@@ -100,12 +98,12 @@ export async function processCellarTrackerMatchBatch(runId: string): Promise<Cel
         if (recordError) throw recordError;
         return;
       }
+      const ranking = rankCellarTrackerCandidates(result.group, result.hits);
       const { error: recordError } = await context.supabase.rpc("record_cellartracker_algolia_result", {
         p_run_id: runId,
         p_match_group_key: result.group.match_group_key,
-        p_candidates: result.candidates,
-        p_exact_parent_skus: result.exactParentSkus,
-        p_exhaustive: result.exhaustive,
+        p_candidates: ranking.candidates,
+        p_auto_link_parent_sku: ranking.autoLinkParentSku,
         p_observed_at: result.observedAt,
       });
       if (recordError) throw recordError;

@@ -1,4 +1,10 @@
 import { releaseWineMatchKey } from "./parser";
+import {
+  coreKeyScore,
+  geographyTokens,
+  stripGeographicSegments,
+  wineCoreTokens,
+} from "@/lib/wine/coreKey";
 
 export type HistoricOfferMatchGroup = {
   match_group_key: string;
@@ -14,6 +20,7 @@ export type AlgoliaWineHit = {
   vintage?: unknown;
   producer?: unknown;
   region?: unknown;
+  subregion?: unknown;
   country?: unknown;
   stock_origin?: unknown;
   purchase_mode?: unknown;
@@ -72,6 +79,10 @@ export function toHistoricOfferCandidate(
   };
 }
 
+function catalogueGeography(hit: AlgoliaWineHit): Set<string> {
+  return geographyTokens(text(hit.country), text(hit.region), text(hit.subregion));
+}
+
 export function exactParentSkus(
   group: HistoricOfferMatchGroup,
   hits: AlgoliaWineHit[],
@@ -80,28 +91,62 @@ export function exactParentSkus(
   return [...new Set(hits.flatMap((hit) => {
     const candidate = toHistoricOfferCandidate(hit, 1);
     if (!candidate || candidate.vintage !== group.source_vintage) return [];
-    return comparableMatchKey(candidate.name, hit.country) === comparableMatchKey(group.source_wine, hit.country)
+    const geography = catalogueGeography(hit);
+    return comparableMatchKey(candidate.name, geography) === comparableMatchKey(group.source_wine, geography)
       ? [candidate.parent_sku]
       : [];
   }))];
 }
 
-function comparableMatchKey(name: string, country: unknown): string {
-  const key = releaseWineMatchKey(name);
-  const countryKey = text(country) ? releaseWineMatchKey(text(country)!) : "";
-  if (!countryKey || key === countryKey || !key.endsWith(` ${countryKey}`)) return key;
-  return key.slice(0, -(countryKey.length + 1));
+/**
+ * BBR renders the same wine with a geographic tail of varying depth, so a
+ * release-offer name and the catalogue name frequently differ only in how much
+ * geography each repeats. Trailing segments that the candidate itself declares
+ * as its country, region or subregion are dropped from both sides before the
+ * comparison.
+ *
+ * Word order is otherwise preserved. Unlike CellarTracker, release offers
+ * already use BBR's ordering, so there is nothing for an order-independent
+ * comparison to gain and a real precision cost to pay.
+ */
+function comparableMatchKey(name: string, geography: ReadonlySet<string>): string {
+  return releaseWineMatchKey(stripGeographicSegments(name, geography));
 }
 
-export function topHistoricOfferCandidates(hits: AlgoliaWineHit[], limit = 5) {
+export type RankedHistoricOfferCandidate = HistoricOfferCandidate & { match_score: number };
+
+function catalogueCoreTokens(hit: AlgoliaWineHit, candidate: HistoricOfferCandidate): string[] {
+  return wineCoreTokens(
+    `${stripGeographicSegments(candidate.name, catalogueGeography(hit))} ${candidate.producer ?? ""}`,
+  );
+}
+
+/**
+ * Orders a shortlist by how much of the source identity each candidate
+ * accounts for. Algolia's own rank breaks ties, so its judgement still decides
+ * between candidates the score cannot separate.
+ */
+export function topHistoricOfferCandidates(
+  hits: AlgoliaWineHit[],
+  sourceWine: string,
+  limit = 5,
+): RankedHistoricOfferCandidate[] {
+  const sourceTokens = wineCoreTokens(sourceWine);
   const seen = new Set<string>();
-  const candidates: HistoricOfferCandidate[] = [];
+  const scored: Array<{ candidate: RankedHistoricOfferCandidate; order: number }> = [];
   for (let hitIndex = 0; hitIndex < hits.length; hitIndex += 1) {
     const candidate = toHistoricOfferCandidate(hits[hitIndex], hitIndex + 1);
     if (!candidate || seen.has(candidate.parent_sku)) continue;
     seen.add(candidate.parent_sku);
-    candidates.push(candidate);
-    if (candidates.length === limit) break;
+    scored.push({
+      candidate: {
+        ...candidate,
+        match_score: coreKeyScore(sourceTokens, catalogueCoreTokens(hits[hitIndex], candidate)),
+      },
+      order: hitIndex,
+    });
   }
-  return candidates;
+  scored.sort((left, right) =>
+    right.candidate.match_score - left.candidate.match_score || left.order - right.order);
+  return scored.slice(0, limit).map((entry, index) => ({ ...entry.candidate, rank: index + 1 }));
 }
