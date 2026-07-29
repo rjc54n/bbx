@@ -47,13 +47,13 @@ export default async function CellarTrackerPage({
           <Link href="/cellar/imports" className="rounded border border-accent px-3 py-2 text-sm font-medium text-accent hover:bg-background">Import data</Link>
         </div>
       </div>
-      <p className="mt-4 text-sm text-ink-muted">BBX figures use the smallest available case size, divided per bottle. They are approximate.</p>
+      <p className="mt-4 text-sm text-ink-muted">BBX figures are 75cl bottle equivalents across all available formats. Lowest ask and highest bid are compared after normalisation.</p>
     </header>
     <div className="mx-auto max-w-7xl p-5">
       {query.deleted && <p role="status" className="mb-4 rounded border border-green-700/30 bg-green-50 p-3 text-sm text-green-900">The CellarTracker record was deleted.</p>}
       <section className="overflow-auto rounded-lg border border-border bg-background">
         <table className="w-full min-w-[900px] text-sm">
-          <thead className="text-left text-ink-muted"><tr><th className="p-3">Wine</th><th className="p-3">Home</th><th className="p-3">BBR</th><th className="p-3">Paid</th><th className="p-3">Lowest ask</th><th className="p-3">Highest bid</th><th className="p-3">Link</th></tr></thead>
+          <thead className="text-left text-ink-muted"><tr><th className="p-3">Wine</th><th className="p-3">Home</th><th className="p-3">BBR</th><th className="p-3">Paid / 75cl</th><th className="p-3">Lowest ask / 75cl</th><th className="p-3">Highest bid / 75cl</th><th className="p-3">Link</th></tr></thead>
           <tbody>
             {rows.map((row) => <tr key={`${row.import_id}-${row.source_row_number}`} className="border-t">
               <td className="p-3"><Link href={`/cellartracker/${row.import_id}/${row.source_row_number}`} className="font-medium text-accent underline-offset-2 hover:underline">{row.source_wine}</Link> {row.vintage ?? ""}{row.fully_consumed && <span className="ml-2 text-xs text-ink-muted">Consumed</span>}</td>

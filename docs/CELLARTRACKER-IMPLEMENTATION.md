@@ -39,9 +39,9 @@ acceptance remains separate from catalogue matching.
 quantities, recorded purchase price, Parent ID and live BBX values.
 
 Links are stored against `parent_sku`, not a format. For a linked Parent ID,
-the market view chooses the smallest available positive `case_size` row and
-divides ask and highest bid by that case size. This is an approximate
-per-bottle comparison because CellarTracker supplies no case-size relationship.
+the market view converts each positive case-size and bottle-volume format to a
+75cl bottle equivalent. It then shows the lowest normalised ask and highest
+normalised bid, matching the basis used for the CellarTracker purchase price.
 
 ## Catalogue matching
 
