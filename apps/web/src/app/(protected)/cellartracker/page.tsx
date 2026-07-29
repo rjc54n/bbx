@@ -8,6 +8,7 @@ const money = (p: number | null) => p === null
   : new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(p / 100);
 
 type CellarTrackerMarketRow = {
+  import_id: string;
   source_row_number: number;
   source_wine: string;
   vintage: number | null;
@@ -18,9 +19,16 @@ type CellarTrackerMarketRow = {
   lowest_ask_per_bottle_p: number | null;
   highest_bid_per_bottle_p: number | null;
   parent_sku: string | null;
+  link_status: string | null;
+  match_method: string | null;
 };
 
-export default async function CellarTrackerPage() {
+export default async function CellarTrackerPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = await searchParams;
   const { supabase } = await requireOwner();
   const { data, error } = await supabase.from("current_cellartracker_records")
     .select("*").order("source_wine");
@@ -42,18 +50,19 @@ export default async function CellarTrackerPage() {
       <p className="mt-4 text-sm text-ink-muted">BBX figures use the smallest available case size, divided per bottle. They are approximate.</p>
     </header>
     <div className="mx-auto max-w-7xl p-5">
+      {query.deleted && <p role="status" className="mb-4 rounded border border-green-700/30 bg-green-50 p-3 text-sm text-green-900">The CellarTracker record was deleted.</p>}
       <section className="overflow-auto rounded-lg border border-border bg-background">
         <table className="w-full min-w-[900px] text-sm">
           <thead className="text-left text-ink-muted"><tr><th className="p-3">Wine</th><th className="p-3">Home</th><th className="p-3">BBR</th><th className="p-3">Paid</th><th className="p-3">Lowest ask</th><th className="p-3">Highest bid</th><th className="p-3">Link</th></tr></thead>
           <tbody>
-            {rows.map((row) => <tr key={row.source_row_number} className="border-t">
-              <td className="p-3">{row.source_wine} {row.vintage ?? ""}{row.fully_consumed && <span className="ml-2 text-xs text-ink-muted">Consumed</span>}</td>
+            {rows.map((row) => <tr key={`${row.import_id}-${row.source_row_number}`} className="border-t">
+              <td className="p-3"><Link href={`/cellartracker/${row.import_id}/${row.source_row_number}`} className="font-medium text-accent underline-offset-2 hover:underline">{row.source_wine}</Link> {row.vintage ?? ""}{row.fully_consumed && <span className="ml-2 text-xs text-ink-muted">Consumed</span>}</td>
               <td className="p-3">{row.quantity_home}</td>
               <td className="p-3">{row.quantity_bbr}</td>
               <td className="p-3">{money(row.purchase_price_per_bottle_p)}</td>
               <td className="p-3">{money(row.lowest_ask_per_bottle_p)}</td>
               <td className="p-3">{money(row.highest_bid_per_bottle_p)}</td>
-              <td className="p-3">{row.parent_sku ?? "Unlinked"}</td>
+              <td className="p-3">{row.link_status === "linked" ? `${row.parent_sku} (${row.match_method})` : row.link_status === "suppressed" ? "Suppressed" : "Unlinked"}</td>
             </tr>)}
             {!rows.length && <tr><td className="p-5 text-ink-muted" colSpan={7}>No accepted CellarTracker snapshot.</td></tr>}
           </tbody>
