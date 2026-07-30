@@ -4,6 +4,7 @@ import {
   heldBottles,
   isOrphan,
   parseFavouriteQuery,
+  perBottleP,
   serializeFavouriteQuery,
   sourceChips,
   type FavouriteWineRow,
@@ -87,6 +88,36 @@ describe("heldBottles", () => {
       cellartracker_bottles_bbr: null,
       bbr_cellar_bottles: null,
     }))).toBe(0);
+  });
+});
+
+describe("perBottleP", () => {
+  it("leaves a 6x75cl case price at its per-bottle sixth", () => {
+    expect(perBottleP(30_000, 6, 750)).toBe(5_000);
+  });
+
+  it("halves a magnum case price per 75cl equivalent", () => {
+    expect(perBottleP(30_000, 6, 1_500)).toBe(2_500);
+  });
+
+  it("doubles a half-bottle case price per 75cl equivalent", () => {
+    expect(perBottleP(30_000, 6, 375)).toBe(10_000);
+  });
+
+  it("returns null rather than dividing by zero", () => {
+    expect(perBottleP(30_000, 0, 750)).toBeNull();
+    expect(perBottleP(30_000, 6, 0)).toBeNull();
+    expect(perBottleP(30_000, null, null)).toBeNull();
+  });
+
+  it("returns null for a missing amount", () => {
+    expect(perBottleP(null, 6, 750)).toBeNull();
+  });
+
+  // The same arithmetic the views do in SQL, so the card and the tab agree.
+  it("matches the SQL rounding on a value that does not divide evenly", () => {
+    expect(perBottleP(89_400, 6, 750)).toBe(14_900);
+    expect(perBottleP(10_000, 3, 750)).toBe(3_333);
   });
 });
 

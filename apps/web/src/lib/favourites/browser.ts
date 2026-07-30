@@ -87,6 +87,21 @@ export function heldBottles(row: FavouriteWineRow): number {
   return atHome + atBbr;
 }
 
+/**
+ * A case price as a 75cl bottle equivalent -- the basis every money figure in
+ * the favourites surfaces uses, and the same arithmetic the views do in SQL.
+ * Kept here so the card can normalise per-format rows the views do not
+ * pre-aggregate.
+ */
+export function perBottleP(
+  amountP: number | null,
+  caseSize: number | null,
+  bottleVolumeMl: number | null,
+): number | null {
+  if (amountP === null || !caseSize || !bottleVolumeMl) return null;
+  return Math.round((amountP * 750) / (caseSize * bottleVolumeMl));
+}
+
 export function parseFavouriteQuery(params: URLSearchParams): FavouriteQuery {
   const [rawField, rawDir] = (params.get("sort") ?? "favourited_at:desc").split(":");
   const field = sortFields.has(rawField as FavouriteSortField)
