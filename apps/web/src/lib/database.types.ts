@@ -602,6 +602,48 @@ export type Database = {
           },
         ]
       }
+      cellartracker_record_decisions: {
+        Row: {
+          decided_at: string
+          decided_by: string | null
+          excluded_at: string | null
+          is_excluded: boolean
+          link_status: string | null
+          match_group_key: string
+          match_method: string | null
+          parent_sku: string | null
+          purchase_price_per_bottle_p: number | null
+          source_price_per_bottle_p: number | null
+          source_wine: string
+        }
+        Insert: {
+          decided_at?: string
+          decided_by?: string | null
+          excluded_at?: string | null
+          is_excluded?: boolean
+          link_status?: string | null
+          match_group_key: string
+          match_method?: string | null
+          parent_sku?: string | null
+          purchase_price_per_bottle_p?: number | null
+          source_price_per_bottle_p?: number | null
+          source_wine: string
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string | null
+          excluded_at?: string | null
+          is_excluded?: boolean
+          link_status?: string | null
+          match_group_key?: string
+          match_method?: string | null
+          parent_sku?: string | null
+          purchase_price_per_bottle_p?: number | null
+          source_price_per_bottle_p?: number | null
+          source_wine?: string
+        }
+        Relationships: []
+      }
       cellartracker_resolution_events: {
         Row: {
           changed_at: string
@@ -1014,6 +1056,33 @@ export type Database = {
           },
         ]
       }
+      release_offer_record_exclusions: {
+        Row: {
+          content_fingerprint: string
+          excluded_at: string
+          excluded_by: string | null
+          match_group_key: string | null
+          offer_date: string | null
+          source_wine: string | null
+        }
+        Insert: {
+          content_fingerprint: string
+          excluded_at?: string
+          excluded_by?: string | null
+          match_group_key?: string | null
+          offer_date?: string | null
+          source_wine?: string | null
+        }
+        Update: {
+          content_fingerprint?: string
+          excluded_at?: string
+          excluded_by?: string | null
+          match_group_key?: string | null
+          offer_date?: string | null
+          source_wine?: string | null
+        }
+        Relationships: []
+      }
       release_offer_resolution_events: {
         Row: {
           changed_at: string
@@ -1365,6 +1434,18 @@ export type Database = {
             referencedColumns: ["parent_sku"]
           },
         ]
+      }
+      cellartracker_excluded_record_view: {
+        Row: {
+          excluded_at: string | null
+          in_current_snapshot: boolean | null
+          link_status: string | null
+          match_group_key: string | null
+          parent_sku: string | null
+          source_wine: string | null
+          vintage: number | null
+        }
+        Relationships: []
       }
       cellartracker_match_review_view: {
         Row: {
@@ -1788,6 +1869,33 @@ export type Database = {
           },
         ]
       }
+      release_offer_excluded_record_view: {
+        Row: {
+          content_fingerprint: string | null
+          excluded_at: string | null
+          in_accepted_evidence: boolean | null
+          match_group_key: string | null
+          offer_date: string | null
+          source_wine: string | null
+        }
+        Insert: {
+          content_fingerprint?: string | null
+          excluded_at?: string | null
+          in_accepted_evidence?: never
+          match_group_key?: string | null
+          offer_date?: string | null
+          source_wine?: string | null
+        }
+        Update: {
+          content_fingerprint?: string | null
+          excluded_at?: string | null
+          in_accepted_evidence?: never
+          match_group_key?: string | null
+          offer_date?: string | null
+          source_wine?: string | null
+        }
+        Relationships: []
+      }
       release_offer_match_review_view: {
         Row: {
           earliest_offer_date: string | null
@@ -2052,24 +2160,8 @@ export type Database = {
         Args: { p_import_id: string }
         Returns: Json
       }
-      delete_cellartracker_match_group: {
-        Args: { p_match_group_key: string }
-        Returns: Json
-      }
-      delete_cellartracker_record: {
-        Args: { p_import_id: string; p_source_row_number: number }
-        Returns: Json
-      }
       delete_release_offer_import: {
         Args: { p_import_id: string }
-        Returns: Json
-      }
-      delete_release_offer_match_group: {
-        Args: { p_match_group_key: string }
-        Returns: Json
-      }
-      delete_release_offer_record: {
-        Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
       }
       discard_cellartracker_import_row: {
@@ -2084,6 +2176,22 @@ export type Database = {
         Args: { p_match_group_key: string; p_parent_sku: string }
         Returns: Json
       }
+      exclude_cellartracker_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      exclude_cellartracker_record: {
+        Args: { p_import_id: string; p_source_row_number: number }
+        Returns: Json
+      }
+      exclude_release_offer_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      exclude_release_offer_record: {
+        Args: { p_import_id: string; p_source_row_number: number }
+        Returns: Json
+      }
       ignore_release_offer_row: {
         Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
@@ -2094,6 +2202,10 @@ export type Database = {
           p_expected_source_rows: number
           p_import_id: string
         }
+        Returns: Json
+      }
+      preview_cellartracker_import: {
+        Args: { p_import_id: string }
         Returns: Json
       }
       record_cellartracker_algolia_error: {
@@ -2153,8 +2265,16 @@ export type Database = {
         Args: { p_match_group_key: string }
         Returns: Json
       }
+      restore_cellartracker_record: {
+        Args: { p_match_group_key: string; p_source_wine: string }
+        Returns: Json
+      }
       restore_release_offer_match_group: {
         Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      restore_release_offer_record: {
+        Args: { p_content_fingerprint: string }
         Returns: Json
       }
       search_producers: {

@@ -104,19 +104,38 @@ export async function updateCellarTrackerRecordPrice(
   redirect(`${recordPath(importId, sourceRowNumber)}?${error ? "action_error" : "changed"}=1`);
 }
 
-export async function deleteCellarTrackerRecord(
+// Exclusion, not deletion: the evidence row stays, so the record can be
+// restored, and the next snapshot leaves it out without being asked again.
+export async function excludeCellarTrackerRecord(
   importId: string,
   sourceRowNumber: number,
 ): Promise<never> {
   if (!validRecord(importId, sourceRowNumber)) redirect(LIST_PATH);
   const context = await getOwnerContext();
   if (!context) redirect("/login");
-  const { error } = await context.supabase.rpc("delete_cellartracker_record", {
+  const { error } = await context.supabase.rpc("exclude_cellartracker_record", {
     p_import_id: importId,
     p_source_row_number: sourceRowNumber,
   });
   revalidateRecord(importId, sourceRowNumber);
+  revalidatePath("/cellartracker/excluded");
   redirect(error
-    ? `${recordPath(importId, sourceRowNumber)}?delete_error=1`
-    : `${LIST_PATH}?deleted=1`);
+    ? `${recordPath(importId, sourceRowNumber)}?exclude_error=1`
+    : `${LIST_PATH}?excluded=1`);
+}
+
+export async function restoreCellarTrackerRecord(
+  matchGroupKey: string,
+  sourceWine: string,
+): Promise<never> {
+  const context = await getOwnerContext();
+  if (!context) redirect("/login");
+  const { error } = await context.supabase.rpc("restore_cellartracker_record", {
+    p_match_group_key: matchGroupKey,
+    p_source_wine: sourceWine,
+  });
+  revalidatePath(LIST_PATH);
+  revalidatePath("/cellartracker/matches");
+  revalidatePath("/cellartracker/excluded");
+  redirect(`/cellartracker/excluded?${error ? "restore_error" : "restored"}=1`);
 }

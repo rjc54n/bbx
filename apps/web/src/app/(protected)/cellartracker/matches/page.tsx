@@ -5,7 +5,7 @@ import { isFavourited, targetForRecord } from "@/lib/favourites/target";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { cellarTrackerCatalogueQuery } from "@/lib/cellar/cellartrackerMatching";
 import { CellarTrackerCatalogueSearch } from "./CatalogueCandidateSearch";
-import { DeleteCellarTrackerGroupForm } from "./DeleteCellarTrackerGroupForm";
+import { ExcludeCellarTrackerGroupForm } from "./ExcludeCellarTrackerGroupForm";
 import { CellarTrackerMatchRunControl } from "./MatchRunControl";
 import {
   confirmCellarTrackerCandidate,
@@ -191,7 +191,7 @@ export default async function CellarTrackerMatchesPage({
               {group.linked_row_count > 0 && <div className="mt-3 flex flex-wrap gap-2"><form action={editCellarTrackerGroup.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" defaultValue={group.parent_sku ?? ""} className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><button className="rounded border border-border px-2 py-1.5 text-xs">Edit linked Parent ID</button></form><form action={unlinkCellarTrackerGroup.bind(null, group.match_group_key, returnPath)}><button className="rounded border border-accent px-2 py-1.5 text-xs text-accent">Unlink and retry later</button></form></div>}
               {group.suppressed_row_count > 0 && <form action={restoreCellarTrackerGroup.bind(null, group.match_group_key, returnPath)} className="mt-3"><button className="rounded border border-border px-2 py-1.5 text-xs">Restore to unmatched</button></form>}
               {group.unresolved_row_count > 0 && <CellarTrackerCatalogueSearch matchGroupKey={group.match_group_key} sourceWine={group.source_wine} defaultQuery={cellarTrackerCatalogueQuery(group.source_wine, group.source_producer)} sourceVintage={group.source_vintage} returnPath={returnPath} />}
-              <div className="mt-3 border-t border-border pt-3"><DeleteCellarTrackerGroupForm matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
+              <div className="mt-3 border-t border-border pt-3"><ExcludeCellarTrackerGroupForm matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
             </article>;
           })}
           {groups.length === 0 && <p className="p-6 text-sm text-ink-muted">No match groups meet this filter.</p>}

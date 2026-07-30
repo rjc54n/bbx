@@ -30,7 +30,7 @@ SELECT is(has_table_privilege('anon', 'public.release_offer_match_runs', 'SELECT
 SELECT is(has_table_privilege('authenticated', 'public.release_offer_match_runs', 'SELECT'), TRUE, 'authenticated receives owner-gated match-run read access');
 SELECT is(has_table_privilege('authenticated', 'public.release_offer_resolution_events', 'INSERT'), FALSE, 'authenticated cannot forge resolution audit events');
 SELECT is(has_function_privilege('anon', 'public.begin_release_offer_match_run()', 'EXECUTE'), FALSE, 'anon cannot start matching');
-SELECT is(has_function_privilege('anon', 'public.delete_release_offer_match_group(text)', 'EXECUTE'), FALSE, 'anon cannot delete historic offer records');
+SELECT is(has_function_privilege('anon', 'public.exclude_release_offer_match_group(text)', 'EXECUTE'), FALSE, 'anon cannot exclude historic offer records');
 
 SELECT set_config('request.jwt.claims', '{"sub":"11000000-0000-0000-0000-000000000001","role":"authenticated"}', TRUE);
 SET LOCAL ROLE authenticated;
@@ -102,10 +102,12 @@ SELECT is(public.record_release_offer_algolia_result(
     '2018|typo wyne', '[]'::jsonb, ARRAY[]::TEXT[], TRUE, now()
 )->>'linked_row_count', '0', 'resumed group can complete without inventing a link');
 SELECT is((SELECT count(*)::INT FROM public.release_offer_evidence_view), 4, 'accepted linked in-bond evidence remains published');
-SELECT is(public.delete_release_offer_match_group('2018|typo wyne')->>'deleted_row_count', '1', 'owner can permanently delete a historic-offer group');
-SELECT is((SELECT count(*)::INT FROM public.release_offer_source_rows WHERE source_row_number = 6), 0, 'deleting a group removes its source record');
-SELECT is((SELECT count(*)::INT FROM public.release_offer_prices WHERE source_row_number = 6), 0, 'deleting a group cascades to parsed prices');
-SELECT is((SELECT count(*)::INT FROM public.release_offer_resolution_events WHERE source_row_number = 6 AND event_type = 'deleted'), 1, 'deleting a group leaves an append-only audit event');
+SELECT is(public.exclude_release_offer_match_group('2018|typo wyne')->>'excluded_row_count', '1', 'owner can exclude a historic-offer group');
+SELECT is((SELECT count(*)::INT FROM public.release_offer_review_view WHERE source_row_number = 6), 0, 'excluding a group hides its source record');
+-- The row and its prices are retained so the exclusion can be undone, and so a
+-- later file repeating the same content stays out by fingerprint.
+SELECT is((SELECT count(*)::INT FROM public.release_offer_source_rows WHERE source_row_number = 6), 1, 'excluding a group keeps the evidence for restore');
+SELECT is((SELECT count(*)::INT FROM public.release_offer_resolution_events WHERE source_row_number = 6 AND event_type = 'deleted'), 1, 'excluding a group leaves an append-only audit event');
 
 RESET ROLE;
 SELECT set_config('request.jwt.claims', '{"sub":"11000000-0000-0000-0000-000000000002","role":"authenticated"}', TRUE);

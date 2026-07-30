@@ -177,3 +177,44 @@ Gmail cursor history and matching state were removed before the new workflow.
 The clean historic CSV keeps the 3,288-row base and the later enriched
 129-row increment. It must stage 3,417 source rows and 5,412 price fragments.
 The earlier un-enriched 129-row increment is excluded.
+
+## Owner decisions survive the next upload, 30 July 2026
+
+Evidence is import-scoped. A decision about a wine is not. Links, price
+corrections and exclusions were all keyed to `(import_id, source_row_number)`,
+which meant an upload could undo work the owner had already done:
+
+- **CellarTracker** replaces the active snapshot outright, so the next accepted
+  file arrived with no links, no price corrections and every excluded record
+  back in place. Manual and Algolia-confirmed matches were lost with it, so
+  re-matching cost Algolia calls and repeated the confirmation work.
+- **Release offers** accumulate rather than replace, so links survived, but a
+  later file repeating a deleted row reintroduced it.
+- **BBR** has no manual edits or deletions, so it had nothing to lose.
+
+A durable decision layer now sits beside the evidence, keyed on identifiers
+that survive re-import: `match_group_key` plus the source wine text for
+CellarTracker (`cellartracker_record_decisions`), and the content fingerprint
+for release offers (`release_offer_record_exclusions`).
+
+**Exclusion replaces deletion.** Excluding a record leaves the evidence row in
+place and filters it out of the read views. The record is therefore hidden
+everywhere, kept out of future imports, and restorable in one call. Both
+sources list their excluded records for restore. The audit event is unchanged.
+
+**Accepting a CellarTracker snapshot re-applies the decisions.** The import
+page shows what will be carried before the owner commits — links, price
+corrections, records kept excluded, and records new to them — and reports what
+was applied afterwards.
+
+One asymmetry is deliberate. A price correction is re-applied only where
+CellarTracker still reports the value that was corrected. If the source itself
+has changed, the new source value is kept and the held-back correction is
+reported, because a changed source may be the upstream fix. Both the pre-accept
+panel and the post-accept summary carry that count.
+
+A confirmed release-price anchor whose offer is later excluded falls back to
+the provisional pick. The override row is retained, so restoring the offer
+restores the confirmation, and `release_price_anchor_view` reports the anchor
+as provisional in the meantime rather than labelling a provisional pick
+confirmed.

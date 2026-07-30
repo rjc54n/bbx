@@ -4,7 +4,7 @@ import { loadGroupFavourites } from "@/lib/favourites/server";
 import { isFavourited, targetForRecord } from "@/lib/favourites/target";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
-import { DeleteHistoricOfferGroupForm } from "@/components/releaseOffers/DeleteHistoricOfferGroupForm";
+import { ExcludeHistoricOfferGroupForm } from "@/components/releaseOffers/ExcludeHistoricOfferGroupForm";
 import { MatchRunControl } from "@/components/releaseOffers/MatchRunControl";
 import {
   confirmHistoricOfferCandidate,
@@ -191,7 +191,7 @@ export default async function HistoricOfferMatchesPage({
               {group.linked_row_count > 0 && <div className="mt-3 flex flex-wrap gap-2"><form action={editHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" defaultValue={group.parent_sku ?? ""} className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><button className="rounded border border-border px-2 py-1.5 text-xs">Edit linked Parent ID</button></form><form action={unlinkHistoricOfferGroup.bind(null, group.match_group_key, returnPath)}><button className="rounded border border-accent px-2 py-1.5 text-xs text-accent">Unlink and retry later</button></form></div>}
               {group.suppressed_row_count > 0 && <form action={restoreHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="mt-3"><button className="rounded border border-border px-2 py-1.5 text-xs">Restore to unmatched</button></form>}
               {group.unresolved_row_count > 0 && <CatalogueCandidateSearch matchGroupKey={group.match_group_key} sourceWine={group.source_wine} sourceVintage={group.source_vintage} returnPath={returnPath} />}
-              <div className="mt-3 border-t border-border pt-3"><DeleteHistoricOfferGroupForm matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
+              <div className="mt-3 border-t border-border pt-3"><ExcludeHistoricOfferGroupForm matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
             </article>;
           })}
           {groups.length === 0 && <p className="p-6 text-sm text-ink-muted">No match groups meet this filter.</p>}

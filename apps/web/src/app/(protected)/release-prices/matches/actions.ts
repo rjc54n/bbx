@@ -124,7 +124,7 @@ export async function processHistoricOfferMatchBatch(runId: string): Promise<Mat
 }
 
 async function mutateGroup(
-  rpc: "confirm_release_offer_match_group" | "suppress_release_offer_match_group" | "unlink_release_offer_match_group" | "restore_release_offer_match_group" | "edit_release_offer_match_group" | "delete_release_offer_match_group",
+  rpc: "confirm_release_offer_match_group" | "suppress_release_offer_match_group" | "unlink_release_offer_match_group" | "restore_release_offer_match_group" | "edit_release_offer_match_group" | "exclude_release_offer_match_group",
   args: Record<string, string>,
   returnPath: string,
 ): Promise<never> {
@@ -174,23 +174,36 @@ export async function restoreHistoricOfferGroup(matchGroupKey: string, returnPat
   return mutateGroup("restore_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
 }
 
-export async function deleteHistoricOfferGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("delete_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
+export async function excludeHistoricOfferGroup(matchGroupKey: string, returnPath: string): Promise<never> {
+  return mutateGroup("exclude_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
 }
 
-export async function deleteHistoricOfferRecord(importId: string, sourceRowNumber: number): Promise<never> {
+export async function excludeHistoricOfferRecord(importId: string, sourceRowNumber: number): Promise<never> {
   if (!/^[0-9a-f-]{36}$/i.test(importId) || !Number.isSafeInteger(sourceRowNumber) || sourceRowNumber <= 0) {
     redirect("/release-prices");
   }
   const context = await getOwnerContext();
   if (!context) redirect("/login");
-  const { error } = await context.supabase.rpc("delete_release_offer_record", {
+  const { error } = await context.supabase.rpc("exclude_release_offer_record", {
     p_import_id: importId,
     p_source_row_number: sourceRowNumber,
   });
   revalidatePath(MATCH_PATH);
   revalidatePath("/release-prices");
-  redirect(error ? `/release-prices/offers/${importId}/${sourceRowNumber}?delete_error=1` : "/release-prices?deleted=1");
+  revalidatePath("/release-prices/excluded");
+  redirect(error ? `/release-prices/offers/${importId}/${sourceRowNumber}?exclude_error=1` : "/release-prices?excluded=1");
+}
+
+export async function restoreHistoricOfferRecord(contentFingerprint: string): Promise<never> {
+  const context = await getOwnerContext();
+  if (!context) redirect("/login");
+  const { error } = await context.supabase.rpc("restore_release_offer_record", {
+    p_content_fingerprint: contentFingerprint,
+  });
+  revalidatePath(MATCH_PATH);
+  revalidatePath("/release-prices");
+  revalidatePath("/release-prices/excluded");
+  redirect(`/release-prices/excluded?${error ? "restore_error" : "restored"}=1`);
 }
 
 export async function editHistoricOfferGroup(

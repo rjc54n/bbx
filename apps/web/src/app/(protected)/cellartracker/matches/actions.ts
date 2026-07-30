@@ -132,7 +132,7 @@ type GroupRpc =
   | "unlink_cellartracker_match_group"
   | "restore_cellartracker_match_group"
   | "edit_cellartracker_match_group"
-  | "delete_cellartracker_match_group";
+  | "exclude_cellartracker_match_group";
 
 async function mutateGroup(rpc: GroupRpc, args: Record<string, string>, returnPath: string): Promise<never> {
   const context = await getOwnerContext();
@@ -174,8 +174,8 @@ export async function restoreCellarTrackerGroup(matchGroupKey: string, returnPat
   return mutateGroup("restore_cellartracker_match_group", { p_match_group_key: matchGroupKey }, returnPath);
 }
 
-export async function deleteCellarTrackerGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("delete_cellartracker_match_group", { p_match_group_key: matchGroupKey }, returnPath);
+export async function excludeCellarTrackerGroup(matchGroupKey: string, returnPath: string): Promise<never> {
+  return mutateGroup("exclude_cellartracker_match_group", { p_match_group_key: matchGroupKey }, returnPath);
 }
 
 export async function editCellarTrackerGroup(matchGroupKey: string, returnPath: string, formData: FormData): Promise<never> {
