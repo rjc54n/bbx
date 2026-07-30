@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { bbrProductUrl, wineSearcherUrl } from "@/lib/listingLinks";
 import type { CatalogueMetricField, PriceChangeSortField } from "@/lib/query/registry";
@@ -58,6 +59,30 @@ function WineCell({
       )}
     </div>
   );
+}
+
+/**
+ * Appended rather than declared in the column arrays because the star needs the
+ * favourite set, which is per-request state the module-level configs cannot see.
+ * Not sortable: sorting happens in the database and a favourite is not a
+ * catalogue column.
+ */
+export function favouriteColumn<
+  Row extends { parent_sku: string | null; name: string | null },
+  SortField extends string,
+>(favourites: ReadonlySet<string>): Column<Row, SortField> {
+  return {
+    id: "favourite",
+    label: "Favourite",
+    align: "left",
+    render: (row) => (row.parent_sku
+      ? <FavouriteStar
+        target={{ kind: "wine", parentSku: row.parent_sku }}
+        favourite={favourites.has(row.parent_sku)}
+        label={row.name ?? row.parent_sku}
+      />
+      : <span className="text-xs text-ink-muted">–</span>),
+  };
 }
 
 function RegionCell({ region, colour }: { region: string | null; colour: string | null }) {

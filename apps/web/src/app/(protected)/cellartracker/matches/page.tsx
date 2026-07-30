@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { requireOwner } from "@/lib/auth/owner";
+import { loadGroupFavourites } from "@/lib/favourites/server";
+import { isFavourited, targetForRecord } from "@/lib/favourites/target";
+import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { cellarTrackerCatalogueQuery } from "@/lib/cellar/cellartrackerMatching";
 import { CellarTrackerCatalogueSearch } from "./CatalogueCandidateSearch";
 import { DeleteCellarTrackerGroupForm } from "./DeleteCellarTrackerGroupForm";
@@ -100,7 +103,8 @@ export default async function CellarTrackerMatchesPage({
   const state: StateFilter = states.includes(stateParam as StateFilter) ? stateParam as StateFilter : "unresolved";
   const search = typeof params.q === "string" ? params.q.trim().slice(0, 200) : "";
   const page = Math.max(1, Number(typeof params.page === "string" ? params.page : "1") || 1);
-  const { supabase } = await requireOwner();
+  const owner = await requireOwner();
+  const { supabase } = owner;
 
   let rowsQuery = supabase.from("cellartracker_match_review_view").select("*", { count: "exact" })
     .order("suggestion_count", { ascending: false })
@@ -130,6 +134,8 @@ export default async function CellarTrackerMatchesPage({
       .in("match_group_key", groupKeys).order("match_group_key").order("rank");
   if (suggestionError) throw new Error("CellarTracker suggestions could not be loaded.");
   const suggestions = (suggestionData ?? []) as SuggestionRow[];
+  // Scoped to the visible page: this is a work queue, not a favourites list.
+  const favourites = await loadGroupFavourites(owner, "cellartracker", groups);
   const byGroup = new Map<string, SuggestionRow[]>();
   for (const suggestion of suggestions) {
     const values = byGroup.get(suggestion.match_group_key) ?? [];
@@ -169,6 +175,10 @@ export default async function CellarTrackerMatchesPage({
             return <article key={group.match_group_key} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 flex-1"><h2 className="font-semibold">{group.source_wine}</h2><p className="mt-1 text-xs text-ink-muted">{group.source_vintage ?? "Vintage unavailable"} · {group.source_producer ?? "Producer unavailable"} · {group.source_region ?? "Region unavailable"} · {group.source_row_count.toLocaleString()} source record{group.source_row_count === 1 ? "" : "s"}</p></div>
+                {(() => {
+                  const target = targetForRecord("cellartracker", group.parent_sku ? "linked" : null, group.parent_sku, group.match_group_key);
+                  return target && <FavouriteStar target={target} favourite={isFavourited(favourites, target)} label={group.source_wine} />;
+                })()}
                 <div className="text-right text-xs"><p>{group.unresolved_row_count} unresolved · {group.linked_row_count} linked · {group.suppressed_row_count} suppressed</p>{group.parent_sku && <p className="mt-1 font-medium">Parent {group.parent_sku} · {displayMethod(group.match_method)}</p>}{group.parent_sku && <p className="text-ink-muted">{group.is_biddable ? "Currently in the BBX-eligible catalogue" : "Found in BBR catalogue, not currently BBX-eligible"}</p>}</div>
               </div>
               {group.unresolved_row_count > 0 && candidates.length > 0 && <div className="mt-3 grid gap-2 lg:grid-cols-2">

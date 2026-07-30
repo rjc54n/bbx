@@ -12,10 +12,11 @@ type AcceptedImport = {
 };
 
 export default async function BbrCellarPage() {
-  const { supabase } = await requireOwner();
+  const { supabase, userId } = await requireOwner();
   const [
     { data: holdingData, error: holdingError },
     { data: importData, error: importError },
+    { data: favouriteData, error: favouriteError },
   ] = await Promise.all([
     supabase
       .from("bbr_cellar_market_view")
@@ -29,10 +30,14 @@ export default async function BbrCellarPage() {
       .order("accepted_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("wine_favourites").select("parent_sku").eq("user_id", userId),
   ]);
 
   if (holdingError || importError) {
     throw new Error("The current BBR cellar could not be loaded.");
+  }
+  if (favouriteError) {
+    throw new Error("Wine favourites could not be loaded.");
   }
 
   const rows = (holdingData ?? []) as BbrCellarRow[];
@@ -45,6 +50,7 @@ export default async function BbrCellarPage() {
         acceptedImportId={acceptedImport?.id ?? null}
         confirmedAt={acceptedImport?.accepted_at ?? rows[0]?.confirmed_at ?? null}
         unmatchedCount={acceptedImport?.unmatched_row_count ?? 0}
+        favouriteParentSkus={(favouriteData ?? []).map((row) => row.parent_sku)}
       />
     </Suspense>
   );

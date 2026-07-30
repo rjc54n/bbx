@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { formatDateTime, formatFormat, formatPence, formatSignedPence } from "@/lib/format";
 import { bbrProductUrl } from "@/lib/listingLinks";
 import {
@@ -19,6 +20,7 @@ type BbrCellarBrowserProps = {
   acceptedImportId: string | null;
   confirmedAt: string | null;
   unmatchedCount: number;
+  favouriteParentSkus: string[];
 };
 
 type SortColumn = {
@@ -85,10 +87,12 @@ export function BbrCellarBrowser({
   acceptedImportId,
   confirmedAt,
   unmatchedCount,
+  favouriteParentSkus,
 }: BbrCellarBrowserProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const favourites = useMemo(() => new Set(favouriteParentSkus), [favouriteParentSkus]);
   const query = useMemo(
     () => parseCellarQuery(new URLSearchParams(searchParams)),
     [searchParams],
@@ -331,13 +335,16 @@ export function BbrCellarBrowser({
                   </button>
                 </th>
               ))}
+              <th scope="col" className="whitespace-nowrap px-3 py-2 text-center font-medium text-ink-muted">
+                Favourite
+              </th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={sortableColumns.length}
+                  colSpan={sortableColumns.length + 1}
                   className="px-3 py-10 text-center text-ink-muted"
                 >
                   No BBR holdings match these filters.
@@ -418,6 +425,18 @@ export function BbrCellarBrowser({
                   </td>
                   <td className="px-3 py-2 align-top tabular-nums">
                     {formatDateTime(row.last_rest_checked_at)}
+                  </td>
+                  <td className="px-3 py-2 text-center align-top">
+                    {/* An unmatched holding has no Parent ID, and BBR holdings
+                        are not one of the two sources that carry a match group,
+                        so there is nothing to hold a star against. */}
+                    {row.parent_sku ? (
+                      <FavouriteStar
+                        target={{ kind: "wine", parentSku: row.parent_sku }}
+                        favourite={favourites.has(row.parent_sku)}
+                        label={row.catalogue_name ?? row.description ?? row.parent_sku}
+                      />
+                    ) : <span className="text-xs text-ink-muted">Unmatched</span>}
                   </td>
                 </tr>
               );

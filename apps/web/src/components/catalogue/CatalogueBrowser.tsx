@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { CatalogueFilterField } from "@/lib/query/registry";
+import type {
+  CatalogueFilterField,
+  CatalogueMetricField,
+  PriceChangeSortField,
+} from "@/lib/query/registry";
 import { getFilter, removeFilter, setFilter } from "@/lib/query/filterOps";
 import { fetchCatalogue, fetchPriceChanges, PAGE_SIZE, type FetchResult } from "@/lib/query/fetchCatalogue";
 import {
@@ -17,7 +21,7 @@ import type { CatalogueRow, PriceChangeRow } from "@/lib/query/rows";
 import { startingPointFor } from "@/lib/query/startingPoints";
 import type { CatalogueFilter, QueryState } from "@/lib/query/types";
 import { parse, serialize } from "@/lib/query/url";
-import { CATALOGUE_COLUMNS, PRICE_CHANGE_COLUMNS, withFormatAdjustedColumns } from "./columns";
+import { CATALOGUE_COLUMNS, favouriteColumn, PRICE_CHANGE_COLUMNS, withFormatAdjustedColumns } from "./columns";
 import { DataHonestyHeader } from "./DataHonestyHeader";
 import { DataTable } from "./DataTable";
 import { FilterChips } from "./FilterChips";
@@ -32,10 +36,15 @@ function rowKey(row: { parent_sku: string | null; format_code: string | null }):
 // Explore and Price Changes are the only visible starting points. The typed
 // query-state machinery preserves the other internal starting points for a
 // later saved-filter or agent interface without making them permanent tabs.
-export function CatalogueBrowser() {
+// favouriteParentSkus arrives from the server page rather than being fetched
+// here alongside the rows: setFavourite() calls refresh(), which re-renders the
+// server tree and delivers the new set as props. A client-side fetch would not
+// see that, and the star's optimistic value would revert on every toggle.
+export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const favourites = useMemo(() => new Set(favouriteParentSkus), [favouriteParentSkus]);
 
   const queryState = useMemo(() => parse(searchParams), [searchParams]);
 
@@ -174,8 +183,18 @@ export function CatalogueBrowser() {
   const onlyListed = !isPriceChanges && getFilter(queryState.filters, "is_listed")?.value === true;
 
   const visibleCatalogueColumns = useMemo(
-    () => withFormatAdjustedColumns(CATALOGUE_COLUMNS, showFormatAdjusted),
-    [showFormatAdjusted],
+    () => [
+      ...withFormatAdjustedColumns(CATALOGUE_COLUMNS, showFormatAdjusted),
+      favouriteColumn<CatalogueRow, CatalogueMetricField>(favourites),
+    ],
+    [showFormatAdjusted, favourites],
+  );
+  const visiblePriceChangeColumns = useMemo(
+    () => [
+      ...PRICE_CHANGE_COLUMNS,
+      favouriteColumn<PriceChangeRow, PriceChangeSortField>(favourites),
+    ],
+    [favourites],
   );
 
   return (
@@ -244,7 +263,7 @@ export function CatalogueBrowser() {
 
       {isPriceChanges ? (
         <DataTable
-          columns={PRICE_CHANGE_COLUMNS}
+          columns={visiblePriceChangeColumns}
           rows={priceChangeResult.rows}
           rowKey={rowKey}
           sort={queryState.sort}

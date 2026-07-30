@@ -2,6 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOwner } from "@/lib/auth/owner";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
+import { isTargetFavourited } from "@/lib/favourites/server";
+import { targetForRecord } from "@/lib/favourites/target";
+import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
 import { DeleteHistoricOfferRecordForm } from "@/components/releaseOffers/DeleteHistoricOfferRecordForm";
 import {
@@ -110,7 +113,8 @@ export default async function ReleaseOfferDetailPage({
   const { delete_error: deleteError } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(importId) || !/^\d+$/.test(sourceRowNumber)) notFound();
   const rowNumber = Number(sourceRowNumber);
-  const { supabase } = await requireOwner();
+  const owner = await requireOwner();
+  const { supabase } = owner;
 
   const [{ data: sourceData, error: sourceError }, { data: importData, error: importError }, { data: priceData, error: priceError }, { data: resolutionData, error: resolutionError }] = await Promise.all([
     supabase.from("release_offer_source_rows").select("import_id, source_row_number, offer_date, source_wine, source_vintage, source_match_key, match_group_key, source_price_text, source_product_id, source_product_url, source_message_id, description, tasting_notes, raw_row, validation_errors, validation_warnings").eq("import_id", importId).eq("source_row_number", rowNumber).maybeSingle(),
@@ -138,12 +142,24 @@ export default async function ReleaseOfferDetailPage({
   const catalogue = (catalogueData ?? []) as CatalogueRow[];
   const returnPath = `/release-prices/offers/${importId}/${rowNumber}`;
   const unresolved = !resolution;
+  const favouriteTarget = targetForRecord(
+    "release_offer",
+    resolution?.status ?? null,
+    resolution?.parent_sku ?? null,
+    source.match_group_key,
+  );
+  const favourited = favouriteTarget
+    ? await isTargetFavourited(owner, favouriteTarget)
+    : false;
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <div className="mx-auto max-w-6xl space-y-5 p-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Release offer record</p><h1 className="mt-1 text-2xl font-semibold">{source.source_wine}</h1><p className="mt-1 text-sm text-ink-muted">Offer date {formatDate(source.offer_date)} · source row {source.source_row_number}</p></div>
-        <Link href="/release-prices" className="rounded border border-accent px-3 py-2 text-sm text-accent">All accepted offers</Link>
+        <div className="flex items-center gap-3">
+          {favouriteTarget && <FavouriteStar target={favouriteTarget} favourite={favourited} label={source.source_wine} />}
+          <Link href="/release-prices" className="rounded border border-accent px-3 py-2 text-sm text-accent">All accepted offers</Link>
+        </div>
       </header>
 
       {deleteError === "1" && <p role="alert" className="rounded border border-red-700/30 bg-background p-3 text-sm text-red-800">The record was not deleted. It remains in the accepted offers list.</p>}

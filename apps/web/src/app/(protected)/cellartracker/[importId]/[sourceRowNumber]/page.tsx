@@ -2,6 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatDate, formatFormat, formatPence, formatSignedPct } from "@/lib/format";
 import { requireOwner } from "@/lib/auth/owner";
+import { isTargetFavourited } from "@/lib/favourites/server";
+import { targetForRecord } from "@/lib/favourites/target";
+import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { DeleteCellarTrackerRecordForm } from "./DeleteCellarTrackerRecordForm";
 import {
   confirmCellarTrackerRecordCandidate,
@@ -116,7 +119,8 @@ export default async function CellarTrackerRecordPage({
   const query = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(importId) || !/^\d+$/.test(sourceRowNumber)) notFound();
   const rowNumber = Number(sourceRowNumber);
-  const { supabase } = await requireOwner();
+  const owner = await requireOwner();
+  const { supabase } = owner;
 
   const [
     { data: sourceData, error: sourceError },
@@ -164,6 +168,15 @@ export default async function CellarTrackerRecordPage({
   const catalogue = (catalogueData ?? []) as CatalogueRow[];
   const releasePrices = (releaseData ?? []) as ReleasePriceRow[];
   const linkable = !resolution || resolution.status === "suppressed";
+  const favouriteTarget = targetForRecord(
+    "cellartracker",
+    resolution?.status ?? null,
+    resolution?.parent_sku ?? null,
+    source.match_group_key,
+  );
+  const favourited = favouriteTarget
+    ? await isTargetFavourited(owner, favouriteTarget)
+    : false;
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <div className="mx-auto max-w-6xl space-y-5 p-5">
@@ -173,7 +186,10 @@ export default async function CellarTrackerRecordPage({
           <h1 className="mt-1 text-2xl font-semibold">{source.source_wine}</h1>
           <p className="mt-1 text-sm text-ink-muted">{source.vintage ?? "Vintage unavailable"} · source row {source.source_row_number}</p>
         </div>
-        <Link href="/cellartracker" className="rounded border border-accent px-3 py-2 text-sm text-accent">All CellarTracker records</Link>
+        <div className="flex items-center gap-3">
+          {favouriteTarget && <FavouriteStar target={favouriteTarget} favourite={favourited} label={source.source_wine} />}
+          <Link href="/cellartracker" className="rounded border border-accent px-3 py-2 text-sm text-accent">All CellarTracker records</Link>
+        </div>
       </header>
 
       {query.changed && <p role="status" className="rounded border border-green-700/30 bg-green-50 p-3 text-sm text-green-900">The CellarTracker record was updated.</p>}
