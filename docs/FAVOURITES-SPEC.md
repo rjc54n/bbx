@@ -1,9 +1,27 @@
 # Favourites — functional spec
 
-**Status:** proposal, not yet built. Written 29 July 2026.
+**Status:** built and pushed, 29 July 2026. Commits `45eb9e3` (schema),
+`d536e92` (shared star and action), `e922051` (all surfaces), `62fbd72` (error
+surfacing), `0255d06` (tab), `8d4ac73` (wine card).
 **Decisions taken:** favourites attach to the **wine** (Parent ID); the
 Favourites tab drills into a **new unified wine card**; v1 is a **plain star** —
 no notes, no named lists, no alerts.
+
+### What changed during the build
+
+- **`refresh()` instead of `revalidatePath()`** in the server action. The star is
+  clicked from eight surfaces; a hard-coded path would leave seven stale.
+- **`useOptimistic` instead of a hand-rolled rollback.** This also fixed a latent
+  bug in the old button: its `Set` was seeded from props once via `useState` and
+  never re-synced, so two rows of the same wine could disagree.
+- **The two views carry the format-adjusted guide** as well as the raw one, since
+  `catalogue_view` already computes it and the raw guide's flatness is the point.
+- **Unlink/re-link are linked to, not duplicated** on the wine card (§6.5). The
+  record pages own those actions and their audit trail.
+- **Error messages carry the Postgres cause.** The first real failure was an
+  unpushed migration, and "could not be loaded" said nothing about it.
+- **pgTAP suite added** (`supabase/tests/database/wine_favourites.test.sql`),
+  15 tests over the propagation rules.
 
 ---
 
@@ -271,9 +289,10 @@ Each step leaves the app working.
 
 ## 10. Open points
 
-- **Nav crowding** — a sixth top-level tab. Favourites arguably belongs beside
-  "My BBR Cellar" and "My CellarTracker" under a "Mine" grouping; worth
-  deciding before the tab lands rather than after.
+- **Nav crowding** — shipped as a sixth top-level tab, which is the crowded
+  option. Favourites arguably belongs beside "My BBR Cellar" and "My
+  CellarTracker" under a "Mine" grouping. Still open, now a change rather than
+  a decision.
 - **Tab load** — the favourites view fans out across four sources per wine. Fine
   at tens of favourites; if it grows, the view is the thing to materialise, not
   the page to paginate.
