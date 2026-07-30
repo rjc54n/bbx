@@ -6,7 +6,7 @@ import { isTargetFavourited } from "@/lib/favourites/server";
 import { targetForRecord } from "@/lib/favourites/target";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
-import { DeleteHistoricOfferRecordForm } from "@/components/releaseOffers/DeleteHistoricOfferRecordForm";
+import { ExcludeHistoricOfferRecordForm } from "@/components/releaseOffers/ExcludeHistoricOfferRecordForm";
 import {
   confirmHistoricOfferCandidate,
   confirmManualHistoricOfferMatch,
@@ -107,10 +107,10 @@ export default async function ReleaseOfferDetailPage({
   searchParams,
 }: {
   params: Promise<{ importId: string; sourceRowNumber: string }>;
-  searchParams: Promise<{ delete_error?: string }>;
+  searchParams: Promise<{ exclude_error?: string }>;
 }) {
   const { importId, sourceRowNumber } = await params;
-  const { delete_error: deleteError } = await searchParams;
+  const { exclude_error: excludeError } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(importId) || !/^\d+$/.test(sourceRowNumber)) notFound();
   const rowNumber = Number(sourceRowNumber);
   const owner = await requireOwner();
@@ -162,7 +162,7 @@ export default async function ReleaseOfferDetailPage({
         </div>
       </header>
 
-      {deleteError === "1" && <p role="alert" className="rounded border border-red-700/30 bg-background p-3 text-sm text-red-800">The record was not deleted. It remains in the accepted offers list.</p>}
+      {excludeError === "1" && <p role="alert" className="rounded border border-red-700/30 bg-background p-3 text-sm text-red-800">The record was not excluded. It remains in the accepted offers list.</p>}
 
       <section aria-labelledby="offer-evidence" className="rounded-lg border border-border bg-background p-5">
         <h2 id="offer-evidence" className="text-lg font-semibold">Imported offer evidence</h2>
@@ -180,7 +180,7 @@ export default async function ReleaseOfferDetailPage({
 
       <section aria-labelledby="price-fragments" className="rounded-lg border border-border bg-background p-5">
         <h2 id="price-fragments" className="text-lg font-semibold">Parsed price fragments</h2>
-        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="text-xs uppercase text-ink-muted"><tr><th className="p-2">Fragment</th><th className="p-2">Price</th><th className="p-2">Format</th><th className="p-2">Basis</th><th className="p-2">Parse</th></tr></thead><tbody>{prices.map((price) => <tr key={price.id} className="border-t border-border"><td className="p-2">{price.raw_price_text}</td><td className="p-2">{formatPence(price.amount_p)}</td><td className="p-2">{formatFormat(price.case_size, price.bottle_volume_ml)}{price.format_code ? ` (${price.format_code})` : ""}</td><td className="p-2">{price.tax_basis.replaceAll("_", " ")}</td><td className="p-2">{price.parse_status}</td></tr>)}</tbody></table></div>
+        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="text-xs uppercase tracking-wide text-ink-muted"><tr><th className="p-2">Fragment</th><th className="p-2">Price</th><th className="p-2">Format</th><th className="p-2">Basis</th><th className="p-2">Parse</th></tr></thead><tbody>{prices.map((price) => <tr key={price.id} className="border-t border-border"><td className="p-2">{price.raw_price_text}</td><td className="p-2">{formatPence(price.amount_p)}</td><td className="p-2">{formatFormat(price.case_size, price.bottle_volume_ml)}{price.format_code ? ` (${price.format_code})` : ""}</td><td className="p-2">{price.tax_basis.replaceAll("_", " ")}</td><td className="p-2">{price.parse_status}</td></tr>)}</tbody></table></div>
       </section>
 
       <section aria-labelledby="product-link" className="rounded-lg border border-border bg-background p-5">
@@ -229,10 +229,10 @@ export default async function ReleaseOfferDetailPage({
         {unresolved && <CatalogueCandidateSearch matchGroupKey={source.match_group_key} sourceWine={source.source_wine} sourceVintage={source.source_vintage} returnPath={returnPath} />}
       </section>
 
-      <section aria-labelledby="delete-record" className="rounded-lg border border-red-700/30 bg-background p-5">
-        <h2 id="delete-record" className="text-lg font-semibold">Delete record</h2>
-        <p className="mt-1 text-sm text-ink-muted">This removes only this accepted offer record and its parsed price fragments. Other records in the same match group are retained.</p>
-        <div className="mt-4"><DeleteHistoricOfferRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
+      <section aria-labelledby="exclude-record" className="rounded-lg border border-border bg-background p-5">
+        <h2 id="exclude-record" className="text-lg font-semibold">Exclude record</h2>
+        <p className="mt-1 text-sm text-ink-muted">This hides only this offer record and stops its parsed prices feeding the release-price anchor. Other records in the same match group are retained, and a later file repeating this offer is filtered out. Restore it from <Link href="/release-prices/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
+        <div className="mt-4"><ExcludeHistoricOfferRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
       </section>
 
       {resolution?.parent_sku && <section aria-labelledby="catalogue-card" className="rounded-lg border border-border bg-background p-5"><h2 id="catalogue-card" className="text-lg font-semibold">Current BBX catalogue card</h2>{catalogue.length === 0 ? <p className="mt-3 text-sm text-ink-muted">This Parent ID is saved, but it is not currently in the BBX-eligible catalogue.</p> : <div className="mt-4 space-y-4">{catalogue.map((product) => <article key={product.format_code} className="rounded border border-border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{product.name}</h3><p className="mt-1 text-sm text-ink-muted">Parent {product.parent_sku} · {product.vintage ?? "Vintage unavailable"} · {product.producer ?? "Producer unavailable"}</p></div>{product.product_url && <a className="text-sm text-accent underline-offset-2 hover:underline" href={product.product_url}>Open BBR product</a>}</div><dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-3"><div><dt className="text-xs uppercase text-ink-muted">Region</dt><dd>{[product.country, product.region, product.subregion].filter(Boolean).join(" · ") || "Unavailable"}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Format</dt><dd>{formatFormat(product.case_size, product.bottle_volume_ml)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Listing status</dt><dd>{product.is_listed ? "Listed" : "Unlisted"}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Lowest ask</dt><dd>{formatPence(product.ask)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Highest bid</dt><dd>{formatPence(product.highest_bid_p)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Market price</dt><dd>{formatPence(product.market_price_p)}</dd></div></dl></article>)}</div>}</section>}

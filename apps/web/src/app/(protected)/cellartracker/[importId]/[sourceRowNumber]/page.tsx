@@ -5,7 +5,7 @@ import { requireOwner } from "@/lib/auth/owner";
 import { isTargetFavourited } from "@/lib/favourites/server";
 import { targetForRecord } from "@/lib/favourites/target";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
-import { DeleteCellarTrackerRecordForm } from "./DeleteCellarTrackerRecordForm";
+import { ExcludeCellarTrackerRecordForm } from "./ExcludeCellarTrackerRecordForm";
 import {
   confirmCellarTrackerRecordCandidate,
   setManualCellarTrackerRecordLink,
@@ -34,8 +34,6 @@ type CellarTrackerRecord = {
   region: string | null;
   appellation: string | null;
   varietal: string | null;
-  begin_consume: number | null;
-  end_consume: number | null;
 };
 
 type Resolution = {
@@ -129,7 +127,7 @@ export default async function CellarTrackerRecordPage({
     { data: rawData, error: rawError },
   ] = await Promise.all([
     supabase.from("cellartracker_evidence")
-      .select("import_id,source_row_number,source_wine,source_match_key,match_group_key,vintage,bottle_volume_ml,purchase_price_per_bottle_p,quantity_home,quantity_bbr,total_quantity,fully_consumed,colour,producer,country,region,appellation,varietal,begin_consume,end_consume")
+      .select("import_id,source_row_number,source_wine,source_match_key,match_group_key,vintage,bottle_volume_ml,purchase_price_per_bottle_p,quantity_home,quantity_bbr,total_quantity,fully_consumed,colour,producer,country,region,appellation,varietal")
       .eq("import_id", importId).eq("source_row_number", rowNumber).maybeSingle(),
     supabase.from("cellar_imports").select("status,original_filename,accepted_at")
       .eq("id", importId).eq("source_type", "cellartracker_inventory").maybeSingle(),
@@ -194,7 +192,7 @@ export default async function CellarTrackerRecordPage({
 
       {query.changed && <p role="status" className="rounded border border-green-700/30 bg-green-50 p-3 text-sm text-green-900">The CellarTracker record was updated.</p>}
       {query.action_error && <p role="alert" className="rounded border border-red-700/30 bg-background p-3 text-sm text-red-800">The CellarTracker record could not be updated.</p>}
-      {query.delete_error && <p role="alert" className="rounded border border-red-700/30 bg-background p-3 text-sm text-red-800">The record was not deleted. It remains in the accepted CellarTracker snapshot.</p>}
+      {query.exclude_error && <p role="alert" className="rounded border border-red-700/30 bg-background p-3 text-sm text-red-800">The record was not excluded. It remains in the accepted CellarTracker snapshot.</p>}
 
       <section aria-labelledby="cellartracker-evidence" className="rounded-lg border border-border bg-background p-5">
         <h2 id="cellartracker-evidence" className="text-lg font-semibold">Imported CellarTracker record</h2>
@@ -208,7 +206,6 @@ export default async function CellarTrackerRecordPage({
           <div><dt className="text-xs uppercase text-ink-muted">Producer</dt><dd>{source.producer ?? "Unavailable"}</dd></div>
           <div><dt className="text-xs uppercase text-ink-muted">Origin</dt><dd>{[source.country, source.region, source.appellation].filter(Boolean).join(" · ") || "Unavailable"}</dd></div>
           <div><dt className="text-xs uppercase text-ink-muted">Colour and variety</dt><dd>{[source.colour, source.varietal].filter(Boolean).join(" · ") || "Unavailable"}</dd></div>
-          <div><dt className="text-xs uppercase text-ink-muted">Drinking window</dt><dd>{source.begin_consume ?? "–"} to {source.end_consume ?? "–"}</dd></div>
         </dl>
         <form action={updateCellarTrackerRecordPrice.bind(null, importId, rowNumber)} className="mt-5 flex flex-wrap items-end gap-2 border-t border-border pt-4">
           <label className="grid gap-1 text-xs text-ink-muted">Purchase price per bottle
@@ -312,10 +309,10 @@ export default async function CellarTrackerRecordPage({
           </article>)}</div>}
       </section>}
 
-      <section aria-labelledby="delete-record" className="rounded-lg border border-red-700/30 bg-background p-5">
-        <h2 id="delete-record" className="text-lg font-semibold">Delete record</h2>
-        <p className="mt-1 text-sm text-ink-muted">This removes only this record from the accepted CellarTracker snapshot. Other records in the same wine-and-vintage match group are retained.</p>
-        <div className="mt-4"><DeleteCellarTrackerRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
+      <section aria-labelledby="exclude-record" className="rounded-lg border border-border bg-background p-5">
+        <h2 id="exclude-record" className="text-lg font-semibold">Exclude record</h2>
+        <p className="mt-1 text-sm text-ink-muted">This hides only this record from the CellarTracker snapshot, and leaves it out of every snapshot you accept from now on. Other records in the same wine-and-vintage match group are retained. Restore it from <Link href="/cellartracker/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
+        <div className="mt-4"><ExcludeCellarTrackerRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
       </section>
 
       <details className="rounded-lg border border-border bg-background p-5">

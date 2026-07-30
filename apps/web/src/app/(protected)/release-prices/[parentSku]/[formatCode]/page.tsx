@@ -25,7 +25,7 @@ export default async function ReleasePriceHistoryPage({
   const returnPath = `/release-prices/${parentSku}/${formatCode}`;
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
-    <div className="mx-auto max-w-5xl space-y-5 p-5">
+    <div className="mx-auto max-w-6xl space-y-5 p-5">
       <Link href="/release-prices" className="text-sm text-accent underline-offset-2 hover:underline">Back to release prices</Link>
       {query.confirmed && <p className="rounded border border-green-700/30 bg-green-50 px-4 py-3 text-sm text-green-900">The selected evidence is now the confirmed release anchor.</p>}
       {query.confirm_error && <p role="alert" className="rounded border border-accent/30 bg-background px-4 py-3 text-sm text-accent">The release anchor could not be confirmed.</p>}

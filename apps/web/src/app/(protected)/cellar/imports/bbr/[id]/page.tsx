@@ -257,7 +257,7 @@ export default async function BbrImportPage({
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse text-left text-sm">
-              <thead className="bg-accent-soft text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-4 py-2">Wine</th>
                   <th className="px-4 py-2">Parent ID</th>

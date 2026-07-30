@@ -23,7 +23,7 @@ export default async function ReleaseOfferImportsPage() {
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
-      <div className="mx-auto max-w-5xl space-y-5 p-5">
+      <div className="mx-auto max-w-6xl space-y-5 p-5">
         <nav className="flex flex-wrap gap-4 text-sm">
           <Link href="/cellar/imports" className="text-accent underline-offset-2 hover:underline">
             Back to imports

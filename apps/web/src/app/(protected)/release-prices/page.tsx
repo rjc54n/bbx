@@ -4,7 +4,12 @@ import { loadFavourites } from "@/lib/favourites/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReleasePricesPage() {
+export default async function ReleasePricesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = await searchParams;
   const owner = await requireOwner();
   const { supabase } = owner;
   const rows: AcceptedOfferRow[] = [];
@@ -18,11 +23,16 @@ export default async function ReleasePricesPage() {
     rows.push(...page);
     if (page.length < pageSize) break;
   }
-  const { parentSkus, pending } = await loadFavourites(owner, "release_offer");
+  const [{ parentSkus, pending }, { count: excludedCount }] = await Promise.all([
+    loadFavourites(owner, "release_offer"),
+    supabase.from("release_offer_excluded_record_view").select("*", { count: "exact", head: true }),
+  ]);
 
   return <AcceptedOfferBrowser
     rows={rows}
     favouriteParentSkus={parentSkus}
     pendingFavourites={pending}
+    excludedCount={excludedCount ?? 0}
+    justExcluded={query.excluded === "1"}
   />;
 }

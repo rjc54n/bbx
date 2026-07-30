@@ -194,7 +194,7 @@ export default async function FavouriteWinePage({ params }: {
       >
         <div className="mt-4 overflow-auto">
           <table className="w-full min-w-max text-left text-sm">
-            <thead className="text-xs uppercase text-ink-muted">
+            <thead className="text-xs uppercase tracking-wide text-ink-muted">
               <tr>
                 <th className="py-2 pr-3">Format</th><th className="py-2 pr-3">Listing</th>
                 <th className="py-2 pr-3 text-right">Ask / 75cl</th><th className="py-2 pr-3 text-right">Bid / 75cl</th>
@@ -231,7 +231,7 @@ export default async function FavouriteWinePage({ params }: {
           ? <p className="mt-3 text-sm text-ink-muted">No accepted release offer resolves to this wine.</p>
           : <div className="mt-4 overflow-auto">
             <table className="w-full min-w-max text-left text-sm">
-              <thead className="text-xs uppercase text-ink-muted">
+              <thead className="text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="py-2 pr-3">Offer date</th><th className="py-2 pr-3">Format</th>
                   <th className="py-2 pr-3 text-right">Release / 75cl</th><th className="py-2 pr-3">Anchor</th>

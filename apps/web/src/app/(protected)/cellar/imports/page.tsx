@@ -43,7 +43,7 @@ export default async function ImportsPage() {
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
-      <div className="mx-auto max-w-5xl space-y-5 p-5">
+      <div className="mx-auto max-w-6xl space-y-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-accent">
