@@ -25,12 +25,15 @@ const tabs = [
     label: "Release prices",
     href: "/release-prices",
   },
+  { id: "favourites", label: "Favourites", href: "/favourites" },
 ] as const;
 
 export function PrimaryNavigation() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname.startsWith("/release-prices") || pathname.startsWith("/cellar/imports/release-offers")
+  const active = pathname.startsWith("/favourites")
+    ? "favourites"
+    : pathname.startsWith("/release-prices") || pathname.startsWith("/cellar/imports/release-offers")
     ? "release-prices"
     : pathname.startsWith("/cellartracker") || pathname.startsWith("/cellar/imports/cellartracker")
     ? "cellartracker"
