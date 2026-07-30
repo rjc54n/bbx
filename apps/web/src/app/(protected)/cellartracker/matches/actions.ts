@@ -103,7 +103,9 @@ export async function processCellarTrackerMatchBatch(runId: string): Promise<Cel
         p_run_id: runId,
         p_match_group_key: result.group.match_group_key,
         p_candidates: ranking.candidates,
-        p_auto_link_parent_sku: ranking.autoLinkParentSku,
+        // The type generator models every function argument as non-null, but
+        // this one takes NULL to mean "no candidate was good enough to link".
+        p_auto_link_parent_sku: ranking.autoLinkParentSku as string,
         p_observed_at: result.observedAt,
       });
       if (recordError) throw recordError;

@@ -12,8 +12,8 @@ export async function setReleasePriceFavourite(parentSku: string, favourite: boo
   if (!context) return { error: "Your owner session has expired. Sign in again." };
 
   const query = favourite
-    ? context.supabase.from("release_price_favourites").insert({ user_id: context.userId, parent_sku: parentSku })
-    : context.supabase.from("release_price_favourites").delete()
+    ? context.supabase.from("wine_favourites").insert({ user_id: context.userId, parent_sku: parentSku })
+    : context.supabase.from("wine_favourites").delete()
       .eq("user_id", context.userId)
       .eq("parent_sku", parentSku);
   const { error } = await query;

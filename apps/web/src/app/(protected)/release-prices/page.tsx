@@ -17,10 +17,10 @@ export default async function ReleasePricesPage() {
     if (page.length < pageSize) break;
   }
   const { data: favouriteRows, error: favouriteError } = await supabase
-    .from("release_price_favourites")
+    .from("wine_favourites")
     .select("parent_sku")
     .eq("user_id", userId);
-  if (favouriteError) throw new Error("Release-price favourites could not be loaded.");
+  if (favouriteError) throw new Error("Wine favourites could not be loaded.");
 
   return <AcceptedOfferBrowser
     rows={rows}

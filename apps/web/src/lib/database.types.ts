@@ -280,6 +280,382 @@ export type Database = {
         }
         Relationships: []
       }
+      cellartracker_evidence: {
+        Row: {
+          appellation: string | null
+          begin_consume: number | null
+          bottle_volume_ml: number
+          colour: string | null
+          country: string | null
+          end_consume: number | null
+          fully_consumed: boolean
+          import_id: string
+          match_group_key: string | null
+          producer: string | null
+          purchase_price_per_bottle_p: number | null
+          quantity_bbr: number
+          quantity_home: number
+          region: string | null
+          source_core_key: string | null
+          source_match_key: string
+          source_row_number: number
+          source_wine: string
+          total_quantity: number
+          varietal: string | null
+          vintage: number | null
+        }
+        Insert: {
+          appellation?: string | null
+          begin_consume?: number | null
+          bottle_volume_ml: number
+          colour?: string | null
+          country?: string | null
+          end_consume?: number | null
+          fully_consumed: boolean
+          import_id: string
+          match_group_key?: string | null
+          producer?: string | null
+          purchase_price_per_bottle_p?: number | null
+          quantity_bbr: number
+          quantity_home: number
+          region?: string | null
+          source_core_key?: string | null
+          source_match_key: string
+          source_row_number: number
+          source_wine: string
+          total_quantity: number
+          varietal?: string | null
+          vintage?: number | null
+        }
+        Update: {
+          appellation?: string | null
+          begin_consume?: number | null
+          bottle_volume_ml?: number
+          colour?: string | null
+          country?: string | null
+          end_consume?: number | null
+          fully_consumed?: boolean
+          import_id?: string
+          match_group_key?: string | null
+          producer?: string | null
+          purchase_price_per_bottle_p?: number | null
+          quantity_bbr?: number
+          quantity_home?: number
+          region?: string | null
+          source_core_key?: string | null
+          source_match_key?: string
+          source_row_number?: number
+          source_wine?: string
+          total_quantity?: number
+          varietal?: string | null
+          vintage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "cellar_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "cellar_import_rows"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+        ]
+      }
+      cellartracker_match_run_groups: {
+        Row: {
+          error_message: string | null
+          match_group_key: string
+          processed_at: string | null
+          run_id: string
+          source_match_key: string
+          source_producer: string | null
+          source_region: string | null
+          source_row_count: number
+          source_vintage: number | null
+          source_wine: string
+          status: string
+        }
+        Insert: {
+          error_message?: string | null
+          match_group_key: string
+          processed_at?: string | null
+          run_id: string
+          source_match_key: string
+          source_producer?: string | null
+          source_region?: string | null
+          source_row_count: number
+          source_vintage?: number | null
+          source_wine: string
+          status?: string
+        }
+        Update: {
+          error_message?: string | null
+          match_group_key?: string
+          processed_at?: string | null
+          run_id?: string
+          source_match_key?: string
+          source_producer?: string | null
+          source_region?: string | null
+          source_row_count?: number
+          source_vintage?: number | null
+          source_wine?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellartracker_match_run_groups_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "cellartracker_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cellartracker_match_runs: {
+        Row: {
+          algolia_exact_link_count: number
+          algolia_observed_at: string | null
+          algorithm_version: string
+          catalogue_index: string
+          error_group_count: number
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          local_exact_link_count: number
+          processed_group_count: number
+          remaining_group_count: number
+          snapshot_import_id: string
+          started_at: string
+          started_by: string
+          status: string
+          total_group_count: number
+        }
+        Insert: {
+          algolia_exact_link_count?: number
+          algolia_observed_at?: string | null
+          algorithm_version?: string
+          catalogue_index?: string
+          error_group_count?: number
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          local_exact_link_count?: number
+          processed_group_count?: number
+          remaining_group_count?: number
+          snapshot_import_id: string
+          started_at?: string
+          started_by: string
+          status?: string
+          total_group_count?: number
+        }
+        Update: {
+          algolia_exact_link_count?: number
+          algolia_observed_at?: string | null
+          algorithm_version?: string
+          catalogue_index?: string
+          error_group_count?: number
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          local_exact_link_count?: number
+          processed_group_count?: number
+          remaining_group_count?: number
+          snapshot_import_id?: string
+          started_at?: string
+          started_by?: string
+          status?: string
+          total_group_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellartracker_match_runs_snapshot_import_id_fkey"
+            columns: ["snapshot_import_id"]
+            isOneToOne: false
+            referencedRelation: "cellar_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cellartracker_match_suggestions: {
+        Row: {
+          match_group_key: string
+          match_score: number | null
+          matched_words: string[]
+          name: string
+          observed_at: string
+          parent_sku: string
+          producer: string | null
+          product_url: string | null
+          purchase_mode: string | null
+          rank: number
+          region: string | null
+          source_run_id: string
+          stock_origin: string | null
+          typo_count: number | null
+          vintage: number | null
+          was_biddable_at_observation: boolean
+        }
+        Insert: {
+          match_group_key: string
+          match_score?: number | null
+          matched_words?: string[]
+          name: string
+          observed_at: string
+          parent_sku: string
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank: number
+          region?: string | null
+          source_run_id: string
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
+          was_biddable_at_observation: boolean
+        }
+        Update: {
+          match_group_key?: string
+          match_score?: number | null
+          matched_words?: string[]
+          name?: string
+          observed_at?: string
+          parent_sku?: string
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank?: number
+          region?: string | null
+          source_run_id?: string
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
+          was_biddable_at_observation?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellartracker_match_suggestions_source_run_id_fkey"
+            columns: ["source_run_id"]
+            isOneToOne: false
+            referencedRelation: "cellartracker_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cellartracker_product_resolutions: {
+        Row: {
+          import_id: string
+          match_method: string
+          match_run_id: string | null
+          parent_sku: string | null
+          resolved_at: string
+          resolved_by: string | null
+          source_row_number: number
+          status: string
+        }
+        Insert: {
+          import_id: string
+          match_method: string
+          match_run_id?: string | null
+          parent_sku?: string | null
+          resolved_at?: string
+          resolved_by?: string | null
+          source_row_number: number
+          status: string
+        }
+        Update: {
+          import_id?: string
+          match_method?: string
+          match_run_id?: string | null
+          parent_sku?: string | null
+          resolved_at?: string
+          resolved_by?: string | null
+          source_row_number?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellartracker_product_resoluti_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "cellartracker_evidence"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "cellartracker_product_resoluti_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "current_cellartracker_records"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+          {
+            foreignKeyName: "cellartracker_product_resolutions_match_run_id_fkey"
+            columns: ["match_run_id"]
+            isOneToOne: false
+            referencedRelation: "cellartracker_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cellartracker_resolution_events: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          event_type: string
+          id: number
+          import_id: string
+          parent_sku: string | null
+          previous_parent_sku: string | null
+          source_row_number: number
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          event_type: string
+          id?: never
+          import_id: string
+          parent_sku?: string | null
+          previous_parent_sku?: string | null
+          source_row_number: number
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          event_type?: string
+          id?: never
+          import_id?: string
+          parent_sku?: string | null
+          previous_parent_sku?: string | null
+          source_row_number?: number
+        }
+        Relationships: []
+      }
+      pending_favourites: {
+        Row: {
+          created_at: string
+          match_group_key: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          match_group_key: string
+          source: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          match_group_key?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       release_offer_imports: {
         Row: {
           accepted_at: string | null
@@ -383,9 +759,9 @@ export type Database = {
       }
       release_offer_match_runs: {
         Row: {
-          algorithm_version: string
           algolia_exact_link_count: number
           algolia_observed_at: string | null
+          algorithm_version: string
           catalogue_index: string
           error_group_count: number
           error_message: string | null
@@ -401,9 +777,9 @@ export type Database = {
           total_group_count: number
         }
         Insert: {
-          algorithm_version?: string
           algolia_exact_link_count?: number
           algolia_observed_at?: string | null
+          algorithm_version?: string
           catalogue_index?: string
           error_group_count?: number
           error_message?: string | null
@@ -419,9 +795,9 @@ export type Database = {
           total_group_count?: number
         }
         Update: {
-          algorithm_version?: string
           algolia_exact_link_count?: number
           algolia_observed_at?: string | null
+          algorithm_version?: string
           catalogue_index?: string
           error_group_count?: number
           error_message?: string | null
@@ -629,6 +1005,13 @@ export type Database = {
             referencedRelation: "release_offer_source_rows"
             referencedColumns: ["import_id", "source_row_number"]
           },
+          {
+            foreignKeyName: "release_offer_product_resolutions_match_run_id_fkey"
+            columns: ["match_run_id"]
+            isOneToOne: false
+            referencedRelation: "release_offer_match_runs"
+            referencedColumns: ["id"]
+          },
         ]
       }
       release_offer_resolution_events: {
@@ -692,7 +1075,7 @@ export type Database = {
           content_fingerprint: string
           description: string | null
           import_id: string
-          match_group_key: string
+          match_group_key: string | null
           offer_date: string
           raw_row: Json
           source_match_key: string
@@ -711,7 +1094,7 @@ export type Database = {
           content_fingerprint: string
           description?: string | null
           import_id: string
-          match_group_key?: never
+          match_group_key?: string | null
           offer_date: string
           raw_row: Json
           source_match_key: string
@@ -730,7 +1113,7 @@ export type Database = {
           content_fingerprint?: string
           description?: string | null
           import_id?: string
-          match_group_key?: never
+          match_group_key?: string | null
           offer_date?: string
           raw_row?: Json
           source_match_key?: string
@@ -825,7 +1208,7 @@ export type Database = {
           },
         ]
       }
-      release_price_favourites: {
+      wine_favourites: {
         Row: {
           created_at: string
           parent_sku: string
@@ -843,50 +1226,8 @@ export type Database = {
         }
         Relationships: []
       }
-      cellartracker_evidence: {
-        Row: { import_id: string; source_row_number: number; source_wine: string; source_match_key: string; match_group_key: string; vintage: number | null; bottle_volume_ml: number; purchase_price_per_bottle_p: number | null; quantity_home: number; quantity_bbr: number; total_quantity: number; fully_consumed: boolean; colour: string | null; producer: string | null; country: string | null; region: string | null; appellation: string | null; varietal: string | null; begin_consume: number | null; end_consume: number | null; source_core_key: string | null }
-        Insert: { import_id: string; source_row_number: number; source_wine: string; source_match_key: string; match_group_key?: never; vintage?: number | null; bottle_volume_ml: number; purchase_price_per_bottle_p?: number | null; quantity_home: number; quantity_bbr: number; total_quantity: number; fully_consumed: boolean; colour?: string | null; producer?: string | null; country?: string | null; region?: string | null; appellation?: string | null; varietal?: string | null; begin_consume?: number | null; end_consume?: number | null; source_core_key?: never }
-        Update: { import_id?: string; source_row_number?: number; source_wine?: string; source_match_key?: string; match_group_key?: never; vintage?: number | null; bottle_volume_ml?: number; purchase_price_per_bottle_p?: number | null; quantity_home?: number; quantity_bbr?: number; total_quantity?: number; fully_consumed?: boolean; colour?: string | null; producer?: string | null; country?: string | null; region?: string | null; appellation?: string | null; varietal?: string | null; begin_consume?: number | null; end_consume?: number | null; source_core_key?: never }
-        Relationships: []
-      }
-      cellartracker_product_resolutions: {
-        Row: { import_id: string; source_row_number: number; status: string; parent_sku: string | null; match_method: string; match_run_id: string | null; resolved_by: string | null; resolved_at: string }
-        Insert: { import_id: string; source_row_number: number; status: string; parent_sku?: string | null; match_method: string; match_run_id?: string | null; resolved_by?: string | null; resolved_at?: string }
-        Update: { import_id?: string; source_row_number?: number; status?: string; parent_sku?: string | null; match_method?: string; match_run_id?: string | null; resolved_by?: string | null; resolved_at?: string }
-        Relationships: []
-      }
-      cellartracker_match_run_groups: {
-        Row: { run_id: string; match_group_key: string; source_match_key: string; source_vintage: number | null; source_wine: string; source_producer: string | null; source_region: string | null; source_row_count: number; status: string; processed_at: string | null; error_message: string | null }
-        Insert: { run_id: string; match_group_key: string; source_match_key: string; source_vintage?: number | null; source_wine: string; source_producer?: string | null; source_region?: string | null; source_row_count: number; status?: string; processed_at?: string | null; error_message?: string | null }
-        Update: { run_id?: string; match_group_key?: string; source_match_key?: string; source_vintage?: number | null; source_wine?: string; source_producer?: string | null; source_region?: string | null; source_row_count?: number; status?: string; processed_at?: string | null; error_message?: string | null }
-        Relationships: []
-      }
-      cellartracker_match_runs: {
-        Row: { id: string; snapshot_import_id: string; status: string; algorithm_version: string; catalogue_index: string; started_by: string; started_at: string; finished_at: string | null; algolia_observed_at: string | null; total_group_count: number; processed_group_count: number; remaining_group_count: number; error_group_count: number; local_exact_link_count: number; algolia_exact_link_count: number; error_message: string | null }
-        Insert: { id?: string; snapshot_import_id: string; status?: string; algorithm_version?: string; catalogue_index?: string; started_by: string; started_at?: string; finished_at?: string | null; algolia_observed_at?: string | null; total_group_count?: number; processed_group_count?: number; remaining_group_count?: number; error_group_count?: number; local_exact_link_count?: number; algolia_exact_link_count?: number; error_message?: string | null }
-        Update: { id?: string; snapshot_import_id?: string; status?: string; algorithm_version?: string; catalogue_index?: string; started_by?: string; started_at?: string; finished_at?: string | null; algolia_observed_at?: string | null; total_group_count?: number; processed_group_count?: number; remaining_group_count?: number; error_group_count?: number; local_exact_link_count?: number; algolia_exact_link_count?: number; error_message?: string | null }
-        Relationships: []
-      }
-      cellartracker_match_suggestions: {
-        Row: { match_group_key: string; parent_sku: string; source_run_id: string; rank: number; name: string; vintage: number | null; producer: string | null; region: string | null; stock_origin: string | null; purchase_mode: string | null; product_url: string | null; matched_words: string[]; typo_count: number | null; match_score: number | null; was_biddable_at_observation: boolean; observed_at: string }
-        Insert: { match_group_key: string; parent_sku: string; source_run_id: string; rank: number; name: string; vintage?: number | null; producer?: string | null; region?: string | null; stock_origin?: string | null; purchase_mode?: string | null; product_url?: string | null; matched_words?: string[]; typo_count?: number | null; match_score?: number | null; was_biddable_at_observation: boolean; observed_at: string }
-        Update: { match_group_key?: string; parent_sku?: string; source_run_id?: string; rank?: number; name?: string; vintage?: number | null; producer?: string | null; region?: string | null; stock_origin?: string | null; purchase_mode?: string | null; product_url?: string | null; matched_words?: string[]; typo_count?: number | null; match_score?: number | null; was_biddable_at_observation?: boolean; observed_at?: string }
-        Relationships: []
-      }
     }
     Views: {
-      current_cellartracker_records: {
-        Row: { import_id: string; source_row_number: number; source_wine: string; vintage: number | null; fully_consumed: boolean; quantity_home: number; quantity_bbr: number; purchase_price_per_bottle_p: number | null; lowest_ask_per_bottle_p: number | null; highest_bid_per_bottle_p: number | null; parent_sku: string | null; link_status: string | null; match_method: string | null }
-        Relationships: []
-      }
-      cellartracker_match_review_view: {
-        Row: { match_group_key: string | null; source_wine: string | null; source_vintage: number | null; source_producer: string | null; source_region: string | null; source_row_count: number | null; unresolved_row_count: number | null; linked_row_count: number | null; suppressed_row_count: number | null; parent_sku: string | null; match_method: string | null; is_biddable: boolean | null; suggestion_count: number | null; suggestions_observed_at: string | null }
-        Relationships: []
-      }
-      cellartracker_match_suggestion_view: {
-        Row: { match_group_key: string | null; parent_sku: string | null; source_run_id: string | null; rank: number | null; name: string | null; vintage: number | null; producer: string | null; region: string | null; stock_origin: string | null; purchase_mode: string | null; product_url: string | null; matched_words: string[] | null; typo_count: number | null; is_biddable: boolean | null; observed_at: string | null; match_score: number | null }
-        Relationships: []
-      }
       bbr_cellar_market_view: {
         Row: {
           bottle_volume_ml: number | null
@@ -1025,6 +1366,90 @@ export type Database = {
           },
         ]
       }
+      cellartracker_match_review_view: {
+        Row: {
+          is_biddable: boolean | null
+          linked_row_count: number | null
+          match_group_key: string | null
+          match_method: string | null
+          parent_sku: string | null
+          source_producer: string | null
+          source_region: string | null
+          source_row_count: number | null
+          source_vintage: number | null
+          source_wine: string | null
+          suggestion_count: number | null
+          suggestions_observed_at: string | null
+          suppressed_row_count: number | null
+          unresolved_row_count: number | null
+        }
+        Relationships: []
+      }
+      cellartracker_match_suggestion_view: {
+        Row: {
+          is_biddable: boolean | null
+          match_group_key: string | null
+          match_score: number | null
+          matched_words: string[] | null
+          name: string | null
+          observed_at: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_url: string | null
+          purchase_mode: string | null
+          rank: number | null
+          region: string | null
+          source_run_id: string | null
+          stock_origin: string | null
+          typo_count: number | null
+          vintage: number | null
+        }
+        Insert: {
+          is_biddable?: never
+          match_group_key?: string | null
+          match_score?: number | null
+          matched_words?: string[] | null
+          name?: string | null
+          observed_at?: string | null
+          parent_sku?: string | null
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank?: number | null
+          region?: string | null
+          source_run_id?: string | null
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
+        }
+        Update: {
+          is_biddable?: never
+          match_group_key?: string | null
+          match_score?: number | null
+          matched_words?: string[] | null
+          name?: string | null
+          observed_at?: string | null
+          parent_sku?: string | null
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank?: number | null
+          region?: string | null
+          source_run_id?: string | null
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellartracker_match_suggestions_source_run_id_fkey"
+            columns: ["source_run_id"]
+            isOneToOne: false
+            referencedRelation: "cellartracker_match_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       current_bbr_holdings: {
         Row: {
           alcohol_percent: number | null
@@ -1078,6 +1503,54 @@ export type Database = {
           },
         ]
       }
+      current_cellartracker_records: {
+        Row: {
+          accepted_at: string | null
+          appellation: string | null
+          begin_consume: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          end_consume: number | null
+          fully_consumed: boolean | null
+          highest_bid_per_bottle_p: number | null
+          import_id: string | null
+          is_listed: boolean | null
+          link_status: string | null
+          lowest_ask_per_bottle_p: number | null
+          match_group_key: string | null
+          match_method: string | null
+          parent_sku: string | null
+          producer: string | null
+          purchase_price_per_bottle_p: number | null
+          quantity_bbr: number | null
+          quantity_home: number | null
+          region: string | null
+          source_match_key: string | null
+          source_row_number: number | null
+          source_wine: string | null
+          total_quantity: number | null
+          varietal: string | null
+          vintage: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "cellar_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_source_row_number_fkey"
+            columns: ["import_id", "source_row_number"]
+            isOneToOne: true
+            referencedRelation: "cellar_import_rows"
+            referencedColumns: ["import_id", "source_row_number"]
+          },
+        ]
+      }
       facet_ranges_view: {
         Row: {
           ask_max: number | null
@@ -1103,12 +1576,64 @@ export type Database = {
         }
         Relationships: []
       }
+      favourite_wine_view: {
+        Row: {
+          adjusted_guide_per_bottle_p: number | null
+          anchor_status: string | null
+          ask_vs_release_pct: number | null
+          bbr_cellar_bottles: number | null
+          bbr_cellar_holding_count: number | null
+          bid_vs_release_pct: number | null
+          cellartracker_bottles_bbr: number | null
+          cellartracker_bottles_home: number | null
+          cellartracker_paid_per_bottle_p: number | null
+          cellartracker_record_count: number | null
+          colour: string | null
+          country: string | null
+          favourited_at: string | null
+          format_count: number | null
+          guide_per_bottle_p: number | null
+          highest_bid_per_bottle_p: number | null
+          in_tracked_catalogue: boolean | null
+          latest_release_offer_date: string | null
+          latest_release_price_per_bottle_p: number | null
+          listed_format_count: number | null
+          lowest_ask_per_bottle_p: number | null
+          parent_sku: string | null
+          producer: string | null
+          product_url: string | null
+          region: string | null
+          release_offer_record_count: number | null
+          subregion: string | null
+          user_id: string | null
+          vintage: number | null
+          wine_name: string | null
+        }
+        Relationships: []
+      }
       format_options_view: {
         Row: {
           bottle_volume_ml: number | null
           case_size: number | null
           format_code: string | null
           n: number | null
+        }
+        Relationships: []
+      }
+      pending_favourite_view: {
+        Row: {
+          bottles: number | null
+          favourited_at: string | null
+          is_stale: boolean | null
+          latest_offer_date: string | null
+          match_group_key: string | null
+          producer: string | null
+          record_count: number | null
+          source: string | null
+          source_wine: string | null
+          suggestion_count: number | null
+          user_id: string | null
+          vintage: number | null
         }
         Relationships: []
       }
@@ -1286,6 +1811,7 @@ export type Database = {
         Row: {
           is_biddable: boolean | null
           match_group_key: string | null
+          match_score: number | null
           matched_words: string[] | null
           name: string | null
           observed_at: string | null
@@ -1299,8 +1825,42 @@ export type Database = {
           stock_origin: string | null
           typo_count: number | null
           vintage: number | null
-          // Appended, not inserted: the view can only add trailing columns.
-          match_score: number | null
+        }
+        Insert: {
+          is_biddable?: never
+          match_group_key?: string | null
+          match_score?: number | null
+          matched_words?: string[] | null
+          name?: string | null
+          observed_at?: string | null
+          parent_sku?: string | null
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank?: number | null
+          region?: string | null
+          source_run_id?: string | null
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
+        }
+        Update: {
+          is_biddable?: never
+          match_group_key?: string | null
+          match_score?: number | null
+          matched_words?: string[] | null
+          name?: string | null
+          observed_at?: string | null
+          parent_sku?: string | null
+          producer?: string | null
+          product_url?: string | null
+          purchase_mode?: string | null
+          rank?: number | null
+          region?: string | null
+          source_run_id?: string | null
+          stock_origin?: string | null
+          typo_count?: number | null
+          vintage?: number | null
         }
         Relationships: [
           {
@@ -1316,6 +1876,7 @@ export type Database = {
         Row: {
           import_id: string | null
           link_status: string | null
+          match_group_key: string | null
           match_method: string | null
           offer_date: string | null
           parent_sku: string | null
@@ -1440,31 +2001,17 @@ export type Database = {
       }
     }
     Functions: {
-      accept_cellartracker_import: { Args: { p_import_id: string }; Returns: Json }
-      discard_cellartracker_import_row: { Args: { p_import_id: string; p_source_row_number: number }; Returns: Json }
-      repair_cellartracker_import_price: { Args: { p_import_id: string; p_source_row_number: number; p_price_p: number }; Returns: Json }
-      repair_cellartracker_import_row: { Args: { p_import_id: string; p_source_row_number: number; p_raw_row: Json }; Returns: Json }
-      delete_cellartracker_import: { Args: { p_import_id: string }; Returns: Json }
-      begin_cellartracker_matching: { Args: never; Returns: Json }
-      begin_cellartracker_match_run: { Args: never; Returns: Json }
-      record_cellartracker_algolia_error: { Args: { p_run_id: string; p_match_group_key: string; p_error_message: string }; Returns: Json }
-      record_cellartracker_algolia_result: { Args: { p_run_id: string; p_match_group_key: string; p_candidates: Json; p_auto_link_parent_sku: string | null; p_observed_at: string }; Returns: Json }
-      confirm_cellartracker_match_group: { Args: { p_match_group_key: string; p_parent_sku: string; p_method?: string }; Returns: Json }
-      suppress_cellartracker_match_group: { Args: { p_match_group_key: string }; Returns: Json }
-      unlink_cellartracker_match_group: { Args: { p_match_group_key: string }; Returns: Json }
-      restore_cellartracker_match_group: { Args: { p_match_group_key: string }; Returns: Json }
-      edit_cellartracker_match_group: { Args: { p_match_group_key: string; p_parent_sku: string }; Returns: Json }
-      delete_cellartracker_match_group: { Args: { p_match_group_key: string }; Returns: Json }
-      set_cellartracker_product_resolution: { Args: { p_import_id: string; p_source_row_number: number; p_parent_sku: string; p_method?: string }; Returns: Json }
-      unlink_cellartracker_product_resolution: { Args: { p_import_id: string; p_source_row_number: number }; Returns: Json }
-      update_cellartracker_record_price: { Args: { p_import_id: string; p_source_row_number: number; p_price_p: number }; Returns: Json }
-      delete_cellartracker_record: { Args: { p_import_id: string; p_source_row_number: number }; Returns: Json }
-      stage_cellartracker_import: { Args: { p_import_id: string; p_content_checksum: string; p_original_filename: string; p_byte_size: number; p_storage_object_path: string; p_parser_version: string; p_rows: Json }; Returns: Json }
       accept_bbr_import: { Args: { p_import_id: string }; Returns: Json }
+      accept_cellartracker_import: {
+        Args: { p_import_id: string }
+        Returns: Json
+      }
       accept_release_offer_import: {
         Args: { p_import_id: string }
         Returns: Json
       }
+      begin_cellartracker_match_run: { Args: never; Returns: Json }
+      begin_cellartracker_matching: { Args: never; Returns: Json }
       begin_release_offer_import: {
         Args: {
           p_byte_size: number
@@ -1481,8 +2028,12 @@ export type Database = {
         Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
       }
-      confirm_release_price_anchor: {
-        Args: { p_note?: string; p_release_offer_price_id: number }
+      confirm_cellartracker_match_group: {
+        Args: {
+          p_match_group_key: string
+          p_method?: string
+          p_parent_sku: string
+        }
         Returns: Json
       }
       confirm_release_offer_match_group: {
@@ -1491,6 +2042,22 @@ export type Database = {
           p_method?: string
           p_parent_sku: string
         }
+        Returns: Json
+      }
+      confirm_release_price_anchor: {
+        Args: { p_note?: string; p_release_offer_price_id: number }
+        Returns: Json
+      }
+      delete_cellartracker_import: {
+        Args: { p_import_id: string }
+        Returns: Json
+      }
+      delete_cellartracker_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      delete_cellartracker_record: {
+        Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
       }
       delete_release_offer_import: {
@@ -1505,12 +2072,20 @@ export type Database = {
         Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
       }
-      ignore_release_offer_row: {
+      discard_cellartracker_import_row: {
         Args: { p_import_id: string; p_source_row_number: number }
+        Returns: Json
+      }
+      edit_cellartracker_match_group: {
+        Args: { p_match_group_key: string; p_parent_sku: string }
         Returns: Json
       }
       edit_release_offer_match_group: {
         Args: { p_match_group_key: string; p_parent_sku: string }
+        Returns: Json
+      }
+      ignore_release_offer_row: {
+        Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
       }
       mark_release_offer_import_staged: {
@@ -1518,6 +2093,24 @@ export type Database = {
           p_expected_price_fragments: number
           p_expected_source_rows: number
           p_import_id: string
+        }
+        Returns: Json
+      }
+      record_cellartracker_algolia_error: {
+        Args: {
+          p_error_message: string
+          p_match_group_key: string
+          p_run_id: string
+        }
+        Returns: Json
+      }
+      record_cellartracker_algolia_result: {
+        Args: {
+          p_auto_link_parent_sku: string
+          p_candidates: Json
+          p_match_group_key: string
+          p_observed_at: string
+          p_run_id: string
         }
         Returns: Json
       }
@@ -1540,6 +2133,26 @@ export type Database = {
         }
         Returns: Json
       }
+      repair_cellartracker_import_price: {
+        Args: {
+          p_import_id: string
+          p_price_p: number
+          p_source_row_number: number
+        }
+        Returns: Json
+      }
+      repair_cellartracker_import_row: {
+        Args: {
+          p_import_id: string
+          p_raw_row: Json
+          p_source_row_number: number
+        }
+        Returns: Json
+      }
+      restore_cellartracker_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
       restore_release_offer_match_group: {
         Args: { p_match_group_key: string }
         Returns: Json
@@ -1551,20 +2164,21 @@ export type Database = {
           producer: string
         }[]
       }
+      set_cellartracker_product_resolution: {
+        Args: {
+          p_import_id: string
+          p_method?: string
+          p_parent_sku: string
+          p_source_row_number: number
+        }
+        Returns: Json
+      }
       set_release_offer_product_resolution: {
         Args: {
           p_import_id: string
           p_parent_sku: string
           p_source_row_number: number
         }
-        Returns: Json
-      }
-      suppress_release_offer_match_group: {
-        Args: { p_match_group_key: string }
-        Returns: Json
-      }
-      unlink_release_offer_match_group: {
-        Args: { p_match_group_key: string }
         Returns: Json
       }
       show_limit: { Args: never; Returns: number }
@@ -1581,8 +2195,48 @@ export type Database = {
         }
         Returns: Json
       }
+      stage_cellartracker_import: {
+        Args: {
+          p_byte_size: number
+          p_content_checksum: string
+          p_import_id: string
+          p_original_filename: string
+          p_parser_version: string
+          p_rows: Json
+          p_storage_object_path: string
+        }
+        Returns: Json
+      }
       stage_release_offer_batch: {
         Args: { p_import_id: string; p_rows: Json }
+        Returns: Json
+      }
+      suppress_cellartracker_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      suppress_release_offer_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      unlink_cellartracker_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      unlink_cellartracker_product_resolution: {
+        Args: { p_import_id: string; p_source_row_number: number }
+        Returns: Json
+      }
+      unlink_release_offer_match_group: {
+        Args: { p_match_group_key: string }
+        Returns: Json
+      }
+      update_cellartracker_record_price: {
+        Args: {
+          p_import_id: string
+          p_price_p: number
+          p_source_row_number: number
+        }
         Returns: Json
       }
     }
@@ -1717,3 +2371,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
