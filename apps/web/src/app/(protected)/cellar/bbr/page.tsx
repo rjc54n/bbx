@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { BbrCellarBrowser } from "@/components/cellar/BbrCellarBrowser";
 import type { BbrCellarRow } from "@/lib/cellar/bbrBrowser";
 import { requireOwner } from "@/lib/auth/owner";
+import { loadFavourites } from "@/lib/favourites/server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,12 @@ type AcceptedImport = {
 };
 
 export default async function BbrCellarPage() {
-  const { supabase, userId } = await requireOwner();
+  const owner = await requireOwner();
+  const { supabase } = owner;
   const [
     { data: holdingData, error: holdingError },
     { data: importData, error: importError },
-    { data: favouriteData, error: favouriteError },
+    { parentSkus },
   ] = await Promise.all([
     supabase
       .from("bbr_cellar_market_view")
@@ -30,14 +32,11 @@ export default async function BbrCellarPage() {
       .order("accepted_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase.from("wine_favourites").select("parent_sku").eq("user_id", userId),
+    loadFavourites(owner),
   ]);
 
   if (holdingError || importError) {
     throw new Error("The current BBR cellar could not be loaded.");
-  }
-  if (favouriteError) {
-    throw new Error("Wine favourites could not be loaded.");
   }
 
   const rows = (holdingData ?? []) as BbrCellarRow[];
@@ -50,7 +49,7 @@ export default async function BbrCellarPage() {
         acceptedImportId={acceptedImport?.id ?? null}
         confirmedAt={acceptedImport?.accepted_at ?? rows[0]?.confirmed_at ?? null}
         unmatchedCount={acceptedImport?.unmatched_row_count ?? 0}
-        favouriteParentSkus={(favouriteData ?? []).map((row) => row.parent_sku)}
+        favouriteParentSkus={parentSkus}
       />
     </Suspense>
   );

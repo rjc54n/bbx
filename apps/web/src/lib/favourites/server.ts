@@ -8,6 +8,42 @@ import {
   type FavouriteTarget,
 } from "./target";
 
+type PendingRow = { source: string; match_group_key: string };
+
+/**
+ * Postgres says why -- a missing relation, a policy denial, a stale schema
+ * cache -- and a bare "could not be loaded" throws that away. The cause is
+ * worth more than the tidy sentence when a migration has not been pushed.
+ */
+function fail(what: string, error: { message: string; code?: string }): never {
+  throw new Error(`${what} could not be loaded: ${error.message}${error.code ? ` (${error.code})` : ""}`);
+}
+
+/**
+ * Every favourite the owner holds, for the table surfaces that resolve per row.
+ * Pass a source to include its pending favourites; omit it for surfaces that
+ * only ever show linked wines, like the catalogue browser and the BBR cellar.
+ */
+export async function loadFavourites(
+  { supabase, userId }: OwnerContext,
+  source?: FavouriteSource,
+): Promise<{ parentSkus: string[]; pending: PendingRow[] }> {
+  const [wines, pending] = await Promise.all([
+    supabase.from("wine_favourites").select("parent_sku").eq("user_id", userId),
+    source
+      ? supabase.from("pending_favourites").select("source, match_group_key")
+        .eq("user_id", userId).eq("source", source)
+      : Promise.resolve({ data: [] as PendingRow[], error: null }),
+  ]);
+  if (wines.error) fail("Wine favourites", wines.error);
+  if (pending.error) fail("Pending favourites", pending.error);
+
+  return {
+    parentSkus: (wines.data ?? []).map((row) => row.parent_sku),
+    pending: pending.data ?? [],
+  };
+}
+
 /**
  * Favourite state for one page of match-review groups. Scoped to the visible
  * keys rather than loading every favourite, because the match screens are a
@@ -33,8 +69,8 @@ export async function loadGroupFavourites(
       : supabase.from("wine_favourites").select("parent_sku")
         .eq("user_id", userId).in("parent_sku", parentSkus),
   ]);
-  if (pending.error) throw new Error("Pending favourites could not be loaded.");
-  if (wines.error) throw new Error("Wine favourites could not be loaded.");
+  if (pending.error) fail("Pending favourites", pending.error);
+  if (wines.error) fail("Wine favourites", wines.error);
 
   return buildFavouriteState(
     (wines.data ?? []).map((row) => row.parent_sku),
@@ -58,7 +94,7 @@ export async function isTargetFavourited(
       .eq("user_id", userId)
       .eq("parent_sku", target.parentSku)
       .maybeSingle();
-    if (error) throw new Error("Wine favourites could not be loaded.");
+    if (error) fail("Wine favourites", error);
     return Boolean(data);
   }
 
@@ -69,6 +105,6 @@ export async function isTargetFavourited(
     .eq("source", target.source)
     .eq("match_group_key", target.matchGroupKey)
     .maybeSingle();
-  if (error) throw new Error("Pending favourites could not be loaded.");
+  if (error) fail("Pending favourites", error);
   return Boolean(data);
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { requireOwner } from "@/lib/auth/owner";
+import { loadFavourites } from "@/lib/favourites/server";
 import { buildFavouriteState, isFavourited, targetForRecord } from "@/lib/favourites/target";
 
 export const dynamic = "force-dynamic";
@@ -32,22 +33,14 @@ export default async function CellarTrackerPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = await searchParams;
-  const { supabase, userId } = await requireOwner();
-  const [{ data, error }, { data: favouriteRows, error: favouriteError }, { data: pendingRows, error: pendingError }] =
-    await Promise.all([
-      supabase.from("current_cellartracker_records").select("*").order("source_wine"),
-      supabase.from("wine_favourites").select("parent_sku").eq("user_id", userId),
-      supabase.from("pending_favourites").select("source, match_group_key")
-        .eq("user_id", userId).eq("source", "cellartracker"),
-    ]);
+  const owner = await requireOwner();
+  const [{ data, error }, { parentSkus, pending }] = await Promise.all([
+    owner.supabase.from("current_cellartracker_records").select("*").order("source_wine"),
+    loadFavourites(owner, "cellartracker"),
+  ]);
   if (error) throw new Error("CellarTracker records could not be loaded.");
-  if (favouriteError) throw new Error("Wine favourites could not be loaded.");
-  if (pendingError) throw new Error("Pending favourites could not be loaded.");
   const rows = (data ?? []) as CellarTrackerMarketRow[];
-  const favourites = buildFavouriteState(
-    (favouriteRows ?? []).map((row) => row.parent_sku),
-    pendingRows ?? [],
-  );
+  const favourites = buildFavouriteState(parentSkus, pending);
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <header className="border-b border-border bg-accent-soft px-5 py-4">
