@@ -1,6 +1,6 @@
 # Import source profiles
 
-**Profile date:** 2026-07-29
+**Profile date:** 2026-07-31
 **Data handling:** source files are private and remain outside Git
 
 This document records the contracts observed in the three representative CSV
@@ -67,6 +67,12 @@ All 201 positive rows have size `750ml`. All 404 zero-total rows have size
 `CScore` is blank throughout. `BeginConsume` is `9999` on 584 rows and
 `EndConsume` is `9999` on 567 rows.
 
+`9999` is not a usable drinking year in this application. The current parser
+stores it as an integer and the wine card can display it as a year. This is a
+known defect. Until the parser-version and existing snapshot treatment are
+decided, consumers must treat `9999` as unknown. See
+[`CODEBASE-REVIEW-2026-07-31.md`](CODEBASE-REVIEW-2026-07-31.md).
+
 `Price` is a GBP per-bottle source value. Nine positive rows use four decimal
 places because CellarTracker has divided a case cost; the parser normalises any
 numeric GBP source price by rounding it to the nearest penny before validation
@@ -109,19 +115,20 @@ view; earlier accepted imports remain source history. No source-embedded date
 guard is applied.
 
 Matching is separate from import acceptance. It groups the latest snapshot by
-normalised wine name and vintage, then uses a unique exact local Parent ID when
-available. Remaining groups query BBR's full `prod_product` Algolia index. A
-leading CellarTracker `Producer` value is removed from the search query when it
-also prefixes `Wine`, because BBR commonly places the producer later in its
-product name. This affects candidate retrieval only. Automatic linking still
-requires one exhaustive exact Parent ID; other results remain provisional
-suggestions for confirmation.
+normalised wine name and vintage. Tier one links a unique Parent ID when the
+order-independent CellarTracker and BBR core-token sets match across the local
+product table. Remaining groups use two bounded `prod_product` Algolia
+shortlists, including a producer-stripped query where appropriate. Candidates
+are ranked locally. Tier two links only a unique exact-set candidate or a
+unique containment winner that is ahead of the rest. Other results remain
+provisional suggestions for confirmation.
 
 Links are stored at `parent_sku` grain and remain valid when the wine is absent
 from the current BBX-eligible catalogue. CellarTracker has no case-size field.
-For market comparison, the application selects the smallest available
-`case_size` for the linked Parent ID and divides ask and highest bid by that
-case size. The displayed per-bottle comparison is an approximation.
+For market comparison, the application converts every available positive
+case-size and bottle-volume format to a 75cl bottle equivalent using
+`price * 750 / (case_size * bottle_volume_ml)`. It then selects the lowest
+normalised ask and highest normalised bid for the linked Parent ID.
 
 ## Historic BBR offers
 

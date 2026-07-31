@@ -8,7 +8,9 @@ trading exchange and managing private cellar evidence:
 3. **Next.js and Supabase application** — the current catalogue reader plus
    owner-only BBR cellar, CellarTracker and historic release-price datasets.
 
-Both are thin wrappers over a single shared pipeline (`core/pipeline.py`), so behaviour is identical across UI, CLI, and CI.
+The Streamlit application and hourly scanner are thin wrappers over the shared
+`core/pipeline.py` scan pipeline. The Next.js application is a separate reader
+and private-data workflow over Supabase.
 
 ---
 
@@ -39,6 +41,7 @@ bbx/
   apps/
     streamlit_app/streamlit_app.py   # UI wrapper
     arbitrage_bot/run_arbitrage.py   # CLI/CI wrapper + Slack + dedup
+    daily_sweep/run_sweep.py         # full biddable-universe snapshot
     web/                             # Next.js catalogue and private cellar app
   core/
     pipeline.py            # shared 3-phase scan funnel (ScanConfig, run_scan)
@@ -52,10 +55,13 @@ bbx/
   docs/
     ROADMAP-2026-07.md               # current product roadmap
     CELLARTRACKER-IMPLEMENTATION.md  # fourth dataset implementation
+    CODEBASE-REVIEW-2026-07-31.md    # current defects and maintenance order
   supabase/
     migrations/                      # deployed database schema history
     tests/                           # database access and behaviour tests
   .github/workflows/arbitrage.yml
+  .github/workflows/daily_sweep.yml
+  .github/workflows/database-migrations.yml
 ```
 
 ---
@@ -127,6 +133,13 @@ npm run lint
 npm test
 npm run build
 ```
+
+The database migration workflow runs on relevant pull requests and pushes to
+`main`. The repository does not currently run the Python or web checks on pull
+requests. The scheduled scanner and sweep run the Python tests before their
+production jobs. See
+[`docs/CODEBASE-REVIEW-2026-07-31.md`](docs/CODEBASE-REVIEW-2026-07-31.md)
+for the recommended CI split and the current maintenance backlog.
 
 ---
 

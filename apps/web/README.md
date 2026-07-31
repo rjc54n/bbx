@@ -31,7 +31,8 @@ The public catalogue is at `http://localhost:3000`. The owner login is at
 - `/cellar/bbr` for the accepted BBR cellar;
 - `/cellartracker` for the latest accepted CellarTracker snapshot;
 - `/cellartracker/matches` for CellarTracker catalogue matching;
-- `/release-prices` for accepted historic release offers; and
+- `/release-prices` for accepted historic release offers;
+- `/favourites` for wine-level favourites and their source evidence; and
 - `/cellar/imports` for all private import workflows.
 
 `ALGOLIA_APP_ID` and `ALGOLIA_API_KEY` are server-only variables used by the
@@ -65,6 +66,11 @@ npm run build
 The database workflow replays all migrations on a clean local Supabase
 database, lints the public schema and runs the pgTAP tests under
 `supabase/tests/database`.
+
+These commands are release checks, but the repository does not currently run
+the web checks on pull requests. Scheduled Python workflows do not substitute
+for change validation. The dated gap and recommended order are recorded in
+[`docs/CODEBASE-REVIEW-2026-07-31.md`](../../docs/CODEBASE-REVIEW-2026-07-31.md).
 
 ## Owner bootstrap
 

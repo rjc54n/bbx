@@ -7,6 +7,12 @@ surfacing), `0255d06` (tab), `8d4ac73` (wine card).
 Favourites tab drills into a **new unified wine card**; v1 is a **plain star** —
 no notes, no named lists, no alerts.
 
+**Document use, 31 July 2026:** the sections below retain the pre-build problem
+statement and implementation sequence as decision history. They do not describe
+unfinished work unless an item is explicitly listed under Open points. Current
+defects and maintenance recommendations are in
+[`CODEBASE-REVIEW-2026-07-31.md`](CODEBASE-REVIEW-2026-07-31.md).
+
 ### What changed during the build
 
 - **`refresh()` instead of `revalidatePath()`** in the server action. The star is
@@ -25,7 +31,7 @@ no notes, no named lists, no alerts.
 
 ---
 
-## 1. What exists today, and what is actually wrong with it
+## 1. Pre-build baseline
 
 `public.release_price_favourites` (migration
 [`20260728142540_release_price_favourites.sql`](../supabase/migrations/20260728142540_release_price_favourites.sql))
@@ -37,7 +43,7 @@ The problems are all above the storage layer:
 | Problem | Where |
 |---|---|
 | Only one surface writes it | [`AcceptedOfferBrowser.tsx:52`](../apps/web/src/components/releaseOffers/AcceptedOfferBrowser.tsx) is the only star in the app |
-| Only one surface reads it | [`release-prices/page.tsx`](../apps/web/src/app/(protected)/release-prices/page.tsx) is the only query against the table |
+| Only one surface reads it | [`release-prices/page.tsx`](<../apps/web/src/app/(protected)/release-prices/page.tsx>) is the only query against the table |
 | You cannot favourite before a link exists | the browser renders "Link required" unless `link_status === 'linked'` — but the moment you most want to flag a wine is while triaging an unmatched row |
 | Unlinking silently strands the favourite | nothing in `unlink_cellartracker_record` / the release-offer equivalents touches favourites; the wine stays favourited with no record pointing at it, and no screen shows it |
 | The name is source-bound | "release price favourite" is a release-prices concept in the schema, which is why nothing else reads it |
@@ -236,9 +242,10 @@ wine page and later source pages can link into it.
 
 ---
 
-## 7. Migration
+## 7. Implemented migration
 
-Single migration, `2026073xxxxxxx_wine_favourites.sql`:
+Implemented in
+[`20260729203000_wine_favourites.sql`](../supabase/migrations/20260729203000_wine_favourites.sql):
 
 1. `CREATE TABLE public.wine_favourites` (shape above, RLS + grants copied
    verbatim from the existing table: `REVOKE ALL … FROM PUBLIC, anon,
@@ -257,7 +264,7 @@ No data loss: existing favourites carry over by primary key.
 
 ---
 
-## 8. Build order
+## 8. Completed build order
 
 Each step leaves the app working.
 
@@ -276,7 +283,9 @@ Each step leaves the app working.
 
 ## 9. Tests
 
-- **SQL** (extend `tests/test_db.py`): promote on single-row link; promote on
+- **SQL**
+  ([`supabase/tests/database/wine_favourites.test.sql`](../supabase/tests/database/wine_favourites.test.sql)):
+  promote on single-row link; promote on
   match-group confirm; promote on an auto-linked matching run; demote on
   unlink; wine favourite survives record deletion; pending favourite survives a
   re-import; edit A→B favourites B and leaves A; a trigger failure can never
@@ -288,6 +297,11 @@ Each step leaves the app working.
 ---
 
 ## 10. Open points
+
+The 31 July review added one correctness item ahead of the scale and navigation
+questions below: `favourite_wine_view` must exclude owner-excluded release
+offers when it calculates `release_offer_record_count`. Add the regression case
+to the pgTAP file above. This remains unresolved.
 
 - **Nav crowding** — shipped as a sixth top-level tab, which is the crowded
   option. Favourites arguably belongs beside "My BBR Cellar" and "My

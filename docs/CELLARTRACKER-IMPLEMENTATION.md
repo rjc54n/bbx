@@ -1,6 +1,7 @@
 # CellarTracker implementation
 
-**Status:** implemented locally; database schema deployed 29 July 2026
+**Status:** implemented. Deployment statements below are dated observations
+and must be checked against the linked migration ledger before release.
 
 **Source contract:** `IMPORT-SOURCE-PROFILES.md`
 
@@ -108,6 +109,20 @@ project. The local and remote migration ledgers matched through that migration
 on 29 July 2026.
 
 ## Verification and remaining work
+
+The 31 July 2026 codebase review found three additional defects in the shipped
+workflow:
+
+- `BeginConsume` and `EndConsume` value `9999` is stored and displayed as a
+  year rather than treated as unknown;
+- failed validation, parsing or staging can leave a private source object with
+  no import record; and
+- CellarTracker parsing and upload-failure behaviour have no focused web tests.
+
+The review also records the source-row numbering decision and numeric-bound
+checks that should accompany the parser work. See
+[`CODEBASE-REVIEW-2026-07-31.md`](CODEBASE-REVIEW-2026-07-31.md). These are
+documented findings, not completed fixes.
 
 On 29 July 2026, ESLint, all 181 web tests and `tsc --noEmit` passed. The
 core-key and ranking rules are covered by 34 unit tests built from real

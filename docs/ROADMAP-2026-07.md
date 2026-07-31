@@ -1,4 +1,4 @@
-# Roadmap: revised 29 July 2026
+# Roadmap: revised 31 July 2026
 
 ## Purpose
 
@@ -18,7 +18,11 @@ not a transient one.
 
 ## Findings this roadmap is built on
 
-All measured on 23 July 2026. See `docs/EVIDENCE-2026-07.md` for method.
+All measured on 23 July 2026. The private source files remain outside Git.
+Implementation decisions and the recorded measurement basis are in
+[`PHASE3-4-IMPLEMENTATION.md`](PHASE3-4-IMPLEMENTATION.md). Current defects and
+maintenance recommendations are tracked in
+[`CODEBASE-REVIEW-2026-07-31.md`](CODEBASE-REVIEW-2026-07-31.md).
 
 1. **BBX `market_price` is identical to the Liv-ex market price** — exactly
    equal on 115/115 cellar holdings. Liv-ex is therefore not an independent
@@ -234,8 +238,11 @@ actual cellar rather than market data alone.
 
 ### Phase 6: Wishlists and favourites
 
-- Favourites record wines we actively value, independent of whether we intend
-  to buy them now. Preserve notes and preferred formats.
+- **Favourites implemented, 29 July 2026:** a plain wine-level star is shared
+  across catalogue, cellar and release-offer surfaces. Version one does not
+  store notes, named lists or preferred formats.
+- Any future favourite notes or preferred formats require a separate product
+  decision. They are not part of the current storage contract.
 - Wishlists record purchase intent: desired quantity, acceptable formats,
   priority and the cellar gap the wine would fill.
 - A wine may be a favourite without being on a wishlist, and a practical gap
@@ -249,9 +256,10 @@ actual cellar requirement.
 
 ### Phase 7: Release-price connector
 
-**In progress, 2026-07-27:** the owner-only release-offer schema, manual CSV
-parser and import review flow are live. Accepted source records are visible
-before catalogue matching. Gmail ingestion is removed.
+**Implemented, updated 30 July 2026:** the owner-only release-offer schema,
+manual CSV import, whole-dataset catalogue matching, exclusions, price
+corrections and accepted-offer review flow are present. Accepted source records
+remain visible before catalogue matching. Gmail ingestion is removed.
 
 Value is in **anchoring bids on purchases**, not in P&L on existing holdings.
 

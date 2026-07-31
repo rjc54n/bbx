@@ -3,6 +3,13 @@
 **Status:** manual CSV import and whole-dataset product linking.
 **Source contract:** `IMPORT-SOURCE-PROFILES.md`
 
+**Maintenance note, 31 July 2026:** release-offer evidence views exclude owner-
+excluded records, but `favourite_wine_view` still counts linked resolutions
+without the same filter. This can leave a `Release` provenance chip with no
+visible release evidence. The required migration and pgTAP case are recorded
+in [`CODEBASE-REVIEW-2026-07-31.md`](CODEBASE-REVIEW-2026-07-31.md). No fix has
+been applied.
+
 ## Outcome
 
 Phase 7 keeps BBR release offers as private, dated evidence and compares exact
