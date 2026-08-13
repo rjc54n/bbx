@@ -220,8 +220,10 @@ def filter_new_or_improved(
         Output from run_arbitrage() – each dict must contain at least:
         - 'sku' (string)
         - 'ask' (numeric)
+        and optionally 'format_code' (string) to dedupe per format.
     state : dict
-        Notification state, keyed by SKU.
+        Notification state, keyed by "{sku}|{format_code}" (or bare sku when a
+        candidate carries no format_code).
     reminder_days : int
         Number of days after which we will re-notify even if the ask is unchanged.
 
@@ -252,6 +254,12 @@ def filter_new_or_improved(
             notified.append(c)
             continue
 
+        # Dedupe per (parent_sku, format_code): a wine's magnum and its 6x75cl
+        # case are distinct opportunities and must not suppress each other.
+        # Fall back to the bare SKU for candidates without a format_code.
+        fmt = c.get("format_code")
+        key = f"{sku}|{fmt}" if fmt else sku
+
         try:
             ask_val = float(ask)
         except Exception:
@@ -259,12 +267,13 @@ def filter_new_or_improved(
             notified.append(c)
             continue
 
-        record = new_state.get(sku)
+        record = new_state.get(key)
 
         # Case 1: never notified before -> notify
         if record is None:
-            new_state[sku] = {
+            new_state[key] = {
                 "sku": sku,
+                "format_code": fmt,
                 "ask_last_notified": ask_val,
                 "first_notified_at": now_str,
                 "last_notified_at": now_str,
@@ -279,8 +288,9 @@ def filter_new_or_improved(
 
         # If stored data is incomplete, treat like first-time and reset.
         if old_ask is None or last_notified_at is None:
-            new_state[sku] = {
+            new_state[key] = {
                 "sku": sku,
+                "format_code": fmt,
                 "ask_last_notified": ask_val,
                 "first_notified_at": record.get("first_notified_at", now_str),
                 "last_notified_at": now_str,

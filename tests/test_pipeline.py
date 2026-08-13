@@ -9,6 +9,7 @@ from core.pipeline import (
     OB_NOT_CHECKED, OB_SOLE, OB_COMPETING, OB_UNAVAILABLE, OB_CHANGED,
     build_bbx_url,
     build_wine_searcher_url,
+    algolia_effective_ask,
     classify_order_book,
     compute_discounts,
     count_variant_nodes,
@@ -16,7 +17,9 @@ from core.pipeline import (
     extract_variant_prices,
     fetch_rest_pricing,
     fetch_rest_pricing_full,
+    hit_format_code,
     order_book_readable,
+    select_rest_entry,
     threshold_failures,
 )
 from core.fetch_listings import _build_price_filter, _build_bottle_filter
@@ -42,8 +45,8 @@ def _priced(skus):
 # ----------------------------------------------------------------
 
 def test_compute_discounts_basic():
-    disc = compute_discounts({
-        "least_listing_price": 80,
+    # ask comes from Algolia; market/last from the format-matched REST entry.
+    disc = compute_discounts(80, {
         "market_price": 100,
         "last_bbx_transaction": 90,
     })
@@ -57,8 +60,7 @@ def test_compute_discounts_basic():
 
 
 def test_compute_discounts_missing_last_transaction():
-    disc = compute_discounts({
-        "least_listing_price": 80,
+    disc = compute_discounts(80, {
         "market_price": 100,
         "last_bbx_transaction": None,
     })
@@ -68,22 +70,16 @@ def test_compute_discounts_missing_last_transaction():
 
 
 def test_compute_discounts_invalid_ask_returns_none():
-    assert compute_discounts({
-        "least_listing_price": "n/a",
-        "market_price": 100,
-    }) is None
+    assert compute_discounts("n/a", {"market_price": 100}) is None
 
 
 def test_compute_discounts_nonpositive_market_returns_none():
-    assert compute_discounts({
-        "least_listing_price": 80,
-        "market_price": 0,
-    }) is None
+    assert compute_discounts(80, {"market_price": 0}) is None
 
 
 def test_compute_discounts_includes_order_book_status():
-    rest = {"least_listing_price": 80, "market_price": 100, "last_bbx_transaction": 90}
-    disc = compute_discounts(rest, variant_prices=[80.0, 90.0, 120.0])
+    rest = {"market_price": 100, "last_bbx_transaction": 90}
+    disc = compute_discounts(80, rest, variant_prices=[80.0, 90.0, 120.0])
     assert disc["ob_status"] == OB_COMPETING
     assert disc["next_lowest"] == 90.0
     assert disc["pct_next"] == 11.1
@@ -448,3 +444,176 @@ def test_fetch_rest_pricing_full_reports_failures(monkeypatch):
     results, failed = fetch_rest_pricing_full(["SKU1"])
     assert results == {}
     assert failed == ["SKU1"]
+
+
+# ----------------------------------------------------------------
+# Format resolution — the cross-format bug fix
+# ----------------------------------------------------------------
+
+def test_hit_format_code_from_case_and_volume():
+    assert hit_format_code({"case_size": 6, "bottle_volume": "75 cl"}) == "06-00750"
+    assert hit_format_code({"case_size": 1, "bottle_volume": "150 cl"}) == "01-01500"
+
+
+def test_hit_format_code_missing_returns_none():
+    assert hit_format_code({"case_size": 6}) is None
+    assert hit_format_code({"bottle_volume": "75 cl"}) is None
+    assert hit_format_code({}) is None
+
+
+def test_select_rest_entry_matches_format():
+    entries = [
+        {"format": "01-01500", "market_price": 124},
+        {"format": "06-00750", "market_price": 252},
+    ]
+    assert select_rest_entry(entries, "06-00750")["market_price"] == 252
+    assert select_rest_entry(entries, "03-01500") is None
+
+
+def test_algolia_effective_ask_takes_min_matching_format():
+    hit = {
+        "parent_sku": "20171135668",
+        "purchase_options": [
+            {"bbx_listing_id": "1", "case_size": 6, "bottle_volume": "75 cl",
+             "prices": {"price_per_case_exact": 260}},
+            {"bbx_listing_id": "2", "case_size": 6, "bottle_volume": "75 cl",
+             "prices": {"price_per_case_exact": 240}},
+            {"bbx_listing_id": "3", "case_size": 1, "bottle_volume": "150 cl",
+             "prices": {"price_per_case_exact": 95}},  # magnum — different format
+        ],
+    }
+    # Only the 6x75cl offers count; the £95 magnum must not leak in.
+    assert algolia_effective_ask(hit, "06-00750") == 240.0
+    assert algolia_effective_ask(hit, "01-01500") == 95.0
+
+
+def test_algolia_effective_ask_falls_back_to_top_level_price():
+    hit = {"parent_sku": "X", "prices": {"price_per_case_exact": 180}}
+    assert algolia_effective_ask(hit, "06-00750") == 180.0
+
+
+def test_algolia_effective_ask_none_when_no_price():
+    assert algolia_effective_ask({"parent_sku": "X"}, "06-00750") is None
+
+
+def _gql_response_with_formats(items):
+    """items: list of (product_sku, price). product_sku embeds the format code."""
+    variants = [
+        {"product": {"sku": sku,
+                     "custom_prices": {"price_per_case": {"amount": {"value": p}}}}}
+        for sku, p in items
+    ]
+    return {"data": {"products": {"items": [{"variants": variants}]}}}
+
+
+def test_extract_variant_prices_filters_by_format():
+    gql = _gql_response_with_formats([
+        ("2017-06-00750-00-1135668", 300),
+        ("2017-01-01500-00-1135668", 95),
+        ("2017-06-00750-00-1135668", 320),
+    ])
+    assert sorted(extract_variant_prices(gql, "06-00750")) == [300.0, 320.0]
+    assert extract_variant_prices(gql, "01-01500") == [95.0]
+    # No filter -> every format (back-compat for the format-agnostic tests).
+    assert sorted(extract_variant_prices(gql)) == [95.0, 300.0, 320.0]
+
+
+def test_order_book_readable_counts_only_the_target_format():
+    gql = _gql_response_with_formats([
+        ("2017-06-00750-00-1135668", 300),
+        ("2017-01-01500-00-1135668", 95),
+    ])
+    prices = extract_variant_prices(gql, "06-00750")
+    # One 06-00750 node, one parsed price -> readable; the magnum is out of scope.
+    assert order_book_readable(gql, prices, "06-00750") is True
+    assert count_variant_nodes(gql, "06-00750") == 1
+
+
+def test_cross_format_regression_prices_the_discovered_format():
+    """Reproduces the reported Galatrona bug: a 6x75cl listing was priced from
+    the parent's magnum REST entry (entries[0]). Label, ask and market must all
+    resolve to the SAME format."""
+    rest_entries = [
+        {"format": "01-01500", "least_listing_price": 95, "market_price": 124,
+         "last_bbx_transaction": 0},   # magnum — the old, wrong entries[0]
+        {"format": "06-00750", "least_listing_price": 300, "market_price": 320,
+         "last_bbx_transaction": 0},
+    ]
+    hit = {
+        "parent_sku": "20188117542",
+        "case_size": 6, "bottle_volume": "75 cl",
+        "purchase_options": [
+            {"bbx_listing_id": "9", "case_size": 6, "bottle_volume": "75 cl",
+             "prices": {"price_per_case_exact": 300}},
+        ],
+    }
+    fmt = hit_format_code(hit)
+    assert fmt == "06-00750"
+
+    rest_rec = select_rest_entry(rest_entries, fmt)
+    assert rest_rec["market_price"] == 320          # NOT the magnum's 124
+
+    ask = algolia_effective_ask(hit, fmt)
+    assert ask == 300.0                              # NOT the magnum's 95
+
+    disc = compute_discounts(ask, rest_rec)
+    assert disc["ask"] == 300.0 and disc["mkt"] == 320.0
+    # ~6.2% same-format figure, not the spurious 23.4% the bug produced.
+    assert disc["pct_market"] == 6.2
+
+
+def test_run_scan_prices_discovered_format_not_entries0(monkeypatch):
+    """End-to-end: the discovered listing is 6x75cl, but the parent's REST
+    response leads with a cheap magnum (the old entries[0]). run_scan must emit
+    a candidate whose label, ask, market and order book are all 6x75cl."""
+    hit = {
+        "parent_sku": "20188117542",
+        "name": "2018 Galatrona",
+        "vintage": 2018,
+        "region": "Tuscany",
+        "case_size": 6,
+        "bottle_volume": "75 cl",
+        "product_path": "/products-20188117542-2018-galatrona",
+        "prices": {"price_per_case_exact": 300},
+        "purchase_options": [
+            {"bbx_listing_id": "9", "case_size": 6, "bottle_volume": "75 cl",
+             "prices": {"price_per_case_exact": 300}},
+        ],
+    }
+
+    class _FetchResult:
+        hits = [hit]
+
+    rest = {
+        "20188117542": [
+            {"format": "01-01500", "least_listing_price": 95, "market_price": 124,
+             "last_bbx_transaction": 0},   # magnum — the old, wrong entries[0]
+            {"format": "06-00750", "least_listing_price": 300, "market_price": 420,
+             "last_bbx_transaction": 0},
+        ]
+    }
+    gql = _gql_response_with_formats([
+        ("2018-06-00750-00-8117542", 300),   # this format's sole live offer
+        ("2018-01-01500-00-8117542", 95),    # magnum — must not leak into "next"
+    ])
+
+    monkeypatch.setattr(pipeline, "fetch_listings", lambda *a, **k: _FetchResult())
+    monkeypatch.setattr(
+        pipeline, "fetch_rest_pricing_full",
+        lambda skus, **k: ({s: rest[s] for s in skus if s in rest}, []),
+    )
+    monkeypatch.setattr(pipeline, "load_payload", lambda p: {})
+    monkeypatch.setattr(pipeline, "fetch_bbx_listing_variants", lambda *a, **k: gql)
+
+    cfg = ScanConfig(min_pct_market=15.0, min_pct_last=15.0, min_pct_next=15.0)
+    outcome = pipeline.run_scan("app", "key", cfg, payload_path=None)
+
+    assert len(outcome.candidates) == 1
+    c = outcome.candidates[0]
+    assert c["format_code"] == "06-00750"
+    assert c["case_format"] == "6x75 cl"
+    assert c["ask"] == 300.0                 # NOT the magnum's 95
+    assert c["mkt"] == 420.0                 # NOT the magnum's 124
+    assert c["pct_market"] == 28.6           # real same-format discount
+    assert c["ob_status"] == OB_SOLE         # magnum excluded -> no false "next"
+    assert c["pct_next"] is None

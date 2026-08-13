@@ -28,6 +28,7 @@ import requests
 
 from core.fetch_listings import fetch_listings
 from core.fetch_bbx_variants import fetch_bbx_listing_variants, load_payload
+from core.models import Offer, bottle_volume_to_ml, format_code_from
 
 # REST endpoint for the quick pricing lookup (getBiddableCprStock).
 REST_URL = "https://www.bbr.com/api/cellarServices/getBiddableCprStock"
@@ -113,40 +114,70 @@ class ScanOutcome:
 # Pure helpers (unit-tested)
 # --------------------------------------------------------------
 
-def count_variant_nodes(gql_data: dict) -> int:
-    """Number of variant nodes present in the response, regardless of whether
-    each one's price parses. Used to detect a partially-parseable order book."""
+def _variant_format_code(variant: dict) -> Optional[str]:
+    """Format code (e.g. "06-00750") of a GraphQL variant node, read from its
+    product SKU (`2017-06-00750-00-1135668` -> `06-00750`). None if absent."""
+    try:
+        sku = variant["product"]["sku"]
+    except (KeyError, TypeError):
+        return None
+    if not isinstance(sku, str):
+        return None
+    parts = sku.split("-")
+    if len(parts) >= 3:
+        return f"{parts[1]}-{parts[2]}"
+    return None
+
+
+def _variant_nodes(gql_data: dict, format_code: Optional[str] = None) -> List[dict]:
+    """Variant nodes from a GraphQL response, optionally filtered to one format.
+
+    A parent SKU's order book spans every format (magnum, 6x75cl, ...). Passing
+    format_code restricts the book to the discovered listing's own format so
+    cross-format prices never leak into the next-lowest comparison. format_code
+    None returns every node (used by the format-agnostic unit tests)."""
     try:
         items = gql_data.get("data", {}).get("products", {}).get("items", [])
         variants = items[0].get("variants", []) if items else []
     except AttributeError:
-        return 0
-    return len(variants)
+        return []
+    if format_code is None:
+        return list(variants)
+    return [v for v in variants if _variant_format_code(v) == format_code]
 
 
-def order_book_readable(gql_data: dict, prices: List[float]) -> bool:
+def count_variant_nodes(gql_data: dict, format_code: Optional[str] = None) -> int:
+    """Number of variant nodes present (for the given format, if any), regardless
+    of whether each one's price parses. Used to detect a partially-parseable
+    order book."""
+    return len(_variant_nodes(gql_data, format_code))
+
+
+def order_book_readable(
+    gql_data: dict, prices: List[float], format_code: Optional[str] = None
+) -> bool:
     """
     Whether the order book can be trusted as complete.
 
     False if the response carries GraphQL errors, or if any variant node failed
     to yield a price. A partial parse must NOT be trusted: if a competing offer
     silently drops out, the survivors can look like a confirmed sole seller.
+
+    The count and `prices` must be computed over the same format filter, so pass
+    the same format_code given to extract_variant_prices.
     """
     if gql_data.get("errors"):
         return False
-    return len(prices) == count_variant_nodes(gql_data)
+    return len(prices) == count_variant_nodes(gql_data, format_code)
 
 
-def extract_variant_prices(gql_data: dict) -> List[float]:
-    """Pull all well-formed per-case variant prices out of a GraphQL response."""
-    try:
-        items = gql_data.get("data", {}).get("products", {}).get("items", [])
-        variants = items[0].get("variants", []) if items else []
-    except AttributeError:
-        return []
-
+def extract_variant_prices(
+    gql_data: dict, format_code: Optional[str] = None
+) -> List[float]:
+    """Pull all well-formed per-case variant prices out of a GraphQL response,
+    restricted to `format_code` when given (see _variant_nodes)."""
     prices: List[float] = []
-    for variant in variants:
+    for variant in _variant_nodes(gql_data, format_code):
         try:
             amt = (
                 variant["product"]
@@ -208,22 +239,28 @@ def classify_order_book(
 
 
 def compute_discounts(
+    ask: Any,
     rest_rec: Dict[str, Any],
     variant_prices: Optional[List[float]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
-    Compute pct_market, pct_last and the order-book classification for one REST
-    pricing record. Returns None when ask/market are unusable.
+    Compute pct_market, pct_last and the order-book classification for one
+    listing. Returns None when ask/market are unusable.
+
+    `ask` is the discovered listing's effective lowest ask (sourced from Algolia,
+    format-specific by construction). `rest_rec` is the REST pricing entry for
+    the SAME format (matched on its `format` code), supplying `market_price` and
+    `last_bbx_transaction`. Pairing an Algolia ask with a REST entry of a
+    different format is exactly the cross-format bug this signature prevents.
 
     Pass variant_prices=None during the REST-only phase (order book not yet
     fetched). Pass the list (possibly empty) once GraphQL has been consulted.
     """
-    ask_raw = rest_rec.get("least_listing_price")
     mkt_raw = rest_rec.get("market_price")
     last_raw = rest_rec.get("last_bbx_transaction")
 
     try:
-        ask = float(ask_raw)
+        ask = float(ask)
         mkt = float(mkt_raw)
     except (TypeError, ValueError):
         return None
@@ -282,6 +319,62 @@ def threshold_failures(disc: Dict[str, Any], config: ScanConfig) -> List[str]:
         reasons.append(f"next {disc['pct_next']}% < {config.min_pct_next}%")
 
     return reasons
+
+
+def hit_format_code(entry: Dict[str, Any]) -> Optional[str]:
+    """The discovered listing's format code (e.g. "06-00750") from the Algolia
+    hit's case_size + bottle_volume. None when either is missing/unparseable --
+    we skip such a listing rather than guess a format for its pricing."""
+    case_size = entry.get("case_size")
+    bottle_volume = entry.get("bottle_volume")
+    if case_size is None or not bottle_volume:
+        return None
+    try:
+        ml = bottle_volume_to_ml(str(bottle_volume))
+        return format_code_from(case_size, ml)
+    except (TypeError, ValueError):
+        return None
+
+
+def select_rest_entry(
+    entries: List[Dict[str, Any]], format_code: str
+) -> Optional[Dict[str, Any]]:
+    """Pick the REST pricing entry whose `format` matches the discovered
+    listing's format. None when this format is not among the parent's live
+    biddable formats -- previously the code blindly took entries[0] (any
+    format), which is the root of the cross-format mispricing."""
+    for entry in entries:
+        if entry.get("format") == format_code:
+            return entry
+    return None
+
+
+def algolia_effective_ask(
+    entry: Dict[str, Any], format_code: str
+) -> Optional[float]:
+    """Effective lowest ask (in £, per case) for the hit's format, taken from
+    Algolia -- the min price across the hit's purchase_options that resolve to
+    `format_code`. Falls back to the hit's top-level price_per_case_exact when
+    purchase_options are absent. None when no usable price is found.
+
+    Mirrors the web app: Algolia supplies the ask, REST supplies market."""
+    parent_sku = str(entry.get("parent_sku") or "")
+    prices_p: List[int] = []
+    for opt in entry.get("purchase_options") or []:
+        offer = Offer.from_purchase_option(
+            parent_sku, opt, known_format_codes={format_code}
+        )
+        if offer.format_code == format_code and offer.price_per_case_p is not None:
+            prices_p.append(offer.price_per_case_p)
+    if prices_p:
+        return min(prices_p) / 100.0
+
+    top = (entry.get("prices") or {}).get("price_per_case_exact")
+    try:
+        val = float(top)
+    except (TypeError, ValueError):
+        return None
+    return val if val > 0 else None
 
 
 def derive_case_format(entry: Dict[str, Any]) -> str:
@@ -487,14 +580,19 @@ def run_scan(
         return outcome
 
     # ---- Phase 2: REST pricing + preliminary thresholds ----
-    skus = [sku for _, sku in prelim]
-    rest_results, outcome.debug_rest, failed_skus = fetch_rest_pricing(
-        skus, progress=progress
-    )
+    # Query the whole (all-format) REST response per parent so we can pick the
+    # entry matching each discovered listing's format. Multiple hits can share a
+    # parent_sku (different formats), so dedupe before querying.
+    unique_skus = sorted({sku for _, sku in prelim})
+    rest_results, failed_skus = fetch_rest_pricing_full(unique_skus, progress=progress)
 
-    outcome.expected_skus = len(skus)
+    outcome.debug_rest = [
+        {"sku": sku, "reason": "batch REST error", "passed": False}
+        for sku in failed_skus
+    ]
+    outcome.expected_skus = len(unique_skus)
     outcome.failed_skus = len(failed_skus)
-    outcome.queried_skus = len(skus) - len(failed_skus)
+    outcome.queried_skus = len(unique_skus) - len(failed_skus)
     outcome.priced_skus = len(rest_results)
     if outcome.coverage < 1.0:
         logging.warning(
@@ -502,17 +600,36 @@ def run_scan(
             f"({outcome.failed_skus}/{outcome.expected_skus} SKUs in failed batches)."
         )
 
-    rest_candidates: List[Tuple[Dict[str, Any], str, Dict[str, Any]]] = []
+    rest_candidates: List[Tuple[Dict[str, Any], str, str, Dict[str, Any], float]] = []
     for entry, sku in prelim:
-        rest_rec = rest_results.get(sku)
         row: Dict[str, Any] = {"sku": sku}
 
-        if not rest_rec:
+        fmt_code = hit_format_code(entry)
+        if fmt_code is None:
+            row.update(reason="no format_code for hit", passed=False)
+            outcome.debug_rest.append(row)
+            continue
+        row["format_code"] = fmt_code
+
+        entries = rest_results.get(sku)
+        if not entries:
             row.update(reason="no REST data", passed=False)
             outcome.debug_rest.append(row)
             continue
 
-        disc = compute_discounts(rest_rec)
+        rest_rec = select_rest_entry(entries, fmt_code)
+        if rest_rec is None:
+            row.update(reason=f"no REST pricing for format {fmt_code}", passed=False)
+            outcome.debug_rest.append(row)
+            continue
+
+        ask = algolia_effective_ask(entry, fmt_code)
+        if ask is None:
+            row.update(reason="no Algolia ask for format", passed=False)
+            outcome.debug_rest.append(row)
+            continue
+
+        disc = compute_discounts(ask, rest_rec)
         if disc is None:
             row.update(reason="invalid ask/market", passed=False)
             outcome.debug_rest.append(row)
@@ -535,7 +652,7 @@ def run_scan(
 
         row.update(reason="passed", passed=True)
         outcome.debug_rest.append(row)
-        rest_candidates.append((entry, sku, rest_rec))
+        rest_candidates.append((entry, sku, fmt_code, rest_rec, ask))
 
     outcome.rest_pass_count = len(rest_candidates)
     logging.info(f"{len(rest_candidates)} candidates passed REST-level thresholds.")
@@ -548,8 +665,8 @@ def run_scan(
     session = requests.Session()
     total = len(rest_candidates)
 
-    for idx, (entry, sku, rest_rec) in enumerate(rest_candidates, start=1):
-        row = {"sku": sku}
+    for idx, (entry, sku, fmt_code, rest_rec, ask) in enumerate(rest_candidates, start=1):
+        row = {"sku": sku, "format_code": fmt_code}
         path = (entry.get("product_path") or entry.get("product_url") or "").lstrip("/")
 
         try:
@@ -562,11 +679,14 @@ def run_scan(
                 progress("graphql", idx, total)
             continue
 
-        prices = extract_variant_prices(gql)
+        # Restrict the order book to this listing's own format: a parent's book
+        # spans every format, and comparing the ask against another format's
+        # per-case price is what produced the spurious "next" percentages.
+        prices = extract_variant_prices(gql, fmt_code)
         # A partially-parseable or errored order book must not be trusted: pass
         # no prices so it classifies as UNAVAILABLE rather than a false "sole".
-        readable = order_book_readable(gql, prices)
-        disc = compute_discounts(rest_rec, prices if readable else [])
+        readable = order_book_readable(gql, prices, fmt_code)
+        disc = compute_discounts(ask, rest_rec, prices if readable else [])
         if disc is None:
             row.update(passed=False, reason="invalid ask/market")
             outcome.debug_gql.append(row)
@@ -576,7 +696,7 @@ def run_scan(
 
         row.update(
             variant_prices=prices,
-            variant_nodes=count_variant_nodes(gql),
+            variant_nodes=count_variant_nodes(gql, fmt_code),
             book_readable=readable,
             ob_status=disc["ob_status"],
             next_lowest=disc["next_lowest"],
@@ -599,6 +719,7 @@ def run_scan(
             "vintage": entry.get("vintage"),
             "region": entry.get("region"),
             "sku": sku,
+            "format_code": fmt_code,
             "case_format": derive_case_format(entry),
             **disc,
             "url": build_bbx_url(entry),

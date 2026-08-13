@@ -13,8 +13,8 @@ from core.pipeline import ScanOutcome
 def _candidate(sku="S1", ask=100.0):
     return {
         "sku": sku, "ask": ask, "name": "Test Wine", "vintage": 2010,
-        "region": "Burgundy", "case_format": "6x75cl", "mkt": 130.0,
-        "last": None, "next_lowest": None,
+        "region": "Burgundy", "format_code": "06-00750", "case_format": "6x75cl",
+        "mkt": 130.0, "last": None, "next_lowest": None,
         "pct_market": 23.0, "pct_last": None, "pct_next": None,
         "url": "https://www.bbr.com/x",
         "wine_searcher_url": "https://www.wine-searcher.com/find/Test%20Wine%202010",
@@ -66,7 +66,7 @@ def test_successful_send_persists_state(wire_bot):
     bot.main()
     assert len(sends) == 1
     assert len(saves) == 1
-    assert "S1" in saves[0]  # the notified SKU was recorded
+    assert "S1|06-00750" in saves[0]  # recorded per parent_sku + format_code
 
 
 def test_rejected_send_raises_and_persists_nothing(wire_bot):

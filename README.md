@@ -19,8 +19,10 @@ and private-data workflow over Supabase.
 Three phases, ordered cheapest-first:
 
 1. **Algolia discovery** — facet-filtered search of the public `prod_product` index (`stock_origin:'BBX'`, optional `new_to_bbx` window, colour, price band, format).
-2. **REST pricing** — batched lookups against `getBiddableCprStock` returning ask (`least_listing_price`), `market_price`, and `last_bbx_transaction`; records failing the market/last-transaction discount thresholds are dropped here.
-3. **GraphQL order book** — for survivors only, fetch all live variant listings to find the next-lowest competing ask and apply the final threshold.
+2. **REST pricing** — batched lookups against `getBiddableCprStock`, which returns one entry **per format** (`06-00750`, `01-01500`, …) for each parent SKU. Every metric is resolved to the discovered listing's own format: the **ask** is the effective-lowest per-format price from Algolia, while `market_price` and `last_bbx_transaction` come from the REST entry whose `format` matches (never `entries[0]`, which is an arbitrary format). Records failing the market/last-transaction discount thresholds are dropped here.
+3. **GraphQL order book** — for survivors only, fetch all live variant listings, filter them to the listing's format, and find the next-lowest competing ask before applying the final threshold.
+
+A single wine can appear once per format; the pipeline keeps ask, market, "next" and the displayed `case_format` all pinned to the same format so a magnum's price can never be attributed to a case (or vice versa), and notification dedup is keyed by `parent_sku + format_code`.
 
 Threshold semantics: `pct_market` is always enforced; `pct_last` and `pct_next` are enforced only when computable (a wine with no last transaction or no competing seller passes on `pct_market` alone).
 

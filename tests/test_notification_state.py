@@ -97,6 +97,30 @@ def test_missing_sku_or_ask_is_conservatively_notified():
     assert suppressed == []
 
 
+def test_formats_of_one_parent_are_tracked_independently():
+    # A wine's magnum and its 6x75cl case share a parent_sku but are distinct
+    # opportunities: keyed by parent+format, neither suppresses the other.
+    magnum = _candidate(sku="SKU1", ask=95.0, format_code="01-01500")
+    case = _candidate(sku="SKU1", ask=300.0, format_code="06-00750")
+    notified, suppressed, new_state = filter_new_or_improved(
+        [magnum, case], {}, reminder_days=7
+    )
+    assert len(notified) == 2
+    assert suppressed == []
+    assert new_state["SKU1|01-01500"]["ask_last_notified"] == 95.0
+    assert new_state["SKU1|06-00750"]["ask_last_notified"] == 300.0
+
+
+def test_same_format_still_dedupes():
+    state = {"SKU1|06-00750": _state_record(ask=300.0, days_ago=1)}
+    notified, suppressed, _ = filter_new_or_improved(
+        [_candidate(sku="SKU1", ask=300.0, format_code="06-00750")],
+        state, reminder_days=7,
+    )
+    assert notified == []
+    assert len(suppressed) == 1
+
+
 def test_caller_state_is_not_mutated():
     state = {"SKU1": _state_record(ask=120.0, days_ago=1, count=1)}
     before = copy.deepcopy(state)

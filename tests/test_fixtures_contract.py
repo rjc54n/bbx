@@ -109,6 +109,18 @@ def test_order_book_readable_detects_dropped_price_field():
     assert order_book_readable(broken, prices) is False   # -> untrusted, not "sole"
 
 
+def test_variant_format_filter_matches_real_product_skus():
+    """The real fixture's variants are all 06-00750; filtering must read that
+    from each node's product.sku, keep all four, and exclude other formats."""
+    gql = _load("gql_order_book_multi.json")
+    assert count_variant_nodes(gql, "06-00750") == 4
+    assert len(extract_variant_prices(gql, "06-00750")) == 4
+    assert order_book_readable(gql, extract_variant_prices(gql, "06-00750"), "06-00750") is True
+    # A format not present in this parent's book yields an empty, still-readable set.
+    assert extract_variant_prices(gql, "01-01500") == []
+    assert count_variant_nodes(gql, "01-01500") == 0
+
+
 def test_offer_id_is_present_on_every_offer():
     """A missing offer id must be detectable (not defaulted away)."""
     for name in ("algolia_listing_hit.json", "algolia_deep_book.json"):
