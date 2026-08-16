@@ -5,6 +5,7 @@ import { requireOwner } from "@/lib/auth/owner";
 import { isTargetFavourited } from "@/lib/favourites/server";
 import { perBottleP } from "@/lib/favourites/browser";
 import { formatDate, formatDateTime, formatFormat, formatPence, formatSignedPct } from "@/lib/format";
+import { bbrProductUrl } from "@/lib/listingLinks";
 
 export const dynamic = "force-dynamic";
 
@@ -161,7 +162,7 @@ export default async function FavouriteWinePage({ params }: {
     place: [formats[0]?.country, formats[0]?.region ?? fallback?.region, formats[0]?.subregion]
       .filter(Boolean).join(" · "),
     colour: formats[0]?.colour ?? null,
-    productUrl: formats[0]?.product_url ?? releaseRecords[0]?.source_product_url ?? null,
+    productUrl: bbrProductUrl(formats[0]?.product_url ?? releaseRecords[0]?.source_product_url ?? null),
   };
   const anchorByFormat = new Map(anchorRows.map((row) => [row.format_code, row]));
 
