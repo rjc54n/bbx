@@ -1,9 +1,7 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { formatDate } from "@/lib/format";
+import { acceptedOfferHref, acceptedOfferPageCount } from "@/lib/releaseOffers/reviewBrowser";
 import {
   buildFavouriteState,
   isFavourited,
@@ -30,28 +28,26 @@ const columns = ["Offer date", "Wine", "Original price text", "Fragments", "Link
 
 export function AcceptedOfferBrowser({
   rows,
+  page,
+  search,
+  totalRows,
   favouriteParentSkus,
   pendingFavourites,
   excludedCount,
   justExcluded,
 }: {
   rows: AcceptedOfferRow[];
+  page: number;
+  search: string;
+  totalRows: number;
   favouriteParentSkus: string[];
   pendingFavourites: { source: string; match_group_key: string }[];
   excludedCount: number;
   justExcluded: boolean;
 }) {
-  const [search, setSearch] = useState("");
-  const favourites = useMemo(
-    () => buildFavouriteState(favouriteParentSkus, pendingFavourites),
-    [favouriteParentSkus, pendingFavourites],
-  );
-  const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("en-GB");
-    if (!query) return rows;
-    return rows.filter((row) => [row.source_wine, row.source_product_id, row.parent_sku, row.source_price_text]
-      .filter(Boolean).join(" ").toLocaleLowerCase("en-GB").includes(query));
-  }, [rows, search]);
+  const favourites = buildFavouriteState(favouriteParentSkus, pendingFavourites);
+  const pageCount = acceptedOfferPageCount(totalRows);
+  const resultLabel = search ? "matching offer records" : "offer records";
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <header className="border-b border-border bg-accent-soft px-5 py-4">
@@ -71,7 +67,7 @@ export function AcceptedOfferBrowser({
       </div>
       <div className="mt-4 flex flex-wrap gap-3 text-sm">
         <span className="rounded border border-border bg-background px-3 py-2 tabular-nums">
-          <strong>{rows.length.toLocaleString()}</strong> accepted offer records
+          <strong>{totalRows.toLocaleString()}</strong> accepted offer records
         </span>
         {excludedCount > 0 && <Link href="/release-prices/excluded" className="rounded border border-border bg-background px-3 py-2 text-accent underline-offset-2 tabular-nums hover:underline">
           <strong>{excludedCount.toLocaleString()}</strong> excluded
@@ -85,20 +81,28 @@ export function AcceptedOfferBrowser({
     </p>}
 
     <div className="border-b border-border bg-background px-4 py-3">
-      <label className="grid max-w-xl gap-1 text-xs text-ink-muted">
-        Search accepted offers
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Wine, Parent ID or original price text"
-          className="rounded border border-border px-3 py-1.5 text-sm text-ink"
-        />
-      </label>
+      <form action="/release-prices" className="flex max-w-xl items-end gap-2">
+        <label className="grid min-w-0 flex-1 gap-1 text-xs text-ink-muted">
+          Search accepted offers
+          <input
+            name="q"
+            type="search"
+            defaultValue={search}
+            placeholder="Wine, Parent ID or original price text"
+            className="rounded border border-border px-3 py-1.5 text-sm text-ink"
+          />
+        </label>
+        <button type="submit" className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">Search</button>
+      </form>
     </div>
 
-    <div className="border-b border-border px-4 py-2 text-sm text-ink-muted">
-      {filtered.length.toLocaleString()} of {rows.length.toLocaleString()} offer records
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2 text-sm text-ink-muted">
+      <span>{rows.length.toLocaleString()} of {totalRows.toLocaleString()} {resultLabel}</span>
+      <nav aria-label="Accepted offer pages" className="flex items-center gap-3">
+        {page > 1 ? <Link href={acceptedOfferHref(page - 1, search)} className="text-accent underline-offset-2 hover:underline">Previous</Link> : <span aria-disabled="true">Previous</span>}
+        <span>Page {page.toLocaleString()} of {pageCount.toLocaleString()}</span>
+        {page < pageCount ? <Link href={acceptedOfferHref(page + 1, search)} className="text-accent underline-offset-2 hover:underline">Next</Link> : <span aria-disabled="true">Next</span>}
+      </nav>
     </div>
 
     <div className="min-h-0 flex-1 overflow-auto">
@@ -114,11 +118,11 @@ export function AcceptedOfferBrowser({
           </tr>
         </thead>
         <tbody>
-          {filtered.length === 0 ? <tr>
+          {rows.length === 0 ? <tr>
             <td colSpan={columns.length + 1} className="px-3 py-10 text-center text-ink-muted">
-              {rows.length === 0 ? "No accepted offer records." : "No offer records match this search."}
+              {search ? "No offer records match this search." : "No accepted offer records."}
             </td>
-          </tr> : filtered.map((row) => (
+          </tr> : rows.map((row) => (
             <tr key={`${row.import_id}-${row.source_row_number}`} className="border-t border-border hover:bg-accent-soft/50">
               <td className="whitespace-nowrap px-3 py-2 align-top tabular-nums">{formatDate(row.offer_date)}</td>
               <td className="max-w-sm px-3 py-2 align-top">
