@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { bbrProductUrl, wineSearcherUrl } from "@/lib/listingLinks";
@@ -33,30 +34,41 @@ function WineCell({
   vintage,
   producer,
   productUrl,
+  parentSku,
 }: {
   name: string | null;
   vintage: number | null;
   producer: string | null;
   productUrl: string | null;
+  parentSku: string | null;
 }) {
   const bbrUrl = bbrProductUrl(productUrl);
   const wineSearcher = wineSearcherUrl(name, vintage);
 
+  // The name now opens the consolidated wine card; BBR and Wine-Searcher become
+  // secondary out-links rather than the primary click.
   return (
     <div className="max-w-xs">
       <div className="font-medium text-ink">
-        {bbrUrl ? (
-          <a href={bbrUrl} target="_blank" rel="noreferrer" className="hover:text-accent hover:underline">
+        {parentSku ? (
+          <Link href={`/wine/parent/${parentSku}`} className="hover:text-accent hover:underline">
             {name ?? "–"}
-          </a>
+          </Link>
         ) : name ?? "–"}
       </div>
       <div className="text-xs text-ink-muted">{producer ?? "–"}</div>
-      {wineSearcher && (
-        <a href={wineSearcher} target="_blank" rel="noreferrer" className="mt-0.5 inline-block text-xs text-accent hover:underline">
-          Wine-Searcher ↗
-        </a>
-      )}
+      <div className="mt-0.5 flex gap-3">
+        {bbrUrl && (
+          <a href={bbrUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+            BBR ↗
+          </a>
+        )}
+        {wineSearcher && (
+          <a href={wineSearcher} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+            Wine-Searcher ↗
+          </a>
+        )}
+      </div>
     </div>
   );
 }
@@ -108,7 +120,7 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     id: "wine",
     label: "Wine",
     align: "left",
-    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} />,
+    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} parentSku={row.parent_sku} />,
   },
   {
     id: "region",
@@ -219,7 +231,7 @@ export const PRICE_CHANGE_COLUMNS: Column<PriceChangeRow, PriceChangeSortField>[
     id: "wine",
     label: "Wine",
     align: "left",
-    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} />,
+    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} parentSku={row.parent_sku} />,
   },
   {
     id: "region",

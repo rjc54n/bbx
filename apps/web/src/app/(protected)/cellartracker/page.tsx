@@ -123,8 +123,8 @@ export default async function CellarTrackerPage({
               <td className="px-3 py-2 text-right align-top tabular-nums">{formatPence(row.lowest_ask_per_bottle_p)}</td>
               <td className="px-3 py-2 text-right align-top tabular-nums">{formatPence(row.highest_bid_per_bottle_p)}</td>
               <td className="px-3 py-2 align-top">
-                {row.link_status === "linked"
-                  ? <>{row.parent_sku}<span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span></>
+                {row.link_status === "linked" && row.parent_sku
+                  ? <><Link href={`/wine/parent/${row.parent_sku}`} className="text-accent underline-offset-2 hover:underline">{row.parent_sku}</Link><span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span></>
                   : <span className="text-ink-muted">{row.link_status === "suppressed" ? "Suppressed" : "Unlinked"}</span>}
               </td>
               <td className="px-3 py-2 text-center align-top">{(() => {

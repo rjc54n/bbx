@@ -148,7 +148,7 @@ export function FavouritesBrowser({ wines, pending }: {
           </td></tr> : rows.map((row) => (
             <tr key={row.parent_sku} className="border-t border-border hover:bg-accent-soft/50">
               <td className="max-w-sm px-3 py-2 align-top">
-                <Link href={`/favourites/${row.parent_sku}`} className="font-medium text-accent underline-offset-2 hover:underline">
+                <Link href={`/wine/parent/${row.parent_sku}`} className="font-medium text-accent underline-offset-2 hover:underline">
                   {row.wine_name ?? row.parent_sku}
                 </Link>
                 <p className="text-xs text-ink-muted">{row.producer ?? "Producer unavailable"} · Parent {row.parent_sku}</p>
