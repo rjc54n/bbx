@@ -1,8 +1,11 @@
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
-import { recentListedRange } from "./freshness";
+import { applyFilters, buildSearchOrFilter, type AppliedFilter } from "./applyFilters";
 import type { CatalogueQueryState, PriceChangeQueryState } from "./types";
 import type { CatalogueRow, PriceChangeRow } from "./rows";
+
+// Re-exported so existing importers (and their tests) keep their path.
+export { buildSearchOrFilter };
 
 export const PAGE_SIZE = 25;
 
@@ -36,21 +39,6 @@ export function mergeReleasePrices(
 
 type DatabaseCatalogueRow = Database["public"]["Views"]["catalogue_view"]["Row"];
 
-// PostgREST's or() takes a raw filter-syntax string, not a parameterised
-// value -- a search term containing "," or "(" would otherwise be parsed as
-// filter syntax (e.g. splitting into an extra OR condition) rather than
-// literal text. Quote-wrapping mirrors how @supabase/postgrest-js itself
-// escapes reserved characters for .in() (PostgrestReservedCharsRegexp in
-// PostgrestFilterBuilder.ts): wrap in double quotes when a reserved
-// character is present.
-const OR_FILTER_RESERVED_CHARS = /[,()]/;
-
-export function buildSearchOrFilter(term: string): string {
-  const pattern = `%${term}%`;
-  const value = OR_FILTER_RESERVED_CHARS.test(pattern) ? `"${pattern}"` : pattern;
-  return `name.ilike.${value},producer.ilike.${value}`;
-}
-
 export function paginationRange(page: number, pageSize: number = PAGE_SIZE): { from: number; to: number } {
   const from = page * pageSize;
   return { from, to: from + pageSize - 1 };
@@ -63,35 +51,7 @@ export function paginationRange(page: number, pageSize: number = PAGE_SIZE): { f
 // free-text search box.
 export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchResult<CatalogueRow>> {
   let query = supabase.from("catalogue_view").select("*", { count: "exact" });
-
-  for (const filter of state.filters) {
-    switch (filter.kind) {
-      case "enum":
-        if (filter.value.length > 0) query = query.in(filter.field, filter.value);
-        break;
-      case "range":
-        if (filter.min !== undefined) query = query.gte(filter.field, filter.min);
-        if (filter.max !== undefined) query = query.lte(filter.field, filter.max);
-        break;
-      case "date":
-        if (filter.days !== undefined) {
-          query = query.gte(filter.field, recentListedRange(filter.days).min);
-          break;
-        }
-        if (filter.min !== undefined) query = query.gte(filter.field, filter.min);
-        if (filter.max !== undefined) query = query.lte(filter.field, filter.max);
-        break;
-      case "text":
-        if (filter.value) query = query.or(buildSearchOrFilter(filter.value));
-        break;
-      case "typeahead":
-        if (filter.value) query = query.eq(filter.field, filter.value);
-        break;
-      case "boolean":
-        query = query.eq(filter.field, filter.value);
-        break;
-    }
-  }
+  query = applyFilters(query, state.filters as readonly AppliedFilter[]);
 
   // state.sort.field alone isn't unique (e.g. every row from the same scan
   // run shares one last_seen_at) -- without a deterministic tiebreaker,

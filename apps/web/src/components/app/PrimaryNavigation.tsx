@@ -26,12 +26,15 @@ const tabs = [
     href: "/release-prices",
   },
   { id: "favourites", label: "Favourites", href: "/favourites" },
+  { id: "scenarios", label: "Scenarios", href: "/scenarios" },
 ] as const;
 
 export function PrimaryNavigation() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname.startsWith("/favourites")
+  const active = pathname.startsWith("/scenarios")
+    ? "scenarios"
+    : pathname.startsWith("/favourites")
     ? "favourites"
     : pathname.startsWith("/release-prices") || pathname.startsWith("/cellar/imports/release-offers")
     ? "release-prices"

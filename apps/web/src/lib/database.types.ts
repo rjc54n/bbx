@@ -143,6 +143,13 @@ export type Database = {
             referencedRelation: "wine_card_format_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_scenario_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
         ]
       }
       bbx_fee_schedule: {
@@ -224,6 +231,13 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
             referencedRelation: "wine_card_format_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_scenario_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
         ]
@@ -1305,6 +1319,13 @@ export type Database = {
             referencedColumns: ["parent_sku", "format_code"]
           },
           {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
+            referencedRelation: "wine_scenario_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
             foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
             columns: ["release_offer_price_id"]
             isOneToOne: true
@@ -1326,6 +1347,33 @@ export type Database = {
             referencedColumns: ["release_offer_price_id"]
           },
         ]
+      }
+      saved_scenarios: {
+        Row: {
+          created_at: string
+          definition: Json
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          definition: Json
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          definition?: Json
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       wine_favourites: {
         Row: {
@@ -1405,6 +1453,13 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
             referencedRelation: "wine_card_format_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_scenario_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
         ]
@@ -1628,6 +1683,13 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
             referencedRelation: "wine_card_format_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_scenario_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
         ]
@@ -2226,6 +2288,40 @@ export type Database = {
           subregion?: string | null
           vintage?: number | null
           wine_ref?: never
+        }
+        Relationships: []
+      }
+      wine_scenario_view: {
+        Row: {
+          adjusted_guide_p: number | null
+          anchor_status: string | null
+          ask_vs_release_p: number | null
+          ask_vs_release_pct: number | null
+          bid_vs_release_p: number | null
+          bid_vs_release_pct: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          format_code: string | null
+          highest_bid_p: number | null
+          is_biddable: boolean | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          last_transaction_p: number | null
+          lowest_ask_p: number | null
+          market_price_p: number | null
+          name: string | null
+          parent_sku: string | null
+          price_vs_last_pct: number | null
+          price_vs_market_pct: number | null
+          producer: string | null
+          region: string | null
+          release_offer_date: string | null
+          release_price_p: number | null
+          subregion: string | null
+          vintage: number | null
+          wine_ref: string | null
         }
         Relationships: []
       }
