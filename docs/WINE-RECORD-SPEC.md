@@ -444,3 +444,119 @@ data.
 4. **Owner anchor is per `(parent_sku, format_code)`** — no multi-date history
    for owner anchors (unlike imported evidence); the single owner value is the
    anchor. A `source_note`/`offer_date` records context.
+
+## 12. Step 5 — implementation plan
+
+Scope: **feature 4** — a **Scenarios** tab of named, saved filter+sort
+definitions evaluated server-side over the card metrics, each listing the wines
+that match and linking into the card. The canonical example, *"biddable wines
+priced < 10% over release"*, is just `ask_vs_release_pct < 10` over the metrics
+view. **The agent is not a separate build**: it consumes the *same*
+`saved_scenarios.definition` and the *same* view; build the human path, the agent
+inherits it. **Biddable-only** — scenarios evaluate the `parent:` catalogue.
+
+### What exists to build on (reuse, don't reinvent)
+
+- **The typed filter registry** — `CATALOGUE_FILTERS` / `CATALOGUE_METRICS`
+  (`as const satisfies Record<…>`) and the `CatalogueFilter` kinds
+  (`enum | range | date | text | typeahead | boolean`) in `lib/query`. A scenario
+  `definition` is the same `{ filters: Filter[], sort: {field, dir} }` shape.
+- **The translation engine** — `fetchCatalogue`'s switch turns each filter kind
+  into a PostgREST call (`enum→in`, `range→gte/lte`, `text→or(ilike)`,
+  `boolean→eq`, `typeahead→eq`). Extract it to a shared `applyFilters(query,
+  filters)` and point it at the scenario view; the same code runs both surfaces.
+- **The metrics** already exist on `wine_card_format_view` (ask, bid, market,
+  `ask_vs_release_pct`, `bid_vs_release_pct`, `price_vs_market_pct`,
+  `price_vs_last_pct`, `anchor_status`, …) — including the owner-resolved anchor
+  from step 3, so a scenario reflects owner prices for free.
+
+### A. Database — one migration + one pgTAP test
+
+1. **`wine_scenario_view`** (`security_invoker`) — the evaluation *and* display
+   surface, one row per `(parent_sku, format_code)`: `wine_card_format_view`
+   joined to `wine_card_view` identity (`name, vintage, producer, country,
+   region, subregion, colour, is_biddable`). Every row is a live biddable format
+   (the format view is catalogue-driven), so `is_biddable` is effectively always
+   true — the example scenario reduces to the pct filter. Grants/RLS mirror the
+   card views.
+2. **`saved_scenarios`** (durable):
+   ```
+   saved_scenarios (
+     id uuid pk default gen_random_uuid(),
+     user_id uuid not null references auth.users(id),
+     name text not null check (char_length(btrim(name)) between 1 and 120),
+     definition jsonb not null check (jsonb_typeof(definition) = 'object'),
+     created_at timestamptz not null default now(),
+     updated_at timestamptz not null default now()
+   )
+   ```
+   RLS owner-only via `private.is_app_owner()`, but — unlike the derived owner
+   tables — this is **pure user data with no cross-table effects**, so CRUD is
+   **RLS-gated direct** (SELECT/INSERT/UPDATE/DELETE policies with
+   `USING/WITH CHECK (is_app_owner() AND user_id = auth.uid())`), not SECURITY
+   DEFINER functions. The app validates `definition` before writing; the DB keeps
+   only the light `jsonb_typeof` guard.
+3. **pgTAP** `saved_scenarios.test.sql`: RLS (anon no access; a non-owner cannot
+   read/write another's rows), the `jsonb_typeof` and name checks, and
+   `wine_scenario_view` shape/identity + `ask_vs_release_pct` parity with
+   `wine_card_format_view` on a fixture. Plus a remote spot-check that
+   `wine_scenario_view` row count equals `wine_card_format_view`.
+4. **Regenerate `database.types.ts`.**
+
+### B. App — the registry, engine, evaluation
+
+5. **`SCENARIO_FILTERS`** registry (mirrors `CATALOGUE_FILTERS`, over
+   `wine_scenario_view`): `search` (text: name/producer), `producer`
+   (typeahead), `region`/`subregion`/`country`/`colour`/`vintage`/`format_code`
+   (enum), `anchor_status` (enum: owner/confirmed/provisional), `is_listed`
+   (boolean), and `range` metrics `lowest_ask_p`, `price_vs_market_pct`,
+   `price_vs_last_pct`, `ask_vs_release_pct`, `bid_vs_release_pct`,
+   `release_price_p`. Sort = any metric column + `parent_sku, format_code`
+   tiebreak.
+6. **Extract `applyFilters(query, filters)`** from `fetchCatalogue` and reuse it
+   for `fetchScenario(definition, page)` over `wine_scenario_view`. A
+   `parseScenarioDefinition(json)` (hand-rolled, mirroring `url.ts` parse)
+   validates/normalises the stored JSONB against the registry on read and before
+   write — untrusted JSON never reaches the query builder unchecked.
+
+### C. App — the Scenarios tab (5a)
+
+7. **`/scenarios`** route + nav entry:
+   - **List** saved scenarios (name, live match count, updated), plus "New".
+   - **Editor**: name + a **basic filter builder** (add/remove rows: pick a
+     registry field → kind-appropriate input; range = min/max, enum = multi-select,
+     etc.) + a sort picker.
+   - **Run preview** (server-evaluated, paginated with the release-prices
+     paginate/clamp shape): wine · format · ask · `ask_vs_release_pct` ·
+     `anchor_status`, each row linking to `/wine/parent/{sku}`.
+   - **Save / rename / delete** via RLS-gated server actions.
+   Defer full `FilterStrip` reuse (5b) and the agent path (5c).
+
+### D. Later sub-steps (not built in 5a)
+
+- **5b** — swap the basic builder for the catalogue's `FilterStrip`/facets UX;
+  scenario "modes"/starting points if wanted.
+- **5c — agent access.** An agent with Supabase access reads
+  `saved_scenarios.definition` and evaluates it via `applyFilters` over
+  `wine_scenario_view` (or a thin `evaluate_saved_scenario(id)` SQL function that
+  applies the stored filters). No new metrics; the human contract is the agent
+  contract.
+
+### E. Verification
+
+`tsc` + `vitest` (new `applyFilters` + `parseScenarioDefinition` unit tests;
+reuse of the existing filter tests); pgTAP + remote parity spot-check; route
+compiles. Evaluation correctness is proven by the shared-engine tests rather than
+the browser (owner login can't be automated).
+
+### Decisions to confirm (defaults chosen)
+
+1. **`wine_scenario_view` = format view + identity**, as the single evaluate/
+   display/agent surface. *(Recommended.)*
+2. **`saved_scenarios` writes are RLS-gated direct CRUD**, not SECURITY DEFINER
+   functions — pure user data, no cross-table effects.
+3. **First cut is 5a** (table + view + registry + shared engine + a working tab
+   with a basic filter builder); `FilterStrip` reuse (5b) and agent access (5c)
+   are separate.
+4. **`definition` validated in the app** against the registry (`parseScenario
+   Definition`), DB keeps only a `jsonb_typeof = 'object'` guard.
