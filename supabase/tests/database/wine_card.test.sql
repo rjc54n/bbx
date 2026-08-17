@@ -4,7 +4,7 @@
 -- identity, is_biddable and the catalogue-driven format set on local fixtures.
 
 BEGIN;
-SELECT plan(8);
+SELECT plan(10);
 
 -- P1: two live formats + one delisted format.
 INSERT INTO private.products (parent_sku, name, vintage, region, colour, producer, first_seen_at, last_seen_at)
@@ -59,6 +59,11 @@ SELECT is(
   9000,
   'lowest_ask_p carries the least listing price'
 );
+-- The card's "Market now" table leads with last-transaction figures, so the
+-- format view must carry them straight from catalogue_view.
+SELECT has_column('public', 'wine_card_format_view', 'last_transaction_p', 'exposes last_transaction_p');
+SELECT has_column('public', 'wine_card_format_view', 'price_vs_last_pct', 'exposes price_vs_last_pct');
+
 -- With no release anchor, the release columns and derived metrics are NULL.
 SELECT ok(
   (SELECT release_price_p IS NULL AND ask_vs_release_pct IS NULL

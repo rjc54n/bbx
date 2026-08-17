@@ -37,6 +37,8 @@ type WineCardFormat = {
   highest_bid_p: number | null;
   market_price_p: number | null;
   adjusted_guide_p: number | null;
+  last_transaction_p: number | null;
+  price_vs_last_pct: number | null;
   last_rest_checked_at: string | null;
   release_price_p: number | null;
   anchor_status: string | null;
@@ -99,6 +101,21 @@ function methodLabel(value: string | null): string {
   return value ? labels[value] ?? value.replaceAll("_", " ") : "unknown method";
 }
 
+// One labelled figure in the at-a-glance status band. `sub` carries the small
+// supporting line (a release price under a percentage, a holdings breakdown).
+function Stat({ label, value, sub, tone }: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: "muted";
+}) {
+  return <div className="min-w-[7rem]">
+    <dt className="text-xs uppercase tracking-wide text-ink-muted">{label}</dt>
+    <dd className={`mt-1 text-lg font-semibold tabular-nums ${tone === "muted" ? "text-ink-muted" : ""}`}>{value}</dd>
+    {sub && <p className="text-xs text-ink-muted tabular-nums">{sub}</p>}
+  </div>;
+}
+
 function Card({ title, children, note }: { title: string; children: React.ReactNode; note?: string }) {
   return <section className="rounded-lg border border-border bg-background p-5">
     <h2 className="text-lg font-semibold">{title}</h2>
@@ -120,7 +137,7 @@ export default async function WinePage({ params }: {
       .select("wine_ref,parent_sku,name,vintage,producer,country,region,subregion,colour,product_url,is_biddable")
       .eq("parent_sku", parentSku).maybeSingle(),
     supabase.from("wine_card_format_view")
-      .select("format_code,case_size,bottle_volume_ml,is_listed,lowest_ask_p,highest_bid_p,market_price_p,adjusted_guide_p,last_rest_checked_at,release_price_p,anchor_status,release_offer_date,ask_vs_release_pct")
+      .select("format_code,case_size,bottle_volume_ml,is_listed,lowest_ask_p,highest_bid_p,market_price_p,adjusted_guide_p,last_transaction_p,price_vs_last_pct,last_rest_checked_at,release_price_p,anchor_status,release_offer_date,ask_vs_release_pct")
       .eq("parent_sku", parentSku).order("bottle_volume_ml").order("case_size"),
     supabase.from("release_offer_evidence_view")
       .select("import_id,source_row_number,offer_date,source_wine,format_code,release_price_p,case_size,bottle_volume_ml,match_method,source_product_url")
@@ -168,6 +185,28 @@ export default async function WinePage({ params }: {
   };
   const anchorByFormat = new Map(formats.map((row) => [row.format_code, row]));
 
+  // The status-band glance headlines one format so every figure agrees: the
+  // keenest live ask per 75cl, else the 750ml single-bottle reference, else the
+  // first format. Percentages (vs release / vs last / vs market) are already
+  // per-format, so a single headline keeps them coherent.
+  const askable = formats
+    .filter((f) => perBottleP(f.lowest_ask_p, f.case_size, f.bottle_volume_ml) !== null)
+    .sort((a, b) =>
+      (perBottleP(a.lowest_ask_p, a.case_size, a.bottle_volume_ml) ?? Infinity)
+      - (perBottleP(b.lowest_ask_p, b.case_size, b.bottle_volume_ml) ?? Infinity));
+  const headline = askable[0]
+    ?? formats.find((f) => f.bottle_volume_ml === 750 && f.case_size === 1)
+    ?? formats[0]
+    ?? null;
+
+  // Held bottles from the two sources. CellarTracker's "at BBR" and the BBR
+  // cellar holdings are the same physical bottles, so held takes the larger of
+  // the two rather than summing (mirrors heldBottles in the favourites lib).
+  const ctHome = cellarRecords.reduce((n, r) => n + r.quantity_home, 0);
+  const ctBbr = cellarRecords.reduce((n, r) => n + r.quantity_bbr, 0);
+  const bbrStored = bbrHoldings.reduce((n, r) => n + r.quantity_bottles, 0);
+  const heldTotal = ctHome + Math.max(ctBbr, bbrStored);
+
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <div className="mx-auto max-w-6xl space-y-5 p-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -186,6 +225,44 @@ export default async function WinePage({ params }: {
         </div>
       </header>
 
+      {/* At-a-glance status band: where this wine stands, before any scrolling.
+          Market figures are the headline format; holdings span all formats. */}
+      <section className="rounded-lg border border-border bg-background p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${wine?.is_biddable ? "bg-accent text-accent-ink" : "border border-border text-ink-muted"}`}>
+            {wine?.is_biddable ? "Biddable at BBX" : "Not biddable"}
+          </span>
+          {headline && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-ink-muted">
+            {headline.is_listed ? "Listed" : "Unlisted"}
+          </span>}
+          {headline && <span className="text-xs text-ink-muted">
+            Market figures: {formatFormat(headline.case_size, headline.bottle_volume_ml)} · per 75cl
+          </span>}
+        </div>
+        <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
+          <Stat label="Ask" value={formatPence(perBottleP(headline?.lowest_ask_p ?? null, headline?.case_size ?? null, headline?.bottle_volume_ml ?? null))} />
+          <Stat label="Bid" value={formatPence(perBottleP(headline?.highest_bid_p ?? null, headline?.case_size ?? null, headline?.bottle_volume_ml ?? null))} />
+          <Stat label="Guide" value={formatPence(perBottleP(headline?.market_price_p ?? null, headline?.case_size ?? null, headline?.bottle_volume_ml ?? null))} />
+          <Stat
+            label="Ask vs release"
+            value={formatSignedPct(headline?.ask_vs_release_pct ?? null)}
+            sub={headline?.release_price_p != null ? `rel. ${formatPence(perBottleP(headline.release_price_p, headline.case_size, headline.bottle_volume_ml))}` : "no anchor"}
+          />
+          <Stat
+            label="Ask vs last tx"
+            value={formatSignedPct(headline?.price_vs_last_pct ?? null)}
+            sub={headline?.last_transaction_p != null ? `last ${formatPence(perBottleP(headline.last_transaction_p, headline.case_size, headline.bottle_volume_ml))}` : "no trade"}
+          />
+          <Stat
+            label="Held"
+            value={heldTotal || "–"}
+            sub={heldTotal ? `${ctHome} home · ${Math.max(ctBbr, bbrStored)} at BBR` : "none"}
+            tone={heldTotal ? undefined : "muted"}
+          />
+          <Stat label="BBR stored" value={bbrStored || "–"} tone={bbrStored ? undefined : "muted"} />
+        </dl>
+      </section>
+
       {formats.length === 0 && <p role="status" className="rounded border border-accent/40 bg-background p-3 text-sm">
         This wine is not in the tracked BBX catalogue, so there is no live market data for it.
         Everything below comes from the source records that reference this Parent ID.
@@ -193,7 +270,7 @@ export default async function WinePage({ params }: {
 
       {formats.length > 0 && <Card
         title="Market now"
-        note="All prices are 75cl bottle equivalents. The guide is a constant £/litre per wine, so it reads flat across formats while asks do not — the adjusted guide applies BBR's own release-offer format premiums instead."
+        note="All prices are 75cl bottle equivalents. 'Last tx' is the most recent trade; 'vs release' and 'vs last' are the arbitrage signal. The guide reads flat across formats because it is a constant £/litre per wine; the trailing 'adjusted' column applies BBR's release-offer format premiums and is kept only for reference."
       >
         <div className="mt-4 overflow-auto">
           <table className="w-full min-w-max text-left text-sm">
@@ -201,8 +278,9 @@ export default async function WinePage({ params }: {
               <tr>
                 <th className="py-2 pr-3">Format</th><th className="py-2 pr-3">Listing</th>
                 <th className="py-2 pr-3 text-right">Ask / 75cl</th><th className="py-2 pr-3 text-right">Bid / 75cl</th>
-                <th className="py-2 pr-3 text-right">Guide / 75cl</th><th className="py-2 pr-3 text-right">Adjusted / 75cl</th>
-                <th className="py-2 pr-3 text-right">Ask vs release</th><th className="py-2">Checked</th>
+                <th className="py-2 pr-3 text-right">Guide / 75cl</th><th className="py-2 pr-3 text-right">Last tx / 75cl</th>
+                <th className="py-2 pr-3 text-right">Ask vs release</th><th className="py-2 pr-3 text-right">Ask vs last</th>
+                <th className="py-2 pr-3 text-right font-normal normal-case text-ink-muted/70">Adjusted / 75cl</th><th className="py-2">Checked</th>
               </tr>
             </thead>
             <tbody>
@@ -213,8 +291,10 @@ export default async function WinePage({ params }: {
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.lowest_ask_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.highest_bid_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.market_price_p, format.case_size, format.bottle_volume_ml))}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.adjusted_guide_p, format.case_size, format.bottle_volume_ml))}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.last_transaction_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatSignedPct(format.ask_vs_release_pct)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{formatSignedPct(format.price_vs_last_pct)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-ink-muted/70">{formatPence(perBottleP(format.adjusted_guide_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 text-xs text-ink-muted">{formatDateTime(format.last_rest_checked_at)}</td>
                 </tr>
               ))}
@@ -275,14 +355,17 @@ export default async function WinePage({ params }: {
               <ul className="mt-2 space-y-2">
                 {cellarRecords.map((record) => <li key={`${record.import_id}-${record.source_row_number}`} className="flex flex-wrap items-baseline justify-between gap-3 rounded border border-border p-3 text-sm">
                   <div>
-                    <Link href={`/cellartracker/${record.import_id}/${record.source_row_number}`} className="font-medium text-accent underline-offset-2 hover:underline">{record.source_wine}</Link>
+                    <p className="font-medium">{record.source_wine}</p>
                     <p className="mt-1 text-xs text-ink-muted">
                       {record.quantity_home} at home · {record.quantity_bbr} at BBR · paid {formatPence(record.purchase_price_per_bottle_p)} / 75cl
                       {record.fully_consumed && " · fully consumed"}
                       {record.begin_consume && record.end_consume ? ` · drink ${record.begin_consume}–${record.end_consume}` : ""}
                     </p>
                   </div>
-                  <span className="text-xs text-ink-muted">Linked by {methodLabel(record.match_method)}</span>
+                  <span className="shrink-0 text-right text-xs text-ink-muted">
+                    Linked by {methodLabel(record.match_method)}
+                    <Link href={`/cellartracker/${record.import_id}/${record.source_row_number}`} className="mt-0.5 block text-accent underline-offset-2 hover:underline">Manage ↗</Link>
+                  </span>
                 </li>)}
               </ul>
             </div>}

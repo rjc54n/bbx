@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       app_owners: {
@@ -2157,9 +2132,11 @@ export type Database = {
           highest_bid_p: number | null
           is_listed: boolean | null
           last_rest_checked_at: string | null
+          last_transaction_p: number | null
           lowest_ask_p: number | null
           market_price_p: number | null
           parent_sku: string | null
+          price_vs_last_pct: number | null
           price_vs_market_pct: number | null
           release_offer_date: string | null
           release_price_p: number | null
@@ -2589,9 +2566,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
