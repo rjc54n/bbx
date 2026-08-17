@@ -5,7 +5,7 @@
 -- card integration, and the owner-only guard on minimal fixtures.
 
 BEGIN;
-SELECT plan(16);
+SELECT plan(18);
 
 INSERT INTO auth.users (id) VALUES
     ('41000000-0000-0000-0000-000000000001'),
