@@ -251,7 +251,9 @@ export default async function WinePage({ params }: {
           <Stat
             label="Ask vs release"
             value={formatSignedPct(headline?.ask_vs_release_pct ?? null)}
-            sub={headline?.release_price_p != null ? `rel. ${formatPence(perBottleP(headline.release_price_p, headline.case_size, headline.bottle_volume_ml))}` : "no anchor"}
+            sub={headline?.release_price_p != null
+              ? `rel. ${formatPence(perBottleP(headline.release_price_p, headline.case_size, headline.bottle_volume_ml))}${headline.anchor_status === "owner" ? " · owner-set" : ""}`
+              : "no anchor"}
           />
           <Stat
             label="Ask vs last tx"
@@ -297,7 +299,12 @@ export default async function WinePage({ params }: {
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.highest_bid_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.market_price_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.last_transaction_p, format.case_size, format.bottle_volume_ml))}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{formatSignedPct(format.ask_vs_release_pct)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {formatSignedPct(format.ask_vs_release_pct)}
+                    <Link href={`/release-prices/${parentSku}/${format.format_code}`} className="block text-xs font-normal text-accent underline-offset-2 hover:underline">
+                      {format.release_price_p == null ? "Set release price →" : format.anchor_status === "owner" ? "Owner-set ✎" : "Release history ↗"}
+                    </Link>
+                  </td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatSignedPct(format.price_vs_last_pct)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums text-ink-muted/70">{formatPence(perBottleP(format.adjusted_guide_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 text-xs text-ink-muted">{formatDateTime(format.last_rest_checked_at)}</td>

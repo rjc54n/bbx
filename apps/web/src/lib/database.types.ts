@@ -691,6 +691,42 @@ export type Database = {
         }
         Relationships: []
       }
+      owner_release_anchors: {
+        Row: {
+          decided_at: string
+          decided_by: string | null
+          format_code: string
+          offer_date: string | null
+          release_price_p: number
+          source_note: string | null
+          superseded_source_price_p: number | null
+          tax_basis: string
+          wine_ref: string
+        }
+        Insert: {
+          decided_at?: string
+          decided_by?: string | null
+          format_code: string
+          offer_date?: string | null
+          release_price_p: number
+          source_note?: string | null
+          superseded_source_price_p?: number | null
+          tax_basis?: string
+          wine_ref: string
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string | null
+          format_code?: string
+          offer_date?: string | null
+          release_price_p?: number
+          source_note?: string | null
+          superseded_source_price_p?: number | null
+          tax_basis?: string
+          wine_ref?: string
+        }
+        Relationships: []
+      }
       pending_favourites: {
         Row: {
           created_at: string
@@ -1287,13 +1323,6 @@ export type Database = {
             columns: ["release_offer_price_id"]
             isOneToOne: true
             referencedRelation: "release_price_anchor_view"
-            referencedColumns: ["release_offer_price_id"]
-          },
-          {
-            foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
-            columns: ["release_offer_price_id"]
-            isOneToOne: true
-            referencedRelation: "release_price_market_view"
             referencedColumns: ["release_offer_price_id"]
           },
         ]
@@ -2065,6 +2094,19 @@ export type Database = {
         }
         Relationships: []
       }
+      resolved_release_anchor_view: {
+        Row: {
+          anchor_status: string | null
+          format_code: string | null
+          offer_date: string | null
+          parent_sku: string | null
+          release_offer_price_id: number | null
+          release_price_p: number | null
+          source_product_url: string | null
+          source_wine: string | null
+        }
+        Relationships: []
+      }
       scan_health_view: {
         Row: {
           algolia_complete: boolean | null
@@ -2212,6 +2254,10 @@ export type Database = {
         Returns: Json
       }
       begin_release_offer_match_run: { Args: never; Returns: Json }
+      clear_owner_release_anchor: {
+        Args: { p_format_code: string; p_parent_sku: string }
+        Returns: Json
+      }
       clear_release_offer_product_resolution: {
         Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
@@ -2370,6 +2416,17 @@ export type Database = {
           p_method?: string
           p_parent_sku: string
           p_source_row_number: number
+        }
+        Returns: Json
+      }
+      set_owner_release_anchor: {
+        Args: {
+          p_format_code: string
+          p_offer_date?: string
+          p_parent_sku: string
+          p_release_price_p: number
+          p_source_note?: string
+          p_tax_basis?: string
         }
         Returns: Json
       }
