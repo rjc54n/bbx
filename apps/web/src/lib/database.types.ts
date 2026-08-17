@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       app_owners: {
@@ -136,6 +161,13 @@ export type Database = {
             referencedRelation: "catalogue_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_card_format_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
         ]
       }
       bbx_fee_schedule: {
@@ -210,6 +242,13 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
             referencedRelation: "catalogue_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_card_format_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
         ]
@@ -1248,6 +1287,13 @@ export type Database = {
             referencedColumns: ["parent_sku", "format_code"]
           },
           {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
+            referencedRelation: "wine_card_format_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
             foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
             columns: ["release_offer_price_id"]
             isOneToOne: true
@@ -1350,6 +1396,13 @@ export type Database = {
             referencedRelation: "catalogue_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_card_format_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
         ]
       }
       candidate_view: {
@@ -1381,15 +1434,7 @@ export type Database = {
           subregion: string | null
           vintage: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "skus_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-        ]
+        Relationships: []
       }
       catalogue_view: {
         Row: {
@@ -1425,15 +1470,7 @@ export type Database = {
           subregion: string | null
           vintage: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "skus_parent_sku_fkey"
-            columns: ["parent_sku"]
-            isOneToOne: false
-            referencedRelation: "product_detail_view"
-            referencedColumns: ["parent_sku"]
-          },
-        ]
+        Relationships: []
       }
       cellartracker_excluded_record_view: {
         Row: {
@@ -1580,6 +1617,13 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
             referencedRelation: "catalogue_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_card_format_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
         ]
@@ -1752,15 +1796,7 @@ export type Database = {
           parent_sku?: never
           scan_run_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "observation_events_scan_run_id_fkey"
-            columns: ["scan_run_id"]
-            isOneToOne: false
-            referencedRelation: "scan_health_view"
-            referencedColumns: ["run_id"]
-          },
-        ]
+        Relationships: []
       }
       product_detail_view: {
         Row: {
@@ -2104,6 +2140,72 @@ export type Database = {
           scope?: string | null
           started_at?: string | null
           status?: string | null
+        }
+        Relationships: []
+      }
+      wine_card_format_view: {
+        Row: {
+          adjusted_guide_p: number | null
+          anchor_status: string | null
+          ask_vs_release_p: number | null
+          ask_vs_release_pct: number | null
+          bid_vs_release_p: number | null
+          bid_vs_release_pct: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          format_code: string | null
+          highest_bid_p: number | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          lowest_ask_p: number | null
+          market_price_p: number | null
+          parent_sku: string | null
+          price_vs_market_pct: number | null
+          release_offer_date: string | null
+          release_price_p: number | null
+          wine_ref: string | null
+        }
+        Relationships: []
+      }
+      wine_card_view: {
+        Row: {
+          colour: string | null
+          country: string | null
+          is_biddable: boolean | null
+          name: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_url: string | null
+          region: string | null
+          subregion: string | null
+          vintage: number | null
+          wine_ref: string | null
+        }
+        Insert: {
+          colour?: string | null
+          country?: string | null
+          is_biddable?: never
+          name?: string | null
+          parent_sku?: string | null
+          producer?: string | null
+          product_url?: string | null
+          region?: string | null
+          subregion?: string | null
+          vintage?: number | null
+          wine_ref?: never
+        }
+        Update: {
+          colour?: string | null
+          country?: string | null
+          is_biddable?: never
+          name?: string | null
+          parent_sku?: string | null
+          producer?: string | null
+          product_url?: string | null
+          region?: string | null
+          subregion?: string | null
+          vintage?: number | null
+          wine_ref?: never
         }
         Relationships: []
       }
@@ -2487,8 +2589,10 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
-
