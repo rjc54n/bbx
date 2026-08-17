@@ -317,3 +317,130 @@ the view tests rather than the browser).
   market / release + vs-release %); `seller_net`/`recoup_bid` deferred.
 - Keep favourites detail as a redirect (not deleted).
 - Don't extract a shared `WineCard` component yet — one caller.
+
+## 11. Step 3 — implementation plan
+
+Scope: **feature 3** — add or override a release price on a biddable wine when
+the import missed it (or got it wrong). This is the first *owner-fact write* and
+the first precedence machinery. **Biddable-only** (`parent:` half of `wine_ref`);
+`wine_locals`/`local:` stay in step 4. Builds directly on the seam the step-1
+card view already left.
+
+### What exists to build on
+
+- `release_price_anchor_view (parent_sku, format_code, anchor_status,
+  release_offer_price_id, offer_date, release_price_p, source_wine,
+  source_product_url)` — resolves imported evidence into a per-format anchor,
+  `anchor_status ∈ {provisional, confirmed}` (confirmed via
+  `release_price_anchor_overrides`). **Leave this untouched** — it stays the pure
+  *imported* resolution that the confirm/reset UI drives.
+- `release_price_market_view` and `wine_card_format_view` both read the anchor
+  and derive every arbitrage metric from `release_price_p`. These are the two
+  consumers that must move to the resolved anchor.
+- `cellartracker_record_decisions` is the provenance/precedence template
+  (typed columns, `is_app_owner()` RLS, retained superseded source value,
+  `decided_at`/`decided_by`, carry-forward across re-import).
+
+### Constraint that shapes the write surface
+
+`/release-prices/[parentSku]/[formatCode]` reads `release_price_market_view` and
+does `if (!anchor) notFound()`. When the import **missed** the price there is no
+market-view row, so that page 404s — it cannot host "add the missing price"
+unchanged. The write surface must be reachable with **zero imported evidence**.
+
+### A. Database — one migration + one pgTAP test
+
+1. **`owner_release_anchors`** (new, durable), per §3:
+   `PRIMARY KEY (wine_ref, format_code)`, `release_price_p INT CHECK (> 0)` (per
+   case, pence), `tax_basis` default `in_bond`, `offer_date`, `source_note`,
+   `superseded_source_price_p`, `decided_at`/`decided_by`. RLS owner-only via
+   `private.is_app_owner()`; grants mirror `cellartracker_record_decisions`
+   (SELECT to `authenticated`, writes only through the functions below). For
+   step 3 `wine_ref` is always `'parent:' || parent_sku`; a
+   `CHECK (wine_ref LIKE 'parent:%')` documents that until step 4 relaxes it.
+2. **`resolved_release_anchor_view`** (new, `security_invoker`) — the wrapper the
+   step-1 seam anticipated. Same column shape as `release_price_anchor_view`,
+   with `release_offer_price_id` now **nullable** and `anchor_status` gaining
+   `'owner'` as the top rank:
+   ```
+   -- owner anchors win (any format, even one with no imported evidence)
+   SELECT split_part(wine_ref,':',2) AS parent_sku, format_code, 'owner' AS anchor_status,
+          NULL::BIGINT AS release_offer_price_id, offer_date, release_price_p,
+          NULL AS source_wine, NULL AS source_product_url
+   FROM public.owner_release_anchors WHERE wine_ref LIKE 'parent:%'
+   UNION ALL
+   -- imported anchors only where the owner has NOT set one
+   SELECT a.* FROM public.release_price_anchor_view a
+   WHERE NOT EXISTS (SELECT 1 FROM public.owner_release_anchors o
+                     WHERE o.wine_ref = 'parent:'||a.parent_sku AND o.format_code = a.format_code)
+   ```
+   Recommended as a **wrapper**, not an edit to `release_price_anchor_view`, so
+   the imported confirm/reset path stays pure and only the two metric consumers
+   change.
+3. **Repoint the two consumers** (the seam):
+   - `release_price_market_view`: `FROM release_price_anchor_view` →
+     `FROM resolved_release_anchor_view`. Nothing else changes; `recoup_bid`,
+     `seller_net`, `ask_vs_release_*` all recompute off the owner price. Because
+     `fetchCatalogue.ts` and the favourites surfaces read this view, the
+     catalogue arbitrage columns and favourites inherit the owner price for
+     free.
+   - `wine_card_format_view`: `LEFT JOIN release_price_anchor_view a` →
+     `LEFT JOIN resolved_release_anchor_view a`. One line; the card's Market-now
+     metrics recompute.
+4. **Write functions** (`SECURITY DEFINER`, `is_app_owner()` gate,
+   `search_path=''`), mirroring the CellarTracker price action:
+   - `set_owner_release_anchor(p_parent_sku, p_format_code, p_release_price_p,
+     p_tax_basis, p_offer_date, p_source_note)` — validates the format exists in
+     `public.skus (parent_sku, format_code)`; snapshots
+     `superseded_source_price_p` from the current
+     `release_price_anchor_view.release_price_p` (NULL if the import missed it);
+     upserts on `(wine_ref, format_code)`; returns JSON.
+   - `clear_owner_release_anchor(p_parent_sku, p_format_code)` — deletes the
+     owner row, reverting to the imported anchor.
+   Grants: `EXECUTE` to `authenticated` (the function body enforces owner).
+5. **pgTAP** `owner_release_anchors.test.sql`: owner anchor outranks a confirmed
+   imported anchor; an owner anchor appears for a format with **no** imported
+   evidence; `clear` reverts to the imported value; `resolved` metrics equal a
+   hand-computed `ask_vs_release_pct`. Plus a read-only remote spot-check that
+   `resolved_release_anchor_view` equals `release_price_anchor_view` on all
+   formats where no owner row exists (i.e. the change is inert until used).
+6. **Regenerate `database.types.ts`.**
+
+### B. App — write surface + provenance
+
+7. **Generalise `/release-prices/[parentSku]/[formatCode]`** to load from
+   `catalogue_view` + `resolved_release_anchor_view` (so it renders with zero
+   imported evidence instead of 404ing), and host an **owner-anchor form**
+   beside the existing imported confirm/reset: set price + optional `tax_basis`,
+   `offer_date`, `source_note`; a **Clear** action when an owner anchor is set.
+   Header shows `anchor_status` including `owner`, and, when overriding, the
+   imported value it superseded.
+8. **Wine card `Market now`** (`/wine/parent`): stays read-only, but each format
+   row gets a small entry point — **"Set release price →"** when
+   `release_price_p` is NULL, **"Owner-set ✎"** when `anchor_status = 'owner'` —
+   linking to the format page above. Render `anchor_status = 'owner'` as
+   "Owner-set" in the status band's *vs release* sub-line and in the Release-
+   history anchor column.
+
+### C. Verification
+
+`tsc` + `vitest`; pgTAP + the remote inertness spot-check from A.5; confirm the
+catalogue/favourites/card all reflect a test owner anchor via read-only remote
+queries (owner login can't be automated). Because the resolved view is inert
+until the first owner row exists, the change is safe to deploy ahead of any
+data.
+
+### Decisions (locked 2026-08-17)
+
+1. **Wrapper view over editing `release_price_anchor_view` in place** — keeps the
+   imported confirm/reset path pure; two consumers repoint. *(Recommended.)*
+2. **Write surface = the generalised per-format page**, reached from a read-only
+   link on the card — consistent with "card reads, management elsewhere". The
+   alternative (an inline form on the card) is rejected to keep the card
+   write-free.
+3. **`tax_basis` defaults to `in_bond`**; metrics assume in-bond (as the imported
+   anchor already does). A `duty_paid` owner price is stored but flagged, not
+   silently compared. 
+4. **Owner anchor is per `(parent_sku, format_code)`** — no multi-date history
+   for owner anchors (unlike imported evidence); the single owner value is the
+   anchor. A `source_note`/`offer_date` records context.
