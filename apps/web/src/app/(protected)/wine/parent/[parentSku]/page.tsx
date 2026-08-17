@@ -57,6 +57,7 @@ type ReleaseRecord = {
   bottle_volume_ml: number | null;
   match_method: string | null;
   source_product_url: string | null;
+  tasting_notes: string | null;
 };
 
 type CellarTrackerRecord = {
@@ -140,7 +141,7 @@ export default async function WinePage({ params }: {
       .select("format_code,case_size,bottle_volume_ml,is_listed,lowest_ask_p,highest_bid_p,market_price_p,adjusted_guide_p,last_transaction_p,price_vs_last_pct,last_rest_checked_at,release_price_p,anchor_status,release_offer_date,ask_vs_release_pct")
       .eq("parent_sku", parentSku).order("bottle_volume_ml").order("case_size"),
     supabase.from("release_offer_evidence_view")
-      .select("import_id,source_row_number,offer_date,source_wine,format_code,release_price_p,case_size,bottle_volume_ml,match_method,source_product_url")
+      .select("import_id,source_row_number,offer_date,source_wine,format_code,release_price_p,case_size,bottle_volume_ml,match_method,source_product_url,tasting_notes")
       .eq("parent_sku", parentSku).order("offer_date", { ascending: false }),
     supabase.from("current_cellartracker_records")
       .select("import_id,source_row_number,source_wine,vintage,producer,quantity_home,quantity_bbr,fully_consumed,purchase_price_per_bottle_p,begin_consume,end_consume,match_method")
@@ -184,6 +185,10 @@ export default async function WinePage({ params }: {
     productUrl: bbrProductUrl(wine?.product_url ?? releaseRecords[0]?.source_product_url ?? null),
   };
   const anchorByFormat = new Map(formats.map((row) => [row.format_code, row]));
+
+  // The most recent release offer that carried a tasting note. Release records
+  // arrive newest-first, so the first non-empty note is the freshest.
+  const tastingNote = releaseRecords.find((r) => r.tasting_notes && r.tasting_notes.trim()) ?? null;
 
   // The status-band glance headlines one format so every figure agrees: the
   // keenest live ask per 75cl, else the 750ml single-bottle reference, else the
@@ -301,6 +306,15 @@ export default async function WinePage({ params }: {
             </tbody>
           </table>
         </div>
+      </Card>}
+
+      {tastingNote?.tasting_notes && <Card
+        title="Tasting note"
+        note={`From the BBR release offer of ${formatDate(tastingNote.offer_date)}.`}
+      >
+        <blockquote className="mt-3 border-l-2 border-accent/40 pl-4 text-sm text-ink whitespace-pre-wrap">
+          {tastingNote.tasting_notes.trim()}
+        </blockquote>
       </Card>}
 
       <Card

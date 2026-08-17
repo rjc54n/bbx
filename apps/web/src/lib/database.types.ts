@@ -1868,6 +1868,7 @@ export type Database = {
           source_product_url: string | null
           source_row_number: number | null
           source_wine: string | null
+          tasting_notes: string | null
           tax_basis: string | null
         }
         Relationships: [
