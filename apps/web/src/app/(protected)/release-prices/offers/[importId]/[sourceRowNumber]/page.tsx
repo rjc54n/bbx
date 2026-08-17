@@ -55,25 +55,6 @@ type Resolution = {
   match_method: string | null;
 };
 
-type CatalogueRow = {
-  parent_sku: string | null;
-  name: string | null;
-  vintage: number | null;
-  producer: string | null;
-  country: string | null;
-  region: string | null;
-  subregion: string | null;
-  colour: string | null;
-  product_url: string | null;
-  format_code: string | null;
-  case_size: number | null;
-  bottle_volume_ml: number | null;
-  ask: number | null;
-  highest_bid_p: number | null;
-  market_price_p: number | null;
-  is_listed: boolean | null;
-};
-
 type ProvisionalCandidate = {
   parent_sku: string;
   rank: number;
@@ -135,11 +116,6 @@ export default async function ReleaseOfferDetailPage({
     .order("rank");
   if (candidateError) throw new Error("Historic-offer candidates could not be loaded.");
   const candidates = (candidateData ?? []) as ProvisionalCandidate[];
-  const { data: catalogueData, error: catalogueError } = resolution?.parent_sku
-    ? await supabase.from("catalogue_view").select("parent_sku, name, vintage, producer, country, region, subregion, colour, product_url, format_code, case_size, bottle_volume_ml, ask, highest_bid_p, market_price_p, is_listed").eq("parent_sku", resolution.parent_sku).order("format_code")
-    : { data: [], error: null };
-  if (catalogueError) throw new Error("Current catalogue data could not be loaded.");
-  const catalogue = (catalogueData ?? []) as CatalogueRow[];
   const returnPath = `/release-prices/offers/${importId}/${rowNumber}`;
   const unresolved = !resolution;
   const favouriteTarget = targetForRecord(
@@ -158,6 +134,7 @@ export default async function ReleaseOfferDetailPage({
         <div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Release offer record</p><h1 className="mt-1 text-2xl font-semibold">{source.source_wine}</h1><p className="mt-1 text-sm text-ink-muted">Offer date {formatDate(source.offer_date)} · source row {source.source_row_number}</p></div>
         <div className="flex items-center gap-3">
           {favouriteTarget && <FavouriteStar target={favouriteTarget} favourite={favourited} label={source.source_wine} />}
+          {resolution?.parent_sku && <Link href={`/wine/parent/${resolution.parent_sku}`} className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">View wine card ↗</Link>}
           <Link href="/release-prices" className="rounded border border-accent px-3 py-2 text-sm text-accent">All accepted offers</Link>
         </div>
       </header>
@@ -234,8 +211,6 @@ export default async function ReleaseOfferDetailPage({
         <p className="mt-1 text-sm text-ink-muted">This hides only this offer record and stops its parsed prices feeding the release-price anchor. Other records in the same match group are retained, and a later file repeating this offer is filtered out. Restore it from <Link href="/release-prices/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
         <div className="mt-4"><ExcludeHistoricOfferRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
       </section>
-
-      {resolution?.parent_sku && <section aria-labelledby="catalogue-card" className="rounded-lg border border-border bg-background p-5"><h2 id="catalogue-card" className="text-lg font-semibold">Current BBX catalogue card</h2>{catalogue.length === 0 ? <p className="mt-3 text-sm text-ink-muted">This Parent ID is saved, but it is not currently in the BBX-eligible catalogue.</p> : <div className="mt-4 space-y-4">{catalogue.map((product) => <article key={product.format_code} className="rounded border border-border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{product.name}</h3><p className="mt-1 text-sm text-ink-muted">Parent {product.parent_sku} · {product.vintage ?? "Vintage unavailable"} · {product.producer ?? "Producer unavailable"}</p></div>{product.product_url && <a className="text-sm text-accent underline-offset-2 hover:underline" href={product.product_url}>Open BBR product</a>}</div><dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-3"><div><dt className="text-xs uppercase text-ink-muted">Region</dt><dd>{[product.country, product.region, product.subregion].filter(Boolean).join(" · ") || "Unavailable"}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Format</dt><dd>{formatFormat(product.case_size, product.bottle_volume_ml)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Listing status</dt><dd>{product.is_listed ? "Listed" : "Unlisted"}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Lowest ask</dt><dd>{formatPence(product.ask)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Highest bid</dt><dd>{formatPence(product.highest_bid_p)}</dd></div><div><dt className="text-xs uppercase text-ink-muted">Market price</dt><dd>{formatPence(product.market_price_p)}</dd></div></dl></article>)}</div>}</section>}
 
       <details className="rounded-lg border border-border bg-background p-5"><summary className="cursor-pointer font-semibold">Imported JSON and validation data</summary><div className="mt-4 grid gap-4 lg:grid-cols-3"><section><h2 className="text-sm font-medium">Raw row</h2><pre className="mt-2 overflow-auto rounded bg-accent-soft p-3 text-xs">{json(source.raw_row)}</pre></section><section><h2 className="text-sm font-medium">Validation warnings</h2><pre className="mt-2 overflow-auto rounded bg-accent-soft p-3 text-xs">{json(source.validation_warnings)}</pre></section><section><h2 className="text-sm font-medium">Validation errors</h2><pre className="mt-2 overflow-auto rounded bg-accent-soft p-3 text-xs">{json(source.validation_errors)}</pre></section></div></details>
     </div>
