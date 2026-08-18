@@ -2,20 +2,9 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth/owner";
 import { loadGroupFavourites } from "@/lib/favourites/server";
 import { isFavourited, targetForRecord } from "@/lib/favourites/target";
-import { FavouriteStar } from "@/components/favourites/FavouriteStar";
-import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
-import { ExcludeHistoricOfferGroupForm } from "@/components/releaseOffers/ExcludeHistoricOfferGroupForm";
 import { MatchRunControl } from "@/components/releaseOffers/MatchRunControl";
-import { SubmitButton } from "@/components/forms/SubmitButton";
-import {
-  confirmHistoricOfferCandidate,
-  confirmManualHistoricOfferMatch,
-  editHistoricOfferGroup,
-  restoreHistoricOfferGroup,
-  suppressHistoricOfferGroup,
-  unlinkHistoricOfferGroup,
-  type MatchRunProgress,
-} from "./actions";
+import { MatchGroupList, type MatchGroupView } from "@/components/releaseOffers/MatchGroupList";
+import { type MatchRunProgress } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -87,17 +76,6 @@ function applyStateFilter<T extends {
   if (state === "linked") return query.gt("linked_row_count", 0).eq("unresolved_row_count", 0);
   if (state === "suppressed") return query.gt("suppressed_row_count", 0).eq("unresolved_row_count", 0);
   return query;
-}
-
-function displayMethod(value: string | null) {
-  const labels: Record<string, string> = {
-    supplied_id: "Supplied ID",
-    local_exact: "Local exact",
-    algolia_exact: "Algolia exact",
-    algolia_confirmed: "Algolia confirmed",
-    manual: "Manual",
-  };
-  return value ? labels[value] ?? value.replaceAll("_", " ") : "Mixed methods";
 }
 
 function runProgress(row: Record<string, unknown> | null): MatchRunProgress | null {
@@ -184,6 +162,49 @@ export default async function HistoricOfferMatchesPage({
     recordsByGroup.set(record.match_group_key, values);
   }
 
+  // Assemble the serialisable view the client list renders. targetForRecord and
+  // isFavourited are pure, so the star is resolved here and passed down as data.
+  const groupViews: MatchGroupView[] = groups.map((group) => {
+    const target = targetForRecord("release_offer", group.parent_sku ? "linked" : null, group.parent_sku, group.match_group_key);
+    return {
+      match_group_key: group.match_group_key,
+      source_wine: group.source_wine,
+      source_vintage: group.source_vintage,
+      earliest_offer_date: group.earliest_offer_date,
+      latest_offer_date: group.latest_offer_date,
+      source_row_count: group.source_row_count,
+      unresolved_row_count: group.unresolved_row_count,
+      linked_row_count: group.linked_row_count,
+      suppressed_row_count: group.suppressed_row_count,
+      parent_sku: group.parent_sku,
+      match_method: group.match_method,
+      is_biddable: group.is_biddable,
+      candidates: (byGroup.get(group.match_group_key) ?? []).map((candidate) => ({
+        parent_sku: candidate.parent_sku,
+        rank: candidate.rank,
+        name: candidate.name,
+        producer: candidate.producer,
+        region: candidate.region,
+        stock_origin: candidate.stock_origin,
+        purchase_mode: candidate.purchase_mode,
+        typo_count: candidate.typo_count,
+        is_biddable: candidate.is_biddable,
+        match_score: candidate.match_score,
+      })),
+      records: (recordsByGroup.get(group.match_group_key) ?? []).filter(hasReleaseInfo).map((record) => ({
+        import_id: record.import_id,
+        source_row_number: record.source_row_number,
+        offer_date: record.offer_date,
+        source_price_text: record.source_price_text,
+        source_product_url: record.source_product_url,
+        tasting_notes: record.tasting_notes,
+        description: record.description,
+      })),
+      favouriteTarget: target,
+      isFavourite: target ? isFavourited(favourites, target) : false,
+    };
+  });
+
   const totalForState = rowsResult.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalForState / PAGE_SIZE));
   const currentParams = new URLSearchParams();
@@ -210,49 +231,7 @@ export default async function HistoricOfferMatchesPage({
           <button className="rounded border border-accent px-3 py-2 text-sm text-accent">Search</button>
           {search && <Link href={`${MATCH_PATH}?state=${state}`} className="rounded border border-border px-3 py-2 text-sm">Clear</Link>}
         </form>
-        <div className="divide-y divide-border">
-          {groups.map((group) => {
-            const candidates = byGroup.get(group.match_group_key) ?? [];
-            const records = (recordsByGroup.get(group.match_group_key) ?? []).filter(hasReleaseInfo);
-            return <article key={group.match_group_key} className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1"><h2 className="font-semibold">{group.source_wine}</h2><p className="mt-1 text-xs text-ink-muted">{group.source_vintage ?? "Vintage unavailable"} · {group.source_row_count.toLocaleString()} source records · offers {group.earliest_offer_date} to {group.latest_offer_date}</p></div>
-                {(() => {
-                  const target = targetForRecord("release_offer", group.parent_sku ? "linked" : null, group.parent_sku, group.match_group_key);
-                  return target && <FavouriteStar target={target} favourite={isFavourited(favourites, target)} label={group.source_wine} />;
-                })()}
-                <div className="text-right text-xs"><p>{group.unresolved_row_count} unresolved · {group.linked_row_count} linked · {group.suppressed_row_count} suppressed</p>{group.parent_sku && <p className="mt-1 font-medium">Parent {group.parent_sku} · {displayMethod(group.match_method)}</p>}{group.parent_sku && <p className="text-ink-muted">{group.is_biddable ? "Currently in the BBX-eligible catalogue" : "Found in BBR catalogue, not currently BBX-eligible"}</p>}</div>
-              </div>
-              {records.length > 0 && <details className="mt-3 rounded border border-border bg-accent-soft/30 p-3 text-xs">
-                <summary className="cursor-pointer font-medium text-ink">Release info</summary>
-                <div className="mt-2 space-y-3">
-                  {records.map((record) => <div key={`${record.import_id}-${record.source_row_number}`} className="space-y-1">
-                    {records.length > 1 && <p className="text-ink-muted">Offer {record.offer_date ?? "date unknown"}</p>}
-                    {record.source_price_text && <p><span className="text-ink-muted">Price: </span>{record.source_price_text}</p>}
-                    {record.tasting_notes && <p className="whitespace-pre-wrap text-ink">{record.tasting_notes}</p>}
-                    {record.description && <p className="whitespace-pre-wrap text-ink-muted">{record.description}</p>}
-                    <p className="flex flex-wrap gap-3">
-                      {record.source_product_url && <a href={record.source_product_url} target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">Source page ↗</a>}
-                      <Link href={`/release-prices/offers/${record.import_id}/${record.source_row_number}`} className="text-accent underline-offset-2 hover:underline">Open record</Link>
-                    </p>
-                  </div>)}
-                </div>
-              </details>}
-              {group.unresolved_row_count > 0 && candidates.length > 0 && <div className="mt-3 grid gap-2 lg:grid-cols-2">
-                {candidates.map((candidate) => <div key={candidate.parent_sku} className="flex items-start justify-between gap-3 rounded border border-border p-3 text-xs"><div><p className="font-medium">#{candidate.rank} {candidate.name}</p><p className="mt-1 text-ink-muted">Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"}</p><p className="text-ink-muted">{candidate.stock_origin ?? "Stock origin unavailable"} · {candidate.purchase_mode ?? "Purchase mode unavailable"} · {candidate.is_biddable ? "BBX-eligible" : "not currently BBX-eligible"}{candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}{typeof candidate.match_score === "number" ? ` · ${Math.round(candidate.match_score * 100)}% name match` : ""}</p></div><form action={confirmHistoricOfferCandidate.bind(null, group.match_group_key, candidate.parent_sku, returnPath)}><SubmitButton pendingLabel="Confirming…" className="rounded border border-accent px-2 py-1 text-accent">Confirm group</SubmitButton></form></div>)}
-              </div>}
-              {group.unresolved_row_count > 0 && <div className="mt-3 flex flex-wrap items-start gap-3">
-                <form action={confirmManualHistoricOfferMatch.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><SubmitButton pendingLabel="Linking…" className="rounded border border-border px-2 py-1.5 text-xs">Link manually</SubmitButton></form>
-                <form action={suppressHistoricOfferGroup.bind(null, group.match_group_key, returnPath)}><SubmitButton pendingLabel="Suppressing…" className="rounded border border-border px-2 py-1.5 text-xs">Reject and suppress</SubmitButton></form>
-              </div>}
-              {group.linked_row_count > 0 && <div className="mt-3 flex flex-wrap gap-2"><form action={editHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" defaultValue={group.parent_sku ?? ""} className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><SubmitButton pendingLabel="Saving…" className="rounded border border-border px-2 py-1.5 text-xs">Edit linked Parent ID</SubmitButton></form><form action={unlinkHistoricOfferGroup.bind(null, group.match_group_key, returnPath)}><SubmitButton pendingLabel="Unlinking…" className="rounded border border-accent px-2 py-1.5 text-xs text-accent">Unlink and retry later</SubmitButton></form></div>}
-              {group.suppressed_row_count > 0 && <form action={restoreHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="mt-3"><SubmitButton pendingLabel="Restoring…" className="rounded border border-border px-2 py-1.5 text-xs">Restore to unmatched</SubmitButton></form>}
-              {group.unresolved_row_count > 0 && <CatalogueCandidateSearch matchGroupKey={group.match_group_key} sourceWine={group.source_wine} sourceVintage={group.source_vintage} returnPath={returnPath} />}
-              <div className="mt-3 border-t border-border pt-3"><ExcludeHistoricOfferGroupForm matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
-            </article>;
-          })}
-          {groups.length === 0 && <p className="p-6 text-sm text-ink-muted">No match groups meet this filter.</p>}
-        </div>
+        <MatchGroupList groups={groupViews} state={state} returnPath={returnPath} />
         <nav className="flex items-center justify-between border-t border-border p-4 text-sm"><span>Page {page} of {totalPages}</span><div className="flex gap-2">{page > 1 && <Link href={`${MATCH_PATH}?state=${state}&page=${page - 1}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className="rounded border border-border px-3 py-1.5">Previous</Link>}{page < totalPages && <Link href={`${MATCH_PATH}?state=${state}&page=${page + 1}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className="rounded border border-border px-3 py-1.5">Next</Link>}</div></nav>
       </section>
     </div>

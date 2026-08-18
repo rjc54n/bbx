@@ -136,6 +136,42 @@ async function mutateGroup(
   redirect(`${safeReturnPath(returnPath)}${returnPath.includes("?") ? "&" : "?"}${error ? "action_error" : "changed"}=1`);
 }
 
+// Non-redirecting sibling of mutateGroup for the optimistic matches list: it
+// runs the same RPCs and revalidates, but returns a result instead of
+// redirect()ing, so the client can remove the group's card on click and let the
+// background revalidation confirm it. The redirecting variants above stay for
+// the offer-record page and the catalogue/exclude forms, which navigate away.
+export type MatchMutation =
+  | { op: "confirm" | "manual" | "edit"; matchGroupKey: string; parentSku: string }
+  | { op: "suppress" | "unlink" | "restore" | "exclude"; matchGroupKey: string };
+
+export async function runMatchGroupMutation(m: MatchMutation): Promise<{ ok: boolean; error?: string }> {
+  const context = await getOwnerContext();
+  if (!context) return { ok: false, error: "Your owner session has expired." };
+  if ((m.op === "confirm" || m.op === "manual" || m.op === "edit") && !/^\d{5,30}$/.test(m.parentSku)) {
+    return { ok: false, error: "Enter a valid Parent ID (5–30 digits)." };
+  }
+
+  const rpc = ({
+    confirm: "confirm_release_offer_match_group",
+    manual: "confirm_release_offer_match_group",
+    edit: "edit_release_offer_match_group",
+    suppress: "suppress_release_offer_match_group",
+    unlink: "unlink_release_offer_match_group",
+    restore: "restore_release_offer_match_group",
+    exclude: "exclude_release_offer_match_group",
+  } as const)[m.op];
+
+  const args: Record<string, string> = { p_match_group_key: m.matchGroupKey };
+  if (m.op === "confirm" || m.op === "manual") { args.p_parent_sku = m.parentSku; args.p_method = m.op === "confirm" ? "algolia_confirmed" : "manual"; }
+  if (m.op === "edit") args.p_parent_sku = m.parentSku;
+
+  const { error } = await context.supabase.rpc(rpc, args as never);
+  revalidatePath(MATCH_PATH);
+  revalidatePath("/release-prices");
+  return error ? { ok: false, error: "The match decision could not be saved." } : { ok: true };
+}
+
 export async function confirmHistoricOfferCandidate(
   matchGroupKey: string,
   parentSku: string,
