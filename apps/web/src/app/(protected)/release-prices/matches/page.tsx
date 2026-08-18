@@ -6,6 +6,7 @@ import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
 import { ExcludeHistoricOfferGroupForm } from "@/components/releaseOffers/ExcludeHistoricOfferGroupForm";
 import { MatchRunControl } from "@/components/releaseOffers/MatchRunControl";
+import { SubmitButton } from "@/components/forms/SubmitButton";
 import {
   confirmHistoricOfferCandidate,
   confirmManualHistoricOfferMatch,
@@ -134,8 +135,12 @@ export default async function HistoricOfferMatchesPage({
   if (search) rowsQuery = rowsQuery.ilike("source_wine", `%${search.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`);
   const from = (page - 1) * PAGE_SIZE;
 
+  // Estimated (planner) counts, not exact: these four tallies are a work-queue
+  // gauge, not an audit, and an exact count re-scans the view on every reload
+  // after a mutation — the bulk of the post-confirm pause. The paginated rows
+  // query below keeps count: "exact" so its page total stays precise.
   const countFor = async (filter: StateFilter) => {
-    let query = supabase.from("release_offer_match_review_view").select("*", { count: "exact", head: true });
+    let query = supabase.from("release_offer_match_review_view").select("*", { count: "estimated", head: true });
     query = applyStateFilter(query, filter);
     const { count } = await query;
     return count ?? 0;
@@ -234,14 +239,14 @@ export default async function HistoricOfferMatchesPage({
                 </div>
               </details>}
               {group.unresolved_row_count > 0 && candidates.length > 0 && <div className="mt-3 grid gap-2 lg:grid-cols-2">
-                {candidates.map((candidate) => <div key={candidate.parent_sku} className="flex items-start justify-between gap-3 rounded border border-border p-3 text-xs"><div><p className="font-medium">#{candidate.rank} {candidate.name}</p><p className="mt-1 text-ink-muted">Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"}</p><p className="text-ink-muted">{candidate.stock_origin ?? "Stock origin unavailable"} · {candidate.purchase_mode ?? "Purchase mode unavailable"} · {candidate.is_biddable ? "BBX-eligible" : "not currently BBX-eligible"}{candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}{typeof candidate.match_score === "number" ? ` · ${Math.round(candidate.match_score * 100)}% name match` : ""}</p></div><form action={confirmHistoricOfferCandidate.bind(null, group.match_group_key, candidate.parent_sku, returnPath)}><button className="rounded border border-accent px-2 py-1 text-accent">Confirm group</button></form></div>)}
+                {candidates.map((candidate) => <div key={candidate.parent_sku} className="flex items-start justify-between gap-3 rounded border border-border p-3 text-xs"><div><p className="font-medium">#{candidate.rank} {candidate.name}</p><p className="mt-1 text-ink-muted">Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"}</p><p className="text-ink-muted">{candidate.stock_origin ?? "Stock origin unavailable"} · {candidate.purchase_mode ?? "Purchase mode unavailable"} · {candidate.is_biddable ? "BBX-eligible" : "not currently BBX-eligible"}{candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}{typeof candidate.match_score === "number" ? ` · ${Math.round(candidate.match_score * 100)}% name match` : ""}</p></div><form action={confirmHistoricOfferCandidate.bind(null, group.match_group_key, candidate.parent_sku, returnPath)}><SubmitButton pendingLabel="Confirming…" className="rounded border border-accent px-2 py-1 text-accent">Confirm group</SubmitButton></form></div>)}
               </div>}
               {group.unresolved_row_count > 0 && <div className="mt-3 flex flex-wrap items-start gap-3">
-                <form action={confirmManualHistoricOfferMatch.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><button className="rounded border border-border px-2 py-1.5 text-xs">Link manually</button></form>
-                <form action={suppressHistoricOfferGroup.bind(null, group.match_group_key, returnPath)}><button className="rounded border border-border px-2 py-1.5 text-xs">Reject and suppress</button></form>
+                <form action={confirmManualHistoricOfferMatch.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><SubmitButton pendingLabel="Linking…" className="rounded border border-border px-2 py-1.5 text-xs">Link manually</SubmitButton></form>
+                <form action={suppressHistoricOfferGroup.bind(null, group.match_group_key, returnPath)}><SubmitButton pendingLabel="Suppressing…" className="rounded border border-border px-2 py-1.5 text-xs">Reject and suppress</SubmitButton></form>
               </div>}
-              {group.linked_row_count > 0 && <div className="mt-3 flex flex-wrap gap-2"><form action={editHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" defaultValue={group.parent_sku ?? ""} className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><button className="rounded border border-border px-2 py-1.5 text-xs">Edit linked Parent ID</button></form><form action={unlinkHistoricOfferGroup.bind(null, group.match_group_key, returnPath)}><button className="rounded border border-accent px-2 py-1.5 text-xs text-accent">Unlink and retry later</button></form></div>}
-              {group.suppressed_row_count > 0 && <form action={restoreHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="mt-3"><button className="rounded border border-border px-2 py-1.5 text-xs">Restore to unmatched</button></form>}
+              {group.linked_row_count > 0 && <div className="mt-3 flex flex-wrap gap-2"><form action={editHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" defaultValue={group.parent_sku ?? ""} className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><SubmitButton pendingLabel="Saving…" className="rounded border border-border px-2 py-1.5 text-xs">Edit linked Parent ID</SubmitButton></form><form action={unlinkHistoricOfferGroup.bind(null, group.match_group_key, returnPath)}><SubmitButton pendingLabel="Unlinking…" className="rounded border border-accent px-2 py-1.5 text-xs text-accent">Unlink and retry later</SubmitButton></form></div>}
+              {group.suppressed_row_count > 0 && <form action={restoreHistoricOfferGroup.bind(null, group.match_group_key, returnPath)} className="mt-3"><SubmitButton pendingLabel="Restoring…" className="rounded border border-border px-2 py-1.5 text-xs">Restore to unmatched</SubmitButton></form>}
               {group.unresolved_row_count > 0 && <CatalogueCandidateSearch matchGroupKey={group.match_group_key} sourceWine={group.source_wine} sourceVintage={group.source_vintage} returnPath={returnPath} />}
               <div className="mt-3 border-t border-border pt-3"><ExcludeHistoricOfferGroupForm matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
             </article>;
