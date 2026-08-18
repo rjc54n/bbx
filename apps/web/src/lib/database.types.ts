@@ -2085,6 +2085,7 @@ export type Database = {
       }
       release_offer_review_view: {
         Row: {
+          description: string | null
           import_id: string | null
           link_status: string | null
           match_group_key: string | null
@@ -2098,6 +2099,7 @@ export type Database = {
           source_row_number: number | null
           source_vintage: number | null
           source_wine: string | null
+          tasting_notes: string | null
           valid_in_bond_fragment_count: number | null
         }
         Relationships: [
