@@ -43,9 +43,3 @@ export function buildAcceptedOfferSearchFilter(term: string): string {
     .map((field) => `${field}.ilike.${value}`)
     .join(",");
 }
-
-export function acceptedOfferHref(page: number, search: string): string {
-  const params = new URLSearchParams({ page: String(page) });
-  if (search) params.set("q", search);
-  return `/release-prices?${params.toString()}`;
-}

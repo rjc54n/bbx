@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_OFFER_PAGE_SIZE,
-  acceptedOfferHref,
   acceptedOfferPageCount,
   acceptedOfferPageForCount,
   acceptedOfferRange,
@@ -29,8 +28,7 @@ describe("accepted offer query", () => {
     );
   });
 
-  it("keeps special characters inside the search term and preserves a later-page search", () => {
+  it("keeps special characters inside the search term", () => {
     expect(buildAcceptedOfferSearchFilter("Wine, Reserve (2015)")).toContain('source_wine.ilike."%Wine, Reserve (2015)%"');
-    expect(acceptedOfferHref(36, "Later result")).toBe("/release-prices?page=36&q=Later+result");
   });
 });

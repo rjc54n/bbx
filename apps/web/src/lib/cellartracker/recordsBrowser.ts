@@ -50,9 +50,3 @@ export function buildCellarTrackerRecordsSearchFilter(term: string): string {
     .map((field) => `${field}.ilike.${value}`)
     .join(",");
 }
-
-export function cellarTrackerRecordsHref(page: number, search: string): string {
-  const params = new URLSearchParams({ page: String(page) });
-  if (search) params.set("q", search);
-  return `/cellartracker?${params.toString()}`;
-}

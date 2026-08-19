@@ -4,6 +4,7 @@ import { loadGroupFavourites } from "@/lib/favourites/server";
 import { isFavourited, targetForRecord } from "@/lib/favourites/target";
 import { MatchRunControl } from "@/components/releaseOffers/MatchRunControl";
 import { MatchGroupList, type MatchGroupView } from "@/components/releaseOffers/MatchGroupList";
+import { Pagination } from "@/components/nav/Pagination";
 import { type MatchRunProgress } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -232,7 +233,14 @@ export default async function HistoricOfferMatchesPage({
           {search && <Link href={`${MATCH_PATH}?state=${state}`} className="rounded border border-border px-3 py-2 text-sm">Clear</Link>}
         </form>
         <MatchGroupList groups={groupViews} state={state} returnPath={returnPath} />
-        <nav className="flex items-center justify-between border-t border-border p-4 text-sm"><span>Page {page} of {totalPages}</span><div className="flex gap-2">{page > 1 && <Link href={`${MATCH_PATH}?state=${state}&page=${page - 1}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className="rounded border border-border px-3 py-1.5">Previous</Link>}{page < totalPages && <Link href={`${MATCH_PATH}?state=${state}&page=${page + 1}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className="rounded border border-border px-3 py-1.5">Next</Link>}</div></nav>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalForState}
+          label="groups"
+          basePath={MATCH_PATH}
+          query={search ? { state, q: search } : { state }}
+        />
       </section>
     </div>
   </main>;

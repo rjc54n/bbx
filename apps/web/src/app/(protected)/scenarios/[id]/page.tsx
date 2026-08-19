@@ -7,6 +7,7 @@ import { formatFormat, formatPence, formatSignedPct } from "@/lib/format";
 import { parseScenarioDefinition } from "@/lib/scenarios/definition";
 import { scenarioPageCount, scenarioPageForCount, scenarioRange, parsePage } from "@/lib/scenarios/browser";
 import { ScenarioEditor } from "@/components/scenarios/ScenarioEditor";
+import { Pagination } from "@/components/nav/Pagination";
 import { deleteScenario, updateScenario } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -70,7 +71,6 @@ export default async function ScenarioDetailPage({
   const rows = (data ?? []) as ScenarioResultRow[];
   const total = count ?? 0;
   const pageCount = scenarioPageCount(total);
-  const href = (target: number) => `/scenarios/${id}?page=${target}`;
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <div className="mx-auto max-w-6xl space-y-5 p-5">
@@ -107,11 +107,6 @@ export default async function ScenarioDetailPage({
       <section className="rounded-lg border border-border bg-background">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
           <h2 className="font-semibold">Matches</h2>
-          <nav aria-label="Result pages" className="flex items-center gap-3 text-sm text-ink-muted">
-            {page > 1 ? <Link href={href(page - 1)} className="text-accent underline-offset-2 hover:underline">Previous</Link> : <span aria-disabled="true">Previous</span>}
-            <span>Page {page.toLocaleString()} of {pageCount.toLocaleString()}</span>
-            {page < pageCount ? <Link href={href(page + 1)} className="text-accent underline-offset-2 hover:underline">Next</Link> : <span aria-disabled="true">Next</span>}
-          </nav>
         </div>
         <div className="overflow-auto">
           <table className="w-full min-w-max text-left text-sm">
@@ -140,6 +135,13 @@ export default async function ScenarioDetailPage({
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          totalPages={pageCount}
+          totalCount={total}
+          label="matches"
+          basePath={`/scenarios/${id}`}
+        />
       </section>
     </div>
   </main>;

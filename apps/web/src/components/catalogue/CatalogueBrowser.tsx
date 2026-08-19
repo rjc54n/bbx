@@ -26,7 +26,7 @@ import { DataHonestyHeader } from "./DataHonestyHeader";
 import { DataTable } from "./DataTable";
 import { FilterChips } from "./FilterChips";
 import { FilterStrip } from "./FilterStrip";
-import { Pagination } from "./Pagination";
+import { Pagination } from "@/components/nav/Pagination";
 import { SearchBar } from "./SearchBar";
 
 function rowKey(row: { parent_sku: string | null; format_code: string | null }): string {
@@ -283,7 +283,13 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
         />
       )}
 
-      <Pagination page={queryState.page} pageSize={PAGE_SIZE} totalCount={totalCount} onPageChange={handlePageChange} />
+      <Pagination
+        page={queryState.page + 1}
+        totalPages={Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
+        totalCount={totalCount}
+        label="results"
+        onPageChange={(target) => handlePageChange(target - 1)}
+      />
     </div>
   );
 }

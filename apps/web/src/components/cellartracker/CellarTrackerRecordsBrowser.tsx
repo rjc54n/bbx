@@ -2,7 +2,8 @@ import Link from "next/link";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { formatPence } from "@/lib/format";
 import { buildFavouriteState, isFavourited, targetForRecord } from "@/lib/favourites/target";
-import { cellarTrackerRecordsHref, cellarTrackerRecordsPageCount } from "@/lib/cellartracker/recordsBrowser";
+import { cellarTrackerRecordsPageCount } from "@/lib/cellartracker/recordsBrowser";
+import { Pagination } from "@/components/nav/Pagination";
 
 export type CellarTrackerMarketRow = {
   import_id: string;
@@ -108,15 +109,6 @@ export function CellarTrackerRecordsBrowser({
       </form>
     </div>
 
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2 text-sm text-ink-muted">
-      <span>{rows.length.toLocaleString()} of {totalRows.toLocaleString()} {resultLabel}</span>
-      <nav aria-label="CellarTracker record pages" className="flex items-center gap-3">
-        {page > 1 ? <Link href={cellarTrackerRecordsHref(page - 1, search)} className="text-accent underline-offset-2 hover:underline">Previous</Link> : <span aria-disabled="true">Previous</span>}
-        <span>Page {page.toLocaleString()} of {pageCount.toLocaleString()}</span>
-        {page < pageCount ? <Link href={cellarTrackerRecordsHref(page + 1, search)} className="text-accent underline-offset-2 hover:underline">Next</Link> : <span aria-disabled="true">Next</span>}
-      </nav>
-    </div>
-
     <div className="min-h-0 flex-1 overflow-auto">
       <table className="w-full min-w-max border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_var(--border)]">
@@ -167,5 +159,14 @@ export function CellarTrackerRecordsBrowser({
         </tbody>
       </table>
     </div>
+
+    <Pagination
+      page={page}
+      totalPages={pageCount}
+      totalCount={totalRows}
+      label={resultLabel}
+      basePath="/cellartracker"
+      query={search ? { q: search } : {}}
+    />
   </div>;
 }

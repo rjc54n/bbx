@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   CELLARTRACKER_PAGE_SIZE,
   buildCellarTrackerRecordsSearchFilter,
-  cellarTrackerRecordsHref,
   cellarTrackerRecordsPageCount,
   cellarTrackerRecordsPageForCount,
   cellarTrackerRecordsRange,
@@ -29,8 +28,7 @@ describe("cellartracker records query", () => {
     );
   });
 
-  it("keeps special characters inside the search term and preserves a later-page search", () => {
+  it("keeps special characters inside the search term", () => {
     expect(buildCellarTrackerRecordsSearchFilter("Clos (St. Jacques)")).toContain('source_wine.ilike."%Clos (St. Jacques)%"');
-    expect(cellarTrackerRecordsHref(7, "Later result")).toBe("/cellartracker?page=7&q=Later+result");
   });
 });
