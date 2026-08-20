@@ -16,6 +16,7 @@ from core.store import (
     load_current_skus,
     mark_run_failed,
     process_disappearances,
+    refresh_facet_caches,
     start_run,
     update_run_discovery,
     update_run_rest,
@@ -527,3 +528,29 @@ class TestPostgresConnectionCompat:
         conn, cur = _pg_like_conn()
         assert load_current_offers(conn) == {}
         cur.execute.assert_called_once()
+
+
+def test_refresh_facet_caches_is_noop_without_postgres(monkeypatch):
+    monkeypatch.setattr("core.store.is_postgres", lambda: False)
+    conn = MagicMock()
+    refresh_facet_caches(conn)
+    conn.cursor.assert_not_called()
+
+
+def test_refresh_facet_caches_refreshes_each_view_concurrently(monkeypatch):
+    monkeypatch.setattr("core.store.is_postgres", lambda: True)
+    conn = MagicMock()
+    conn.autocommit = False
+    cur = conn.cursor.return_value
+
+    refresh_facet_caches(conn)
+
+    conn.commit.assert_called_once()
+    executed = [call.args[0] for call in cur.execute.call_args_list]
+    assert executed == [
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.facet_values_mv",
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.facet_ranges_mv",
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.format_options_mv",
+    ]
+    # autocommit is toggled on for the concurrent refresh, then restored.
+    assert conn.autocommit is False
