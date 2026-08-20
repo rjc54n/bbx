@@ -80,10 +80,13 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
   const parentSkus = [...new Set(rows.flatMap((row) => row.parent_sku ? [row.parent_sku] : []))];
   if (parentSkus.length === 0) return { rows: mergeReleasePrices(rows, []), count: count ?? 0 };
   const { data: anchorData, error: anchorError } = await supabase
-    // resolved_release_anchor_view ranks an owner-set price above the imported
-    // anchor; release_price_anchor_view (imported only) would hide owner prices
-    // from the catalogue while every other surface already shows them.
-    .from("resolved_release_anchor_view")
+    // HOTFIX (2026-08-20): reverted from resolved_release_anchor_view. Filtering
+    // that view by parent_sku pushed the predicate through a correlated NOT
+    // EXISTS anti-join over the heavy imported-anchor view, which hung the
+    // catalogue read and exhausted the connection pool (cascading to other
+    // tabs). release_price_anchor_view is the fast, pre-change path. P1-1 (owner
+    // prices in the catalogue) is re-landed separately via a cheap owner lookup.
+    .from("release_price_anchor_view")
     .select("parent_sku, format_code, release_price_p, anchor_status")
     .in("parent_sku", parentSkus);
   // Release evidence enriches the catalogue, but it must never suppress the
