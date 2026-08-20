@@ -7,12 +7,6 @@ import { requireOwner } from "@/lib/auth/owner";
 
 export const dynamic = "force-dynamic";
 
-const TAX_BASES = [
-  { value: "in_bond", label: "In bond" },
-  { value: "duty_paid", label: "Duty paid" },
-  { value: "unknown", label: "Unknown" },
-];
-
 export default async function ReleasePriceHistoryPage({
   params,
   searchParams,
@@ -35,7 +29,7 @@ export default async function ReleasePriceHistoryPage({
     // The anchor row is absent when no imported *and* no owner price exists, so
     // the catalogue row is what keeps this page renderable in that case.
     supabase.from("catalogue_view").select("name, vintage, region, colour, producer, product_url, case_size, bottle_volume_ml, is_listed, ask, highest_bid_p, market_price_p").eq("parent_sku", parentSku).eq("format_code", formatCode).maybeSingle(),
-    supabase.from("owner_release_anchors").select("release_price_p, tax_basis, offer_date, source_note, superseded_source_price_p").eq("wine_ref", wineRef).eq("format_code", formatCode).maybeSingle(),
+    supabase.from("owner_release_anchors").select("release_price_p, offer_date, source_note, superseded_source_price_p").eq("wine_ref", wineRef).eq("format_code", formatCode).maybeSingle(),
     supabase.from("release_offer_evidence_view").select("release_offer_price_id, offer_date, release_price_p, source_wine, source_product_url, match_method, source_message_id").eq("parent_sku", parentSku).eq("format_code", formatCode).order("offer_date"),
   ]);
   if (anchorError || catalogueError || ownerError || evidenceError) throw new Error("Release-price history could not be loaded.");
@@ -87,11 +81,6 @@ export default async function ReleasePriceHistoryPage({
           <label className="grid gap-1 text-xs text-ink-muted">Release price per case (£)
             <input name="price" inputMode="decimal" pattern="\d+(?:\.\d{1,2})?" defaultValue={ownerPricePounds} placeholder="0.00" required className="w-36 rounded border border-border px-3 py-2 text-sm text-ink" />
           </label>
-          <label className="grid gap-1 text-xs text-ink-muted">Tax basis
-            <select name="tax_basis" defaultValue={owner?.tax_basis ?? "in_bond"} className="rounded border border-border px-2 py-2 text-sm text-ink">
-              {TAX_BASES.map((basis) => <option key={basis.value} value={basis.value}>{basis.label}</option>)}
-            </select>
-          </label>
           <label className="grid gap-1 text-xs text-ink-muted">Offer date (optional)
             <input name="offer_date" type="date" defaultValue={owner?.offer_date ?? ""} className="rounded border border-border px-2 py-2 text-sm text-ink" />
           </label>
@@ -103,7 +92,7 @@ export default async function ReleasePriceHistoryPage({
         {owner && <form action={clearOwnerReleaseAnchor.bind(null, parentSku, formatCode, returnPath)} className="mt-3">
           <button type="submit" className="text-sm text-accent underline-offset-2 hover:underline">Remove my price and revert to imported</button>
         </form>}
-        {owner?.tax_basis && owner.tax_basis !== "in_bond" && <p className="mt-3 text-xs text-accent">This price is {owner.tax_basis.replaceAll("_", " ")}; the vs-market and recoup figures assume in-bond, so treat them with care.</p>}
+        <p className="mt-3 text-xs text-ink-muted">Owner prices are recorded in bond, to match the market prices they are compared against. Duty-paid entry is not available yet.</p>
       </section>
 
       <section className="rounded-lg border border-border bg-background">

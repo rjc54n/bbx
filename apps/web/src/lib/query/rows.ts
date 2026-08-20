@@ -2,6 +2,7 @@ import type { Database } from "../database.types";
 
 export type CatalogueRow = Database["public"]["Views"]["catalogue_view"]["Row"] & {
   release_price_p: number | null;
+  anchor_status: string | null;
 };
 export type PriceChangeRow = Database["public"]["Views"]["recent_price_change_view"]["Row"];
 export type FacetValueRow = Database["public"]["Views"]["facet_values_view"]["Row"];
