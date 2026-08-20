@@ -5,7 +5,7 @@
 -- card integration, and the owner-only guard on minimal fixtures.
 
 BEGIN;
-SELECT plan(18);
+SELECT plan(22);
 
 INSERT INTO auth.users (id) VALUES
     ('41000000-0000-0000-0000-000000000001'),
@@ -108,12 +108,35 @@ SELECT throws_ok(
     'P0002', 'format not found for this wine',
     'an unknown format is rejected');
 
+-- In-bond only (v1): non-in-bond input is rejected at the RPC.
+SELECT throws_ok(
+    $$ SELECT public.set_owner_release_anchor('42000000001', '06-00750', 42000, 'duty_paid') $$,
+    '22023', 'only in-bond owner release prices are accepted',
+    'a duty-paid owner price is rejected at the RPC');
+SELECT throws_ok(
+    $$ SELECT public.set_owner_release_anchor('42000000001', '06-00750', 42000, 'unknown') $$,
+    '22023', 'only in-bond owner release prices are accepted',
+    'an unknown-tax-basis owner price is rejected at the RPC');
+
 -- A non-owner authenticated user cannot write.
 SELECT set_config('request.jwt.claims', '{"sub":"41000000-0000-0000-0000-000000000002","role":"authenticated"}', TRUE);
 SELECT throws_ok(
     $$ SELECT public.set_owner_release_anchor('42000000001', '06-00750', 42000) $$,
     '42501', 'not authorised',
     'a non-owner cannot set an owner anchor');
+
+-- In-bond only (v1): the database constraint is the backstop under the RPC.
+RESET ROLE;
+SELECT is(
+    (SELECT count(*) FROM pg_constraint
+     WHERE conname = 'owner_release_anchors_in_bond_only'
+       AND conrelid = 'public.owner_release_anchors'::regclass),
+    1::BIGINT, 'the in-bond CHECK constraint is present on owner_release_anchors');
+SELECT throws_ok(
+    $$ INSERT INTO public.owner_release_anchors (wine_ref, format_code, release_price_p, tax_basis)
+       VALUES ('parent:42000000001', '06-00750', 42000, 'duty_paid') $$,
+    '23514', NULL,
+    'the CHECK constraint rejects a direct non-in-bond insert');
 
 SELECT * FROM finish();
 ROLLBACK;

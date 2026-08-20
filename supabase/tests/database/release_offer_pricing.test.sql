@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(40);
+SELECT plan(48);
 
 INSERT INTO auth.users (id) VALUES
     ('11000000-0000-0000-0000-000000000001'),
@@ -108,6 +108,44 @@ SELECT is((SELECT count(*)::INT FROM public.release_offer_review_view WHERE sour
 -- later file repeating the same content stays out by fingerprint.
 SELECT is((SELECT count(*)::INT FROM public.release_offer_source_rows WHERE source_row_number = 6), 1, 'excluding a group keeps the evidence for restore');
 SELECT is((SELECT count(*)::INT FROM public.release_offer_resolution_events WHERE source_row_number = 6 AND event_type = 'deleted'), 1, 'excluding a group leaves an append-only audit event');
+
+-- Owner-vs-imported head-to-head (P1-1, docs/REVIEW-RESPONSE-2026-08-20.md).
+-- Format 06-00750 of 21000000001 carries a confirmed imported anchor of 11000
+-- (row 3). An owner price must outrank it on every surface that reads the
+-- resolved anchor -- release-price detail and favourites (release_price_market_view),
+-- the wine card (wine_card_format_view) and scenarios (wine_scenario_view) --
+-- without mutating the imported evidence the confirm/reset UI still drives.
+SELECT is(
+    (SELECT release_price_p FROM public.release_price_anchor_view
+     WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
+    11000, 'the imported anchor is 11000 before any owner override');
+SELECT is(
+    public.set_owner_release_anchor('21000000001', '06-00750', 9900)->>'superseded_source_price_p',
+    '11000', 'setting an owner price snapshots the imported anchor it supersedes');
+SELECT is(
+    (SELECT release_price_p FROM public.release_price_anchor_view
+     WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
+    11000, 'the imported anchor view is unchanged by the owner override');
+SELECT is(
+    (SELECT count(*) FROM public.resolved_release_anchor_view
+     WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
+    1::BIGINT, 'the resolved view returns a single anchor, not both branches');
+SELECT is(
+    (SELECT anchor_status || ':' || release_price_p FROM public.resolved_release_anchor_view
+     WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
+    'owner:9900', 'the resolved view returns the owner price and status');
+SELECT is(
+    (SELECT release_price_p FROM public.release_price_market_view
+     WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
+    9900, 'release-price detail and favourites (market view) show the owner price');
+SELECT is(
+    (SELECT release_price_p FROM public.wine_card_format_view
+     WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
+    9900, 'the wine card shows the owner price');
+SELECT is(
+    (SELECT release_price_p FROM public.wine_scenario_view
+     WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
+    9900, 'the scenario view shows the owner price');
 
 RESET ROLE;
 SELECT set_config('request.jwt.claims', '{"sub":"11000000-0000-0000-0000-000000000002","role":"authenticated"}', TRUE);
