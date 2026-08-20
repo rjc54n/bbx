@@ -555,6 +555,38 @@ def commit_sweep(
         cur.close()
 
 
+# The catalogue facet caches (facet_values_mv, facet_ranges_mv,
+# format_options_mv) are global aggregates over skus/products, refreshed once per
+# sweep rather than recomputed on every catalogue load. Kept here beside
+# commit_sweep because a sweep is the only thing that changes their inputs.
+FACET_CACHE_MVIEWS = ("facet_values_mv", "facet_ranges_mv", "format_options_mv")
+
+
+def refresh_facet_caches(conn) -> None:
+    """Refresh the catalogue facet materialized views after a sweep commits.
+
+    REFRESH ... CONCURRENTLY cannot run inside a transaction block, so it runs in
+    autocommit mode and never blocks catalogue readers. Postgres only -- SQLite
+    has no materialized views. The caller treats a failure as non-fatal: a stale
+    facet cache must never fail an otherwise-successful sweep.
+    """
+    if not is_postgres():
+        return
+    conn.commit()  # ensure no open transaction before switching to autocommit
+    previous_autocommit = conn.autocommit
+    conn.autocommit = True
+    try:
+        cur = conn.cursor()
+        try:
+            for mview in FACET_CACHE_MVIEWS:
+                cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY public.{mview}")
+        finally:
+            cur.close()
+        log.info("Refreshed facet caches: %s", ", ".join(FACET_CACHE_MVIEWS))
+    finally:
+        conn.autocommit = previous_autocommit
+
+
 def _apply_disappearances(
     cur, entity_type, seen_keys, current, run_id, now,
     algolia_complete, rest_unchecked_skus, events,
