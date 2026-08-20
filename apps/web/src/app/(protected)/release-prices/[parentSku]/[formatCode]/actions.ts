@@ -20,7 +20,11 @@ export async function setOwnerReleaseAnchor(
 
   const pounds = Number(String(formData.get("price") ?? "").trim());
   if (!Number.isFinite(pounds) || pounds <= 0) redirect(`${returnPath}?owner_error=1`);
-  const taxBasis = String(formData.get("tax_basis") ?? "in_bond").trim();
+  // v1 accepts in-bond owner prices only (the RPC and a DB constraint enforce the
+  // same). The form no longer submits a tax basis; reject any other value that
+  // reaches this layer rather than silently coercing it.
+  const taxBasis = String(formData.get("tax_basis") ?? "in_bond").trim() || "in_bond";
+  if (taxBasis !== "in_bond") redirect(`${returnPath}?owner_error=1`);
   const offerDate = String(formData.get("offer_date") ?? "").trim();
   const sourceNote = String(formData.get("source_note") ?? "").trim();
 
@@ -28,7 +32,7 @@ export async function setOwnerReleaseAnchor(
     p_parent_sku: parentSku,
     p_format_code: formatCode,
     p_release_price_p: Math.round(pounds * 100),
-    p_tax_basis: taxBasis || undefined,
+    p_tax_basis: "in_bond",
     p_offer_date: offerDate || undefined,
     p_source_note: sourceNote || undefined,
   });

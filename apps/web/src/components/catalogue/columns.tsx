@@ -159,7 +159,15 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     id: "release_price_p",
     label: "Release price",
     align: "right",
-    render: (row) => formatPence(row.release_price_p),
+    render: (row) =>
+      row.release_price_p != null && row.anchor_status === "owner" ? (
+        <span className="inline-flex items-center gap-1">
+          {formatPence(row.release_price_p)}
+          <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-ink">owner</span>
+        </span>
+      ) : (
+        formatPence(row.release_price_p)
+      ),
   },
   {
     id: "market_price_p",

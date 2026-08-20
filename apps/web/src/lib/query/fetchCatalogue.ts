@@ -18,23 +18,30 @@ type ReleasePriceAnchorRow = {
   parent_sku: string | null;
   format_code: string | null;
   release_price_p: number | null;
+  anchor_status: string | null;
 };
 
 export function mergeReleasePrices(
   rows: DatabaseCatalogueRow[],
   anchors: ReleasePriceAnchorRow[],
 ): CatalogueRow[] {
-  const prices = new Map(
+  const anchorByKey = new Map(
     anchors
       .filter((anchor): anchor is ReleasePriceAnchorRow & { parent_sku: string; format_code: string } =>
         anchor.parent_sku !== null && anchor.format_code !== null,
       )
-      .map((anchor) => [`${anchor.parent_sku}|${anchor.format_code}`, anchor.release_price_p]),
+      .map((anchor) => [`${anchor.parent_sku}|${anchor.format_code}`, anchor]),
   );
-  return rows.map((row) => ({
-    ...row,
-    release_price_p: prices.get(`${row.parent_sku}|${row.format_code}`) ?? null,
-  }));
+  return rows.map((row) => {
+    const anchor = anchorByKey.get(`${row.parent_sku}|${row.format_code}`);
+    return {
+      ...row,
+      release_price_p: anchor?.release_price_p ?? null,
+      // anchor_status lets the catalogue mark an owner-set price the same way the
+      // wine card and scenarios do.
+      anchor_status: anchor?.anchor_status ?? null,
+    };
+  });
 }
 
 type DatabaseCatalogueRow = Database["public"]["Views"]["catalogue_view"]["Row"];
@@ -73,8 +80,11 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
   const parentSkus = [...new Set(rows.flatMap((row) => row.parent_sku ? [row.parent_sku] : []))];
   if (parentSkus.length === 0) return { rows: mergeReleasePrices(rows, []), count: count ?? 0 };
   const { data: anchorData, error: anchorError } = await supabase
-    .from("release_price_anchor_view")
-    .select("parent_sku, format_code, release_price_p")
+    // resolved_release_anchor_view ranks an owner-set price above the imported
+    // anchor; release_price_anchor_view (imported only) would hide owner prices
+    // from the catalogue while every other surface already shows them.
+    .from("resolved_release_anchor_view")
+    .select("parent_sku, format_code, release_price_p, anchor_status")
     .in("parent_sku", parentSkus);
   // Release evidence enriches the catalogue, but it must never suppress the
   // primary result set if the secondary read is unavailable or its RLS session

@@ -45,16 +45,27 @@ describe("mergeReleasePrices", () => {
   it("adds an exact Parent SKU and format release-price anchor to a catalogue row", () => {
     const rows = [{ parent_sku: "12345678901", format_code: "06-00750", name: "Test wine" }];
     const merged = mergeReleasePrices(rows as never, [{
-      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500,
+      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500, anchor_status: "confirmed",
     }]);
     expect(merged[0].release_price_p).toBe(12500);
+    expect(merged[0].anchor_status).toBe("confirmed");
   });
 
   it("does not apply an anchor from another format", () => {
     const rows = [{ parent_sku: "12345678901", format_code: "12-00750", name: "Test wine" }];
     const merged = mergeReleasePrices(rows as never, [{
-      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500,
+      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500, anchor_status: "confirmed",
     }]);
     expect(merged[0].release_price_p).toBeNull();
+    expect(merged[0].anchor_status).toBeNull();
+  });
+
+  it("carries an owner anchor status through so the catalogue can mark it", () => {
+    const rows = [{ parent_sku: "12345678901", format_code: "06-00750", name: "Test wine" }];
+    const merged = mergeReleasePrices(rows as never, [{
+      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 9900, anchor_status: "owner",
+    }]);
+    expect(merged[0].release_price_p).toBe(9900);
+    expect(merged[0].anchor_status).toBe("owner");
   });
 });
