@@ -9,6 +9,7 @@ import type {
 } from "@/lib/query/registry";
 import { getFilter, removeFilter, setFilter } from "@/lib/query/filterOps";
 import { fetchCatalogue, fetchPriceChanges, PAGE_SIZE, type FetchResult } from "@/lib/query/fetchCatalogue";
+import { describeQueryError } from "@/lib/query/queryError";
 import {
   fetchFacetRanges,
   fetchFacetValues,
@@ -109,7 +110,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(describeQueryError(err));
         setLoadedQuery(queryState);
       });
 
