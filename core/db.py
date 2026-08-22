@@ -8,8 +8,10 @@ Backend selection:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, List, Tuple
@@ -20,12 +22,49 @@ try:
 except ImportError:
     psycopg2 = None
 
+log = logging.getLogger(__name__)
+
 SQLITE_PATH = Path(__file__).parent.parent / "data" / "scan_store.sqlite"
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
+
+# Supabase free-tier projects auto-pause after inactivity. The first connection
+# after a pause fails (the pooler can't reach the DB to run its auth query:
+# "EAUTHQUERY ... connection to database not available") but that attempt wakes
+# the project, so a short backoff-and-retry lets the daily sweep ride through a
+# cold start instead of failing the whole run.
+_CONNECT_ATTEMPTS = 5
+_CONNECT_BACKOFF_SECONDS = (5, 15, 30, 45)
 
 
 def is_postgres() -> bool:
     return bool(os.environ.get("DATABASE_URL"))
+
+
+def _connect_postgres():
+    """Connect to Postgres, retrying transient errors (e.g. cold-start wake)."""
+    last_error = None
+    for attempt in range(1, _CONNECT_ATTEMPTS + 1):
+        try:
+            return psycopg2.connect(
+                os.environ["DATABASE_URL"],
+                cursor_factory=psycopg2.extras.RealDictCursor,
+            )
+        except psycopg2.OperationalError as exc:
+            last_error = exc
+            if attempt == _CONNECT_ATTEMPTS:
+                break
+            delay = _CONNECT_BACKOFF_SECONDS[
+                min(attempt - 1, len(_CONNECT_BACKOFF_SECONDS) - 1)
+            ]
+            log.warning(
+                "Postgres connect attempt %d/%d failed (%s); retrying in %ds",
+                attempt,
+                _CONNECT_ATTEMPTS,
+                str(exc).splitlines()[0],
+                delay,
+            )
+            time.sleep(delay)
+    raise last_error
 
 
 @contextmanager
@@ -33,10 +72,7 @@ def get_connection():
     if is_postgres():
         if psycopg2 is None:
             raise ImportError("psycopg2 required for Postgres; pip install psycopg2-binary")
-        conn = psycopg2.connect(
-            os.environ["DATABASE_URL"],
-            cursor_factory=psycopg2.extras.RealDictCursor,
-        )
+        conn = _connect_postgres()
         try:
             _configure_postgres_search_path(conn)
             yield conn

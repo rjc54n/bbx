@@ -3,6 +3,7 @@ import sqlite3
 
 import pytest
 
+import core.db
 from core.db import (
     bootstrap_schema,
     is_postgres,
@@ -10,6 +11,7 @@ from core.db import (
     placeholders,
     _adapt_array_param,
     _configure_postgres_search_path,
+    _connect_postgres,
     _parse_array_column,
 )
 
@@ -102,6 +104,68 @@ class TestPostgresSearchPath:
             _configure_postgres_search_path(conn)
 
         assert conn.cursor_instance.closed
+
+
+try:
+    import psycopg2 as _psycopg2
+except ImportError:
+    _psycopg2 = None
+
+
+@pytest.mark.skipif(_psycopg2 is None, reason="psycopg2 not installed")
+class TestConnectRetry:
+    """Cold-start (paused Supabase project) should be retried, not fatal."""
+
+    def _patch(self, monkeypatch, side_effects):
+        calls = {"connect": 0, "sleeps": []}
+
+        def fake_connect(*args, **kwargs):
+            outcome = side_effects[calls["connect"]]
+            calls["connect"] += 1
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/test")
+        monkeypatch.setattr(_psycopg2, "connect", fake_connect)
+        monkeypatch.setattr(core.db.time, "sleep", lambda d: calls["sleeps"].append(d))
+        return calls
+
+    def test_retries_then_succeeds(self, monkeypatch):
+        psycopg2 = _psycopg2
+        sentinel = object()
+        calls = self._patch(
+            monkeypatch,
+            [
+                psycopg2.OperationalError("EAUTHQUERY: connection to database not available"),
+                psycopg2.OperationalError("EAUTHQUERY: connection to database not available"),
+                sentinel,
+            ],
+        )
+
+        assert _connect_postgres() is sentinel
+        assert calls["connect"] == 3
+        assert calls["sleeps"] == [5, 15]
+
+    def test_exhausts_attempts_and_raises_last_error(self, monkeypatch):
+        psycopg2 = _psycopg2
+        calls = self._patch(
+            monkeypatch,
+            [psycopg2.OperationalError(f"attempt {i}") for i in range(core.db._CONNECT_ATTEMPTS)],
+        )
+
+        with pytest.raises(psycopg2.OperationalError, match="attempt 4"):
+            _connect_postgres()
+        assert calls["connect"] == core.db._CONNECT_ATTEMPTS
+
+    def test_does_not_retry_programming_errors(self, monkeypatch):
+        psycopg2 = _psycopg2
+        calls = self._patch(monkeypatch, [psycopg2.ProgrammingError("bad password")])
+
+        with pytest.raises(psycopg2.ProgrammingError):
+            _connect_postgres()
+        assert calls["connect"] == 1
+        assert calls["sleeps"] == []
 
 
 class TestBootstrap:
