@@ -27,11 +27,16 @@ log = logging.getLogger(__name__)
 SQLITE_PATH = Path(__file__).parent.parent / "data" / "scan_store.sqlite"
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
-# Supabase free-tier projects auto-pause after inactivity. The first connection
-# after a pause fails (the pooler can't reach the DB to run its auth query:
-# "EAUTHQUERY ... connection to database not available") but that attempt wakes
-# the project, so a short backoff-and-retry lets the daily sweep ride through a
-# cold start instead of failing the whole run.
+# Supabase free-tier projects auto-pause after inactivity. The first work
+# against the DB after a pause can fail in more than one place while it wakes:
+# the pooler's auth query can fail outright (EAUTHQUERY), pool checkout can
+# time out (ECHECKOUTTIMEOUT), and even a successful connection can still run
+# against a compute that hasn't finished warming up, so a normally-fast query
+# trips Postgres's own statement timeout (QueryCanceled -- itself a subclass
+# of OperationalError). Manual re-runs never hit this because by then the
+# project has already been woken by the failed scheduled attempt; the
+# scheduled run has to ride out the cold start unattended, so transient
+# OperationalErrors are retried with backoff wherever they've been observed.
 _CONNECT_ATTEMPTS = 5
 _CONNECT_BACKOFF_SECONDS = (5, 15, 30, 45)
 
@@ -40,24 +45,29 @@ def is_postgres() -> bool:
     return bool(os.environ.get("DATABASE_URL"))
 
 
-def _connect_postgres():
-    """Connect to Postgres, retrying transient errors (e.g. cold-start wake)."""
+def retry_transient(operation_name: str, fn, *, before_retry=None):
+    """Call fn(), retrying psycopg2.OperationalError with backoff.
+
+    before_retry, if given, runs after a failed attempt and before the sleep
+    -- e.g. conn.rollback() to clear the aborted-transaction state a
+    mid-query OperationalError (like a statement timeout) leaves behind.
+    """
     last_error = None
     for attempt in range(1, _CONNECT_ATTEMPTS + 1):
         try:
-            return psycopg2.connect(
-                os.environ["DATABASE_URL"],
-                cursor_factory=psycopg2.extras.RealDictCursor,
-            )
+            return fn()
         except psycopg2.OperationalError as exc:
             last_error = exc
             if attempt == _CONNECT_ATTEMPTS:
                 break
+            if before_retry is not None:
+                before_retry()
             delay = _CONNECT_BACKOFF_SECONDS[
                 min(attempt - 1, len(_CONNECT_BACKOFF_SECONDS) - 1)
             ]
             log.warning(
-                "Postgres connect attempt %d/%d failed (%s); retrying in %ds",
+                "%s attempt %d/%d failed (%s); retrying in %ds",
+                operation_name,
                 attempt,
                 _CONNECT_ATTEMPTS,
                 str(exc).splitlines()[0],
@@ -65,6 +75,17 @@ def _connect_postgres():
             )
             time.sleep(delay)
     raise last_error
+
+
+def _connect_postgres():
+    """Connect to Postgres, retrying transient errors (e.g. cold-start wake)."""
+    return retry_transient(
+        "Postgres connect",
+        lambda: psycopg2.connect(
+            os.environ["DATABASE_URL"],
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        ),
+    )
 
 
 @contextmanager

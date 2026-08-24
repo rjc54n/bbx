@@ -13,6 +13,7 @@ from core.db import (
     _configure_postgres_search_path,
     _connect_postgres,
     _parse_array_column,
+    retry_transient,
 )
 
 
@@ -166,6 +167,44 @@ class TestConnectRetry:
             _connect_postgres()
         assert calls["connect"] == 1
         assert calls["sleeps"] == []
+
+
+@pytest.mark.skipif(_psycopg2 is None, reason="psycopg2 not installed")
+class TestRetryTransient:
+    """retry_transient is the general form used past connect time too --
+    e.g. a query that hits a statement timeout while the DB is still
+    waking from a Supabase free-tier pause."""
+
+    def test_runs_before_retry_hook_between_attempts(self, monkeypatch):
+        psycopg2 = _psycopg2
+        hook_calls = []
+        attempts = {"n": 0}
+
+        def flaky():
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise psycopg2.OperationalError("canceling statement due to statement timeout")
+            return "ok"
+
+        monkeypatch.setattr(core.db.time, "sleep", lambda d: None)
+
+        result = retry_transient(
+            "load_current_products", flaky, before_retry=lambda: hook_calls.append(1)
+        )
+
+        assert result == "ok"
+        assert attempts["n"] == 3
+        assert len(hook_calls) == 2  # once per failed attempt, not on the final success
+
+    def test_before_retry_not_called_when_exhausted_without_hook(self, monkeypatch):
+        psycopg2 = _psycopg2
+        monkeypatch.setattr(core.db.time, "sleep", lambda d: None)
+
+        def always_fails():
+            raise psycopg2.OperationalError("still cold")
+
+        with pytest.raises(psycopg2.OperationalError, match="still cold"):
+            retry_transient("op", always_fails)
 
 
 class TestBootstrap:
