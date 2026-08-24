@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-from core.db import bootstrap_schema
+from core.db import bootstrap_schema, is_postgres, retry_transient
 from core.fetch_listings import FetchResult, fetch_biddable_universe
 from core.models import (
     ObservationEvent,
@@ -534,7 +534,20 @@ def run_daily_sweep(
         # Load it before selection so baseline retries, new products and
         # missed rotation days can be selected from evidence rather than run
         # history alone.
-        current_products = load_current_products(conn)
+        #
+        # This is the sweep's first substantial read after the long
+        # Algolia-only discovery phase; on a cold-started (post-pause)
+        # Supabase project it's the first point a slow-to-warm compute has
+        # shown up as a statement timeout, so retry transient failures here
+        # too rather than just at connect time.
+        if is_postgres():
+            current_products = retry_transient(
+                "load_current_products",
+                lambda: load_current_products(conn),
+                before_retry=conn.rollback,
+            )
+        else:
+            current_products = load_current_products(conn)
         last_rest_checked_at_by_parent = {
             psku: row.get("last_rest_checked_at")
             for psku, row in current_products.items()
@@ -816,5 +829,9 @@ def run_daily_sweep(
 
     except Exception as e:
         log.exception("Sweep run %s failed", run_id)
+        # A DB-level exception (e.g. a statement timeout) leaves the connection
+        # in an aborted-transaction state; every statement fails with
+        # InFailedSqlTransaction until it's rolled back.
+        conn.rollback()
         mark_run_failed(conn, run_id, str(e))
         raise
