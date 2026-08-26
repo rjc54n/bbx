@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
 import { validateNewPassword } from "@/lib/auth/password";
-import { supabase } from "@/lib/supabase";
+import { recoverySupabase as supabase } from "@/lib/supabase/recovery";
 
 type RecoveryStatus = "checking" | "ready" | "invalid" | "saving";
 
