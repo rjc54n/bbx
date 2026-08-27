@@ -314,6 +314,10 @@ UPDATE private.skus
 SET highest_bid_p = 33000
 WHERE parent_sku = '20000000001'
   AND format_code = '06-00750';
+-- In production the sweep writes private.skus and refreshes the caches in the
+-- same run, so the cellar view still tracks the scanner without a new cellar
+-- import -- which is what this asserts. The test has to do both halves too.
+SELECT private.rebuild_catalogue_caches();
 SET LOCAL ROLE authenticated;
 
 SELECT is(
@@ -330,6 +334,7 @@ UPDATE private.skus
 SET gone_since = now()
 WHERE parent_sku = '20000000001'
   AND format_code = '06-00750';
+SELECT private.rebuild_catalogue_caches();
 SET LOCAL ROLE authenticated;
 
 SELECT is(
