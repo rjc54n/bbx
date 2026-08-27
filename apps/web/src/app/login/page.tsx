@@ -7,6 +7,7 @@ type LoginPageProps = {
   searchParams: Promise<{
     password_updated?: string;
     recovery_error?: string;
+    denied?: string;
     next?: string;
   }>;
 };
@@ -30,6 +31,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             role="status"
           >
             Your password has been saved. Sign in with it below.
+          </p>
+        )}
+        {query.denied === "1" && (
+          <p
+            className="mb-4 rounded border border-accent/30 bg-accent-soft px-3 py-2 text-sm text-accent"
+            role="alert"
+          >
+            Sign in with the owner account to continue.
           </p>
         )}
         {query.recovery_error === "1" && (
