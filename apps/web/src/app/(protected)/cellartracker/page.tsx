@@ -10,6 +10,7 @@ import {
   cellarTrackerRecordsRange,
   parseCellarTrackerRecordsQuery,
 } from "@/lib/cellartracker/recordsBrowser";
+import { timeProtectedQuery } from "@/lib/observability/routeTiming";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +30,11 @@ export default async function CellarTrackerPage({
     let request = supabase.from("current_cellartracker_records").select("*", { count: "exact" });
     if (query.search) request = request.or(buildCellarTrackerRecordsSearchFilter(query.search));
     const { from, to } = cellarTrackerRecordsRange(page);
-    return request
+    return timeProtectedQuery("/cellartracker", "records_page", async () => request
       .order("source_wine", { ascending: true })
       .order("import_id", { ascending: true })
       .order("source_row_number", { ascending: true })
-      .range(from, to);
+      .range(from, to));
   }
 
   let page = query.page;
@@ -52,7 +53,7 @@ export default async function CellarTrackerPage({
     { parentSkus, pending },
     { count: excludedCount },
     { data: totals, error: totalsError },
-  ] = await Promise.all([
+  ] = await timeProtectedQuery("/cellartracker", "summary_data", () => Promise.all([
     loadFavourites(owner, "cellartracker"),
     supabase.from("cellartracker_excluded_record_view").select("*", { count: "exact", head: true }),
     // Whole-snapshot totals for the header, independent of search and page. One
@@ -61,7 +62,7 @@ export default async function CellarTrackerPage({
     // current_cellartracker_records.
     supabase.from("cellartracker_snapshot_totals_view")
       .select("record_count,bottles_home,bottles_bbr").maybeSingle(),
-  ]);
+  ]));
   if (totalsError) throw new Error("CellarTracker snapshot totals could not be loaded.");
   const cellarRecords = totals?.record_count ?? 0;
   const cellarBottles = (totals?.bottles_home ?? 0) + (totals?.bottles_bbr ?? 0);

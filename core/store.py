@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from core.db import is_postgres, placeholder, placeholders, _adapt_array_param, _parse_array_column
 from core.models import ObservationEvent, Offer, Product, Sku, _now_utc, _uuid
@@ -137,6 +139,22 @@ def mark_run_failed(conn, run_id: str, error_message: str) -> None:
         f"UPDATE scan_runs SET status='failed', finished_at={p}, error_message={p} "
         f"WHERE id={p}",
         (_now_utc(), error_message, run_id),
+    )
+    conn.commit()
+    cur.close()
+
+
+def mark_run_partial(conn, run_id: str, error_message: str) -> None:
+    """Record a committed source scan whose read-model refresh did not finish.
+
+    Source rows remain committed. `partial` tells operators that the catalogue
+    cache can be stale without rewriting or replaying that source mutation.
+    """
+    p = placeholder()
+    cur = conn.cursor()
+    cur.execute(
+        f"UPDATE scan_runs SET status='partial', error_message={p} WHERE id={p}",
+        (error_message, run_id),
     )
     conn.commit()
     cur.close()
@@ -595,7 +613,25 @@ def refresh_facet_caches(conn) -> None:
 CATALOGUE_CACHE_MVIEWS = ("catalogue_mv", "wine_market_summary_mv")
 
 
-def refresh_catalogue_caches(conn) -> None:
+@dataclass(frozen=True)
+class CatalogueCacheRefreshResult:
+    success: bool
+    attempts: int
+    reason: Optional[str] = None
+
+
+def _is_ambiguous_transport_failure(exc: Exception) -> bool:
+    """A lost database connection does not prove the REFRESH did not run."""
+    name = type(exc).__name__.lower()
+    return any(token in name for token in ("operationalerror", "interfaceerror", "connection", "timeout"))
+
+
+def refresh_catalogue_caches(
+    conn,
+    *,
+    max_attempts: int = 3,
+    sleep: Callable[[float], None] = time.sleep,
+) -> CatalogueCacheRefreshResult:
     """Refresh the catalogue read-model materialized views after a sweep commits.
 
     Same mechanics and the same non-fatal contract as refresh_facet_caches:
@@ -605,25 +641,42 @@ def refresh_catalogue_caches(conn) -> None:
     to a successful one, and every catalogue surface reads through these.
     """
     if not is_postgres():
-        return
+        return CatalogueCacheRefreshResult(success=True, attempts=0)
     conn.commit()  # ensure no open transaction before switching to autocommit
     previous_autocommit = conn.autocommit
     conn.autocommit = True
     try:
-        cur = conn.cursor()
-        try:
-            for mview in CATALOGUE_CACHE_MVIEWS:
-                cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY public.{mview}")
-                cur.execute(f"SELECT count(*) FROM public.{mview}")
-                (rows,) = cur.fetchone()
-                log.info("Refreshed %s: %d rows", mview, rows)
-                if rows == 0:
-                    log.warning(
-                        "%s refreshed to zero rows -- every catalogue surface "
-                        "reads through it and will now be empty", mview,
+        attempts = max(1, max_attempts)
+        for attempt in range(1, attempts + 1):
+            cur = conn.cursor()
+            try:
+                for mview in CATALOGUE_CACHE_MVIEWS:
+                    cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY public.{mview}")
+                    cur.execute(f"SELECT count(*) FROM public.{mview}")
+                    (rows,) = cur.fetchone()
+                    log.info("Refreshed %s: %d rows", mview, rows)
+                    if rows == 0:
+                        log.warning(
+                            "%s refreshed to zero rows -- every catalogue surface "
+                            "reads through it and will now be empty", mview,
+                        )
+                return CatalogueCacheRefreshResult(success=True, attempts=attempt)
+            except Exception as exc:
+                reason = f"catalogue cache refresh failed ({type(exc).__name__})"
+                ambiguous = _is_ambiguous_transport_failure(exc)
+                if attempt == attempts or ambiguous:
+                    log.exception(
+                        "Catalogue cache refresh failed after %d attempt%s%s",
+                        attempt,
+                        "" if attempt == 1 else "s",
+                        "; not retrying after an ambiguous transport failure" if ambiguous else "",
                     )
-        finally:
-            cur.close()
+                    return CatalogueCacheRefreshResult(success=False, attempts=attempt, reason=reason)
+                delay = (1.0, 3.0)[min(attempt - 1, 1)]
+                log.warning("Catalogue cache refresh attempt %d/%d failed; retrying in %.0fs", attempt, attempts, delay, exc_info=True)
+                sleep(delay)
+            finally:
+                cur.close()
     finally:
         conn.autocommit = previous_autocommit
 

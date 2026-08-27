@@ -9,7 +9,6 @@ import type {
 } from "@/lib/query/registry";
 import { getFilter, removeFilter, setFilter } from "@/lib/query/filterOps";
 import { fetchCatalogue, fetchPriceChanges, PAGE_SIZE, type FetchResult } from "@/lib/query/fetchCatalogue";
-import { describeQueryError } from "@/lib/query/queryError";
 import {
   fetchFacetRanges,
   fetchFacetValues,
@@ -65,25 +64,33 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
   const [facetValues, setFacetValues] = useState<FacetValues>({});
   const [facetRanges, setFacetRanges] = useState<FacetRanges | null>(null);
   const [formatOptions, setFormatOptions] = useState<FormatOption[]>([]);
+  const [facetError, setFacetError] = useState<string | null>(null);
+  const [facetRetry, setFacetRetry] = useState(0);
 
   useEffect(() => {
     if (queryState.mode === "price-changes") return;
     let cancelled = false;
-    Promise.all([fetchFacetValues(), fetchFacetRanges(), fetchFormatOptions()]).then(([values, ranges, formats]) => {
-      if (!cancelled) {
-        setFacetValues(values);
-        setFacetRanges(ranges);
-        setFormatOptions(formats);
-      }
-    });
+    Promise.all([fetchFacetValues(), fetchFacetRanges(), fetchFormatOptions()])
+      .then(([values, ranges, formats]) => {
+        if (!cancelled) {
+          setFacetValues(values);
+          setFacetRanges(ranges);
+          setFormatOptions(formats);
+          setFacetError(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFacetError("Filters are temporarily unavailable.");
+      });
     return () => {
       cancelled = true;
     };
-  }, [queryState.mode]);
+  }, [queryState.mode, facetRetry]);
 
   const [catalogueResult, setCatalogueResult] = useState<FetchResult<CatalogueRow>>({ rows: [], count: 0 });
   const [priceChangeResult, setPriceChangeResult] = useState<FetchResult<PriceChangeRow>>({ rows: [], count: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [resultRetry, setResultRetry] = useState(0);
   // Which QueryState the current result/error reflects. `loading` is derived
   // by comparing this against the live queryState below, rather than a
   // separate setLoading(true) at the top of the effect -- calling setState
@@ -108,21 +115,26 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
         setError(null);
         setLoadedQuery(queryState);
       })
-      .catch((err) => {
+      .catch(() => {
         if (cancelled) return;
-        setError(describeQueryError(err));
+        setError("The catalogue could not be loaded. Try again.");
         setLoadedQuery(queryState);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [queryState]);
+  }, [queryState, resultRetry]);
 
   const loading = loadedQuery !== queryState;
 
   function handleReset() {
     pushQuery(startingPointFor(queryState.mode).initialState);
+  }
+
+  function retryResults() {
+    setLoadedQuery(null);
+    setResultRetry((current) => current + 1);
   }
 
   function handlePageChange(page: number) {
@@ -205,7 +217,9 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
       {!isPriceChanges && (
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
           <SearchBar value={searchValue} onCommit={handleSetSearch} />
-          <FilterStrip
+          {facetError ? <div role="alert" className="rounded border border-accent/40 bg-accent-soft px-3 py-2 text-sm text-accent">
+            Filters are temporarily unavailable. <button type="button" onClick={() => setFacetRetry((current) => current + 1)} className="underline underline-offset-2">Try again</button>
+          </div> : <FilterStrip
             key={queryState.mode}
             filters={queryState.filters}
             facetValues={facetValues}
@@ -214,7 +228,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
             onSetFilter={handleSetFilter}
             onRemoveFilter={handleRemoveFilter}
             onSetFormat={handleSetFormat}
-          />
+          />}
         </div>
       )}
 
@@ -256,12 +270,6 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
         </div>
       </div>
 
-      {error && (
-        <div className="mx-4 mb-2 rounded border border-accent/40 bg-accent-soft px-3 py-2 text-sm text-accent">
-          {error}
-        </div>
-      )}
-
       {isPriceChanges ? (
         <DataTable
           columns={visiblePriceChangeColumns}
@@ -271,6 +279,8 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
           onSortChange={(field, dir) => pushQuery({ mode: "price-changes", filters: [], sort: { field, dir }, page: 0 })}
           loading={loading}
           emptyMessage="No price changes match this view."
+          errorMessage={error}
+          onRetry={retryResults}
         />
       ) : (
         <DataTable
@@ -281,6 +291,8 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
           onSortChange={(field, dir) => pushQuery({ ...queryState, sort: { field, dir }, page: 0 })}
           loading={loading}
           emptyMessage="No results match these filters."
+          errorMessage={error}
+          onRetry={retryResults}
         />
       )}
 

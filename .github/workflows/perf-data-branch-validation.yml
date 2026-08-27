@@ -1,0 +1,76 @@
+name: Performance validation on Supabase data branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Reviewed commit SHA to validate
+        required: true
+        type: string
+      validation_sql_path:
+        description: Repository path to the reviewed branch-only equivalence and timing SQL
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-perf-validation-${{ vars.PERFCHECK_BRANCH_NAME }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate read-model change on data branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # This protected environment contains only disposable branch credentials.
+    # GitHub Actions does not support an `environment.deployment: false` job
+    # field. Using the environment is what enforces the required approval.
+    environment:
+      name: supabase-perf-validation
+    env:
+      PERFCHECK_DATABASE_URL: ${{ secrets.PERFCHECK_DATABASE_URL }}
+      PERFCHECK_SUPABASE_URL: ${{ secrets.PERFCHECK_SUPABASE_URL }}
+      PERFCHECK_PUBLISHABLE_KEY: ${{ secrets.PERFCHECK_PUBLISHABLE_KEY }}
+      PERFCHECK_PROJECT_REF: ${{ vars.PERFCHECK_PROJECT_REF }}
+      PERFCHECK_BRANCH_NAME: ${{ vars.PERFCHECK_BRANCH_NAME }}
+      VALIDATION_SQL_PATH: ${{ inputs.validation_sql_path }}
+
+    steps:
+      - name: Check out the approved commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+
+      - name: Confirm branch-only target and reviewed SQL
+        shell: bash
+        run: |
+          test -n "$PERFCHECK_DATABASE_URL"
+          test -n "$PERFCHECK_PROJECT_REF"
+          test -n "$PERFCHECK_BRANCH_NAME"
+          [[ "$PERFCHECK_BRANCH_NAME" =~ ^perf-validation-[0-9a-f]{7,40}$ ]]
+          test -f "$VALIDATION_SQL_PATH"
+          test "$(git rev-parse HEAD)" = "${{ inputs.commit_sha }}"
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Apply pending migrations to the data branch
+        run: supabase db push --db-url "$PERFCHECK_DATABASE_URL"
+
+      - name: Run reviewed equivalence and timing checks
+        run: psql "$PERFCHECK_DATABASE_URL" --set ON_ERROR_STOP=1 --file "$VALIDATION_SQL_PATH"
+
+      - name: Run branch-configured web checks
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm run test:live
+
+      - name: Remove the validation schema
+        if: always()
+        run: psql "$PERFCHECK_DATABASE_URL" --set ON_ERROR_STOP=1 --command 'DROP SCHEMA IF EXISTS perf_validation CASCADE'

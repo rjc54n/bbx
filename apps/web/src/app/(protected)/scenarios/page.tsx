@@ -3,6 +3,7 @@ import { requireOwner } from "@/lib/auth/owner";
 import { formatDate } from "@/lib/format";
 import { parseScenarioDefinition } from "@/lib/scenarios/definition";
 import { SCENARIO_FILTERS, type ScenarioFilterField } from "@/lib/scenarios/registry";
+import { timeProtectedQuery } from "@/lib/observability/routeTiming";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ type ScenarioRow = { id: string; name: string; definition: unknown; updated_at: 
 
 function summarise(definition: unknown): string {
   const { filters } = parseScenarioDefinition(definition);
-  if (filters.length === 0) return "All biddable formats";
+  if (filters.length === 0) return "Needs at least one filter";
   return filters.map((filter) => {
     const label = SCENARIO_FILTERS[filter.field as ScenarioFilterField]?.label ?? filter.field;
     if (filter.kind === "range") {
@@ -31,10 +32,10 @@ export default async function ScenariosPage({
 }) {
   const query = await searchParams;
   const owner = await requireOwner();
-  const { data, error } = await owner.supabase
+  const { data, error } = await timeProtectedQuery("/scenarios", "saved_scenarios_list", async () => owner.supabase
     .from("saved_scenarios")
     .select("id,name,definition,updated_at")
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false }));
   if (error) throw new Error("Saved scenarios could not be loaded.");
   const scenarios = (data ?? []) as ScenarioRow[];
 
@@ -55,6 +56,7 @@ export default async function ScenariosPage({
 
     {query.deleted && <p role="status" className="border-b border-green-700/30 bg-green-50 px-5 py-3 text-sm text-green-900">The scenario was deleted.</p>}
     {query.error === "name" && <p role="alert" className="border-b border-red-700/30 bg-background px-5 py-3 text-sm text-red-800">A scenario needs a name of 1–120 characters.</p>}
+    {query.error === "filters" && <p role="alert" className="border-b border-red-700/30 bg-background px-5 py-3 text-sm text-red-800">Add at least one valid filter before saving a scenario.</p>}
     {query.error === "save" && <p role="alert" className="border-b border-red-700/30 bg-background px-5 py-3 text-sm text-red-800">The scenario could not be saved.</p>}
 
     <div className="min-h-0 flex-1 overflow-auto p-5">

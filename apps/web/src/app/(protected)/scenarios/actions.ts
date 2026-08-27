@@ -27,6 +27,7 @@ export async function createScenario(formData: FormData): Promise<never> {
   if (!name || name.length > 120) redirect("/scenarios?error=name");
   // Round-trip through the validator so only registry-valid filters persist.
   const definition = parseScenarioDefinition(readDefinition(formData));
+  if (definition.filters.length === 0) redirect("/scenarios?error=filters");
 
   const { data, error } = await context.supabase
     .from("saved_scenarios")
@@ -46,6 +47,7 @@ export async function updateScenario(id: string, formData: FormData): Promise<ne
   const name = readName(formData);
   if (!name || name.length > 120) redirect(`${returnPath}?error=name`);
   const definition = parseScenarioDefinition(readDefinition(formData));
+  if (definition.filters.length === 0) redirect(`${returnPath}?error=filters`);
 
   const { error } = await context.supabase
     .from("saved_scenarios")

@@ -23,6 +23,7 @@ from core.sweep import (
     parse_index_last_update,
     rotation_bucket_for_date,
     run_daily_sweep,
+    report_catalogue_cache_failure,
     select_biddable_rest_pricing,
 )
 
@@ -84,6 +85,26 @@ def _fetch_result(hits, complete=True):
         collected_count=len(hits),
         truncated=not complete,
     )
+
+
+def test_report_catalogue_cache_failure_marks_partial_and_sends_one_alert(conn, monkeypatch):
+    run_id = sweep.start_run(conn, scope="full_book", run_date="2026-07-18")
+    sent = []
+    monkeypatch.setattr(sweep, "send_slack_message", lambda text: sent.append(text) or True)
+
+    report_catalogue_cache_failure(
+        conn,
+        run_id,
+        attempts=3,
+        reason="catalogue cache refresh failed (ProgrammingError)",
+    )
+
+    row = dict(conn.execute("SELECT status, error_message FROM scan_runs WHERE id=?", (run_id,)).fetchone())
+    assert row["status"] == "partial"
+    assert row["error_message"] == "catalogue cache refresh failed (ProgrammingError)"
+    assert sent == [
+        f"BBX sweep {run_id}: source data committed, but catalogue caches did not refresh after 3 attempts. catalogue cache refresh failed (ProgrammingError)"
+    ]
 
 
 # ---------------------------------------------------------------

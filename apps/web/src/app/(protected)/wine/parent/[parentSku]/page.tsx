@@ -6,6 +6,7 @@ import { isTargetFavourited } from "@/lib/favourites/server";
 import { perBottleP } from "@/lib/favourites/browser";
 import { formatDate, formatDateTime, formatFormat, formatPence, formatSignedPct } from "@/lib/format";
 import { bbrProductUrl } from "@/lib/listingLinks";
+import { timeProtectedQuery } from "@/lib/observability/routeTiming";
 
 export const dynamic = "force-dynamic";
 
@@ -133,7 +134,7 @@ export default async function WinePage({ params }: {
   const owner = await requireOwner();
   const { supabase } = owner;
 
-  const [wineCard, formatRows, releases, cellartracker, holdings, suggestion, favourited] = await Promise.all([
+  const [wineCard, formatRows, releases, cellartracker, holdings, suggestion, favourited] = await timeProtectedQuery("/wine/parent/[parentSku]", "wine_page_data", () => Promise.all([
     supabase.from("wine_card_view")
       .select("wine_ref,parent_sku,name,vintage,producer,country,region,subregion,colour,product_url,is_biddable")
       .eq("parent_sku", parentSku).maybeSingle(),
@@ -154,7 +155,7 @@ export default async function WinePage({ params }: {
     supabase.from("release_offer_match_suggestion_view")
       .select("name,vintage,producer,region").eq("parent_sku", parentSku).limit(1).maybeSingle(),
     isTargetFavourited(owner, { kind: "wine", parentSku }),
-  ]);
+  ]));
 
   for (const [what, result] of [
     ["Wine", wineCard], ["Catalogue formats", formatRows], ["Release anchors", formatRows],

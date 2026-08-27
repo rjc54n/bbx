@@ -15,8 +15,10 @@ from core.store import (
     load_current_products,
     load_current_skus,
     mark_run_failed,
+    mark_run_partial,
     process_disappearances,
     refresh_facet_caches,
+    refresh_catalogue_caches,
     start_run,
     update_run_discovery,
     update_run_rest,
@@ -484,6 +486,20 @@ class TestMarkRunFailed:
         assert row["finished_at"] is not None
 
 
+class TestMarkRunPartial:
+    def test_preserves_committed_finish_time_and_records_reason(self, conn):
+        run_id = start_run(conn, scope="full_book", run_date="2026-07-19")
+        conn.execute("UPDATE scan_runs SET status='completed', finished_at='2026-07-19T12:00:00Z' WHERE id=?", (run_id,))
+        conn.commit()
+        mark_run_partial(conn, run_id, "catalogue cache refresh failed (ProgrammingError)")
+        row = dict(conn.execute("SELECT status, error_message, finished_at FROM scan_runs WHERE id=?", (run_id,)).fetchone())
+        assert row == {
+            "status": "partial",
+            "error_message": "catalogue cache refresh failed (ProgrammingError)",
+            "finished_at": "2026-07-19T12:00:00Z",
+        }
+
+
 class TestPostgresConnectionCompat:
     def test_update_run_discovery_uses_cursor(self):
         conn, cur = _pg_like_conn()
@@ -554,3 +570,46 @@ def test_refresh_facet_caches_refreshes_each_view_concurrently(monkeypatch):
     ]
     # autocommit is toggled on for the concurrent refresh, then restored.
     assert conn.autocommit is False
+
+
+def test_refresh_catalogue_caches_retries_then_refreshes_both_views(monkeypatch):
+    monkeypatch.setattr("core.store.is_postgres", lambda: True)
+    conn = MagicMock()
+    conn.autocommit = False
+    first = MagicMock()
+    first.execute.side_effect = [RuntimeError("temporary database error")]
+    second = MagicMock()
+    second.fetchone.return_value = (10,)
+    conn.cursor.side_effect = [first, second]
+    pauses = []
+
+    result = refresh_catalogue_caches(conn, sleep=pauses.append)
+
+    assert result.success is True
+    assert result.attempts == 2
+    assert pauses == [1.0]
+    assert [call.args[0] for call in second.execute.call_args_list] == [
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.catalogue_mv",
+        "SELECT count(*) FROM public.catalogue_mv",
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.wine_market_summary_mv",
+        "SELECT count(*) FROM public.wine_market_summary_mv",
+    ]
+    assert conn.autocommit is False
+
+
+def test_refresh_catalogue_caches_does_not_retry_ambiguous_transport_failure(monkeypatch):
+    class OperationalError(Exception):
+        pass
+
+    monkeypatch.setattr("core.store.is_postgres", lambda: True)
+    conn = MagicMock()
+    conn.autocommit = False
+    cur = conn.cursor.return_value
+    cur.execute.side_effect = OperationalError("connection lost")
+    pauses = []
+
+    result = refresh_catalogue_caches(conn, sleep=pauses.append)
+
+    assert result.success is False
+    assert result.attempts == 1
+    assert pauses == []

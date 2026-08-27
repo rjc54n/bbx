@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { FilterMeta } from "@/lib/query/registry";
 import type { AppliedFilter } from "@/lib/query/applyFilters";
 import type { SortDir } from "@/lib/scenarios/definition";
+import { parseScenarioDefinition } from "@/lib/scenarios/definition";
 import {
   SCENARIO_ANCHOR_STATUSES,
   SCENARIO_FILTERS,
@@ -46,6 +47,10 @@ export function ScenarioEditor({
   const addable = FIELD_ORDER.filter((field) => !used.has(field));
 
   const definition = useMemo(() => JSON.stringify({ filters, sort }), [filters, sort]);
+  const hasValidFilter = useMemo(
+    () => parseScenarioDefinition({ filters, sort }).filters.length > 0,
+    [filters, sort],
+  );
 
   function update(index: number, next: AppliedFilter) {
     setFilters((current) => current.map((filter, i) => (i === index ? next : filter)));
@@ -63,7 +68,7 @@ export function ScenarioEditor({
 
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Filters</p>
-        {filters.length === 0 && <p className="text-sm text-ink-muted">No filters — this matches every biddable format. Add one below.</p>}
+        {!hasValidFilter && <p className="text-sm text-ink-muted">Add at least one valid filter before this scenario can run.</p>}
         {filters.map((filter, index) => (
           <div key={filter.field} className="flex flex-wrap items-center gap-2 rounded border border-border bg-background p-2 text-sm">
             <span className="min-w-[9rem] font-medium">{(SCENARIO_FILTERS[filter.field as ScenarioFilterField] as FilterMeta).label}</span>
@@ -94,7 +99,7 @@ export function ScenarioEditor({
             <option value="desc">Descending</option>
           </select>
         </label>
-        <button type="submit" className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink">{submitLabel}</button>
+        <button type="submit" disabled={!hasValidFilter} className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:cursor-not-allowed disabled:opacity-50">{submitLabel}</button>
       </div>
     </form>
   );

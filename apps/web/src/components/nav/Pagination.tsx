@@ -23,8 +23,10 @@ const SELECT_MAX_PAGES = 25;
 export type PaginationProps = {
   /** 1-based current page. */
   page: number;
-  /** Total pages; coerced to at least 1. */
-  totalPages: number;
+  /** Total pages for exact-total lists; omitted for bounded previews. */
+  totalPages?: number;
+  /** Bounded-preview mode. Shows only Previous and Next, without totals or jumps. */
+  hasNext?: boolean;
   /** Total row count, shown on the left as "N {label}" when provided. */
   totalCount?: number;
   /** Noun for the total, e.g. "wines" / "groups". Defaults to "total". */
@@ -61,7 +63,8 @@ const STEP_CLASS = "rounded border border-border px-2 py-1 focus-visible:outline
 
 export function Pagination(props: PaginationProps) {
   const { page, totalCount, label = "total" } = props;
-  const totalPages = Math.max(1, props.totalPages);
+  const isUnknownTotal = typeof props.hasNext === "boolean";
+  const totalPages = Math.max(1, props.totalPages ?? 1);
   const router = useRouter();
   const jumpId = useId();
   const [jump, setJump] = useState("");
@@ -89,7 +92,7 @@ export function Pagination(props: PaginationProps) {
     setJump("");
   }
 
-  const jumpControl = totalPages > 1 && (totalPages <= SELECT_MAX_PAGES
+  const jumpControl = !isUnknownTotal && totalPages > 1 && (totalPages <= SELECT_MAX_PAGES
     ? <label className="flex items-center gap-1">
         <span className="sr-only">Go to page</span>
         <select
@@ -120,9 +123,9 @@ export function Pagination(props: PaginationProps) {
     <span className="tabular-nums">{typeof totalCount === "number" ? `${totalCount.toLocaleString()} ${label}` : ""}</span>
     <nav aria-label="Pagination" className="flex flex-wrap items-center gap-2">
       {step(page - 1, "Previous", page <= 1)}
-      <span className="tabular-nums">Page {page.toLocaleString()} of {totalPages.toLocaleString()}</span>
+      <span className="tabular-nums">{isUnknownTotal ? `Page ${page.toLocaleString()}` : `Page ${page.toLocaleString()} of ${totalPages.toLocaleString()}`}</span>
       {jumpControl}
-      {step(page + 1, "Next", page >= totalPages)}
+      {step(page + 1, "Next", isUnknownTotal ? !props.hasNext : page >= totalPages)}
     </nav>
   </div>;
 }

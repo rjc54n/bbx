@@ -1,19 +1,18 @@
-// Pagination for a scenario's run preview, same paginate/clamp shape as the
-// release-prices and cellartracker record browsers.
+// Pagination for a scenario preview. It deliberately fetches one row beyond
+// the visible page so it never needs a costly exact total.
 
 export const SCENARIO_PAGE_SIZE = 50;
 
-export function scenarioRange(page: number): { from: number; to: number } {
+export function scenarioPreviewRange(page: number): { from: number; to: number } {
   const from = (page - 1) * SCENARIO_PAGE_SIZE;
-  return { from, to: from + SCENARIO_PAGE_SIZE - 1 };
+  return { from, to: from + SCENARIO_PAGE_SIZE };
 }
 
-export function scenarioPageCount(totalRows: number): number {
-  return Math.max(1, Math.ceil(totalRows / SCENARIO_PAGE_SIZE));
-}
-
-export function scenarioPageForCount(requestedPage: number, totalRows: number): number {
-  return Math.min(requestedPage, scenarioPageCount(totalRows));
+export function scenarioPreview<Row>(rows: Row[]): { rows: Row[]; hasNext: boolean } {
+  return {
+    rows: rows.slice(0, SCENARIO_PAGE_SIZE),
+    hasNext: rows.length > SCENARIO_PAGE_SIZE,
+  };
 }
 
 export function parsePage(value: string | string[] | undefined): number {

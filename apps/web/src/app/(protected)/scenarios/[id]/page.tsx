@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth/owner";
 import { applyFilters } from "@/lib/query/applyFilters";
 import { perBottleP } from "@/lib/favourites/browser";
 import { formatFormat, formatPence, formatSignedPct } from "@/lib/format";
 import { parseScenarioDefinition } from "@/lib/scenarios/definition";
-import { scenarioPageCount, scenarioPageForCount, scenarioRange, parsePage } from "@/lib/scenarios/browser";
+import { parsePage, scenarioPreview, scenarioPreviewRange } from "@/lib/scenarios/browser";
 import { ScenarioEditor } from "@/components/scenarios/ScenarioEditor";
 import { Pagination } from "@/components/nav/Pagination";
+import { timeProtectedQuery } from "@/lib/observability/routeTiming";
 import { deleteScenario, updateScenario } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +41,8 @@ export default async function ScenarioDetailPage({
   const owner = await requireOwner();
   const { supabase } = owner;
 
-  const { data: scenario, error } = await supabase
-    .from("saved_scenarios").select("id,name,definition").eq("id", id).maybeSingle();
+  const { data: scenario, error } = await timeProtectedQuery("/scenarios/[id]", "saved_scenario", async () => supabase
+    .from("saved_scenarios").select("id,name,definition").eq("id", id).maybeSingle());
   if (error) throw new Error("Scenario could not be loaded.");
   if (!scenario) notFound();
 
@@ -49,41 +50,43 @@ export default async function ScenarioDetailPage({
 
   async function loadPage(page: number) {
     const request = applyFilters(
-      supabase.from("wine_scenario_view").select("*", { count: "exact" }),
+      supabase.from("wine_scenario_view").select("parent_sku,format_code,name,vintage,case_size,bottle_volume_ml,lowest_ask_p,release_price_p,ask_vs_release_pct,anchor_status"),
       definition.filters,
     );
-    const { from, to } = scenarioRange(page);
-    return request
+    const { from, to } = scenarioPreviewRange(page);
+    return timeProtectedQuery("/scenarios/[id]", "scenario_preview", async () => request
       .order(definition.sort.field, { ascending: definition.sort.dir === "asc", nullsFirst: false })
       .order("parent_sku", { ascending: true })
       .order("format_code", { ascending: true })
-      .range(from, to);
+      .range(from, to));
   }
 
-  let page = parsePage(query.page);
-  let { data, count, error: runError } = await loadPage(page);
-  if (runError && page > 1) {
-    const clamped = scenarioPageForCount(page, count ?? 0);
-    page = clamped < page ? clamped : 1;
-    ({ data, count, error: runError } = await loadPage(page));
+  const page = parsePage(query.page);
+  const canRun = definition.filters.length > 0;
+  let rows: ScenarioResultRow[] = [];
+  let hasNext = false;
+  if (canRun) {
+    const { data, error: runError } = await loadPage(page);
+    if (runError) throw new Error("The scenario could not be evaluated.");
+    const preview = scenarioPreview((data ?? []) as ScenarioResultRow[]);
+    if (page > 1 && preview.rows.length === 0) redirect(`/scenarios/${id}`);
+    rows = preview.rows;
+    hasNext = preview.hasNext;
   }
-  if (runError) throw new Error(`The scenario could not be evaluated: ${runError.message}`);
-  const rows = (data ?? []) as ScenarioResultRow[];
-  const total = count ?? 0;
-  const pageCount = scenarioPageCount(total);
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <div className="mx-auto max-w-6xl space-y-5 p-5">
       <Link href="/scenarios" className="text-sm text-accent underline-offset-2 hover:underline">Back to scenarios</Link>
       {query.saved && <p role="status" className="rounded border border-green-700/30 bg-green-50 px-4 py-3 text-sm text-green-900">Scenario saved.</p>}
       {query.error === "name" && <p role="alert" className="rounded border border-red-700/30 bg-background px-4 py-3 text-sm text-red-800">A scenario needs a name of 1–120 characters.</p>}
+      {query.error === "filters" && <p role="alert" className="rounded border border-red-700/30 bg-background px-4 py-3 text-sm text-red-800">Add at least one valid filter before saving this scenario.</p>}
       {(query.error === "save" || query.error === "delete") && <p role="alert" className="rounded border border-red-700/30 bg-background px-4 py-3 text-sm text-red-800">The scenario could not be {query.error === "delete" ? "deleted" : "saved"}.</p>}
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Scenario</p>
           <h1 className="mt-1 text-2xl font-semibold">{scenario.name}</h1>
-          <p className="mt-1 text-sm text-ink-muted"><strong className="tabular-nums">{total.toLocaleString()}</strong> matching format{total === 1 ? "" : "s"}</p>
+          <p className="mt-1 text-sm text-ink-muted">Results are shown as a bounded preview.</p>
         </div>
         <form action={deleteScenario.bind(null, id)}>
           <button type="submit" className="rounded border border-border px-3 py-2 text-sm hover:border-red-700 hover:text-red-800">Delete scenario</button>
@@ -104,7 +107,7 @@ export default async function ScenarioDetailPage({
         </div>
       </section>
 
-      <section className="rounded-lg border border-border bg-background">
+      {canRun ? <section className="rounded-lg border border-border bg-background">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
           <h2 className="font-semibold">Matches</h2>
         </div>
@@ -137,12 +140,13 @@ export default async function ScenarioDetailPage({
         </div>
         <Pagination
           page={page}
-          totalPages={pageCount}
-          totalCount={total}
-          label="matches"
+          hasNext={hasNext}
           basePath={`/scenarios/${id}`}
         />
-      </section>
+      </section> : <section className="rounded-lg border border-border bg-background p-5">
+        <h2 className="font-semibold">Preview unavailable</h2>
+        <p className="mt-1 text-sm text-ink-muted">This existing scenario has no valid filters. Add a filter above, then save it to run the preview.</p>
+      </section>}
     </div>
   </main>;
 }

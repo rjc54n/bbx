@@ -14,6 +14,9 @@ means checking against current code, not just the doc.
   local dev, checks, owner bootstrap, Vercel release.
 - [`../AGENTS.md`](../AGENTS.md) — operational rules for anyone (human or
   agent) making changes here, distilled from real incidents.
+- [PERFORMANCE-DATA-BRANCH-VALIDATION.md](PERFORMANCE-DATA-BRANCH-VALIDATION.md)
+  — protected Supabase data-branch setup and release gate for read-model
+  performance changes.
 
 ## Design decisions and specs
 

@@ -11,6 +11,8 @@ interface DataTableProps<Row, SortField extends string> {
   onSortChange: (field: SortField, dir: SortDir) => void;
   loading: boolean;
   emptyMessage: string;
+  errorMessage?: string | null;
+  onRetry?: () => void;
 }
 
 export function DataTable<Row, SortField extends string>({
@@ -21,6 +23,8 @@ export function DataTable<Row, SortField extends string>({
   onSortChange,
   loading,
   emptyMessage,
+  errorMessage,
+  onRetry,
 }: DataTableProps<Row, SortField>) {
   function handleHeaderClick(column: Column<Row, SortField>) {
     if (!column.sortField) return;
@@ -63,6 +67,13 @@ export function DataTable<Row, SortField extends string>({
             <tr>
               <td colSpan={columns.length} className="px-3 py-10 text-center text-ink-muted">
                 Loading…
+              </td>
+            </tr>
+          ) : errorMessage ? (
+            <tr>
+              <td colSpan={columns.length} className="px-3 py-10 text-center text-ink-muted">
+                <p>{errorMessage}</p>
+                {onRetry && <button type="button" onClick={onRetry} className="mt-3 rounded border border-border px-3 py-1.5 text-sm text-ink hover:border-accent">Try again</button>}
               </td>
             </tr>
           ) : rows.length === 0 ? (

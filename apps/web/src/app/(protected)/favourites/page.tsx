@@ -1,6 +1,7 @@
 import { FavouritesBrowser } from "@/components/favourites/FavouritesBrowser";
 import { requireOwner } from "@/lib/auth/owner";
 import type { FavouriteWineRow, PendingFavouriteRow } from "@/lib/favourites/browser";
+import { timeProtectedQuery } from "@/lib/observability/routeTiming";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +10,11 @@ export default async function FavouritesPage() {
 
   // Both views are already owner-scoped by RLS on the underlying tables; the
   // explicit user_id filter keeps the intent visible at the call site.
-  const [wines, pending] = await Promise.all([
+  const [wines, pending] = await timeProtectedQuery("/favourites", "favourites_views", () => Promise.all([
     supabase.from("favourite_wine_view").select("*").eq("user_id", userId),
     supabase.from("pending_favourite_view").select("*").eq("user_id", userId)
       .order("favourited_at", { ascending: false }),
-  ]);
+  ]));
   if (wines.error) {
     throw new Error(`Favourited wines could not be loaded: ${wines.error.message} (${wines.error.code})`);
   }

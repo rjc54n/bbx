@@ -25,6 +25,7 @@ from core.models import (
     _now_utc,
 )
 from core.pipeline import fetch_rest_pricing_full
+from core.slack import send_slack_message
 from core.store import (
     commit_sweep,
     diff_offers,
@@ -35,6 +36,7 @@ from core.store import (
     load_current_products,
     load_current_skus,
     mark_run_failed,
+    mark_run_partial,
     refresh_catalogue_caches,
     refresh_facet_caches,
     start_run,
@@ -48,6 +50,17 @@ log = logging.getLogger(__name__)
 REST_COVERAGE_THRESHOLD = 0.80
 BIDDABLE_FULL_BOOK_SCOPE = "biddable_full_book"
 REST_FRESHNESS_MAX_AGE_DAYS = 30
+
+
+def report_catalogue_cache_failure(conn, run_id: str, *, attempts: int, reason: str) -> None:
+    """Mark a committed scan partial and send one concise operator alert."""
+    mark_run_partial(conn, run_id, reason)
+    message = (
+        f"BBX sweep {run_id}: source data committed, but catalogue caches did not "
+        f"refresh after {attempts} attempts. {reason}"
+    )
+    if not send_slack_message(message):
+        log.warning("Catalogue cache failure alert for sweep %s was not delivered", run_id)
 
 
 # ---------------------------------------------------------------------------
@@ -812,18 +825,19 @@ def run_daily_sweep(
             rest_checked_parent_skus=rest_checked_parent_skus,
         )
 
-        # Refresh the read-model caches now the scan has committed. Both are
-        # non-fatal on their own: a stale cache is far better than failing an
-        # otherwise-good sweep, and the two are independent, so a failure in one
-        # must not skip the other.
-        try:
-            refresh_catalogue_caches(conn)
-        except Exception:
-            log.exception(
-                "Catalogue cache refresh failed after sweep %s; the catalogue, "
-                "favourites, scenarios and cellar surfaces may be stale until the "
-                "next sweep", run_id,
+        # The pair is one read model: wine_market_summary_mv depends on
+        # catalogue_mv, so only both refreshed views count as success. Source
+        # data stays committed if the bounded retry budget is exhausted.
+        cache_refresh = refresh_catalogue_caches(conn)
+        if not cache_refresh.success:
+            reason = cache_refresh.reason or "catalogue cache refresh failed"
+            report_catalogue_cache_failure(
+                conn,
+                run_id,
+                attempts=cache_refresh.attempts,
+                reason=reason,
             )
+            final_status = "partial"
 
         try:
             refresh_facet_caches(conn)
