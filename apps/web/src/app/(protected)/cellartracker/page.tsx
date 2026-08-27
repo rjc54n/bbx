@@ -51,25 +51,27 @@ export default async function CellarTrackerPage({
   const [
     { parentSkus, pending },
     { count: excludedCount },
-    { count: cellarRecords },
-    { data: statsRows, error: statsError },
+    { data: totals, error: totalsError },
   ] = await Promise.all([
     loadFavourites(owner, "cellartracker"),
     supabase.from("cellartracker_excluded_record_view").select("*", { count: "exact", head: true }),
-    // Whole-snapshot totals for the header, independent of search and page.
-    supabase.from("current_cellartracker_records").select("*", { count: "exact", head: true }),
-    supabase.from("current_cellartracker_records").select("quantity_home,quantity_bbr"),
+    // Whole-snapshot totals for the header, independent of search and page. One
+    // row from the database, rather than a head count plus every row's two
+    // quantity columns summed here -- each of those was a full evaluation of
+    // current_cellartracker_records.
+    supabase.from("cellartracker_snapshot_totals_view")
+      .select("record_count,bottles_home,bottles_bbr").maybeSingle(),
   ]);
-  if (statsError) throw new Error("CellarTracker snapshot totals could not be loaded.");
-  const cellarBottles = ((statsRows ?? []) as { quantity_home: number; quantity_bbr: number }[])
-    .reduce((total, row) => total + row.quantity_home + row.quantity_bbr, 0);
+  if (totalsError) throw new Error("CellarTracker snapshot totals could not be loaded.");
+  const cellarRecords = totals?.record_count ?? 0;
+  const cellarBottles = (totals?.bottles_home ?? 0) + (totals?.bottles_bbr ?? 0);
 
   return <CellarTrackerRecordsBrowser
     rows={rows}
     page={page}
     search={query.search}
     totalRows={count ?? 0}
-    cellarRecords={cellarRecords ?? 0}
+    cellarRecords={cellarRecords}
     cellarBottles={cellarBottles}
     favouriteParentSkus={parentSkus}
     pendingFavourites={pending}
