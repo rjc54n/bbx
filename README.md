@@ -136,12 +136,11 @@ npm test
 npm run build
 ```
 
-The database migration workflow runs on relevant pull requests and pushes to
-`main`. The repository does not currently run the Python or web checks on pull
-requests. The scheduled scanner and sweep run the Python tests before their
-production jobs. See
-[`docs/CODEBASE-REVIEW-2026-07-31.md`](docs/CODEBASE-REVIEW-2026-07-31.md)
-for the recommended CI split and the current maintenance backlog.
+`.github/workflows/ci.yml` runs the Python and web checks on every pull
+request and on push to `main`. The database migration workflow
+(`database-migrations.yml`) runs separately, only on changes touching
+`supabase/**`. The scheduled scanner and sweep also run the Python tests
+before their production jobs.
 
 ---
 
@@ -156,17 +155,14 @@ Implemented in `core/notification_state.py`:
 
 ---
 
-## Roadmap
+## Documentation and roadmap
 
 The dated implementation roadmap is
-[`docs/ROADMAP-2026-07.md`](docs/ROADMAP-2026-07.md). Current implementation
-notes include:
+[`docs/ROADMAP-2026-07.md`](docs/ROADMAP-2026-07.md). For the full set of
+specs, phase implementation history and dated reviews, see the index at
+[`docs/README.md`](docs/README.md).
 
-- [`docs/PHASE3-4-IMPLEMENTATION.md`](docs/PHASE3-4-IMPLEMENTATION.md) for the
-  persistent catalogue and scanner;
-- [`docs/PHASE5-IMPLEMENTATION.md`](docs/PHASE5-IMPLEMENTATION.md) for private
-  cellar holdings;
-- [`docs/PHASE7-IMPLEMENTATION.md`](docs/PHASE7-IMPLEMENTATION.md) for historic
-  release prices; and
-- [`docs/CELLARTRACKER-IMPLEMENTATION.md`](docs/CELLARTRACKER-IMPLEMENTATION.md)
-  for CellarTracker import, matching and comparison.
+Agents (and anyone else) making changes here should read
+[`AGENTS.md`](AGENTS.md) first — it records operational rules learned from
+real incidents, including how database migrations actually reach
+production.

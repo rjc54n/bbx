@@ -67,10 +67,8 @@ The database workflow replays all migrations on a clean local Supabase
 database, lints the public schema and runs the pgTAP tests under
 `supabase/tests/database`.
 
-These commands are release checks, but the repository does not currently run
-the web checks on pull requests. Scheduled Python workflows do not substitute
-for change validation. The dated gap and recommended order are recorded in
-[`docs/CODEBASE-REVIEW-2026-07-31.md`](../../docs/CODEBASE-REVIEW-2026-07-31.md).
+These commands also run in CI (`.github/workflows/ci.yml`) on every pull
+request and on push to `main`.
 
 ## Owner bootstrap
 
@@ -112,3 +110,10 @@ Before exposing the cellar routes:
 The migration and owner bootstrap come before the Vercel release. Deploying
 the current code against the old schema would make the cellar pages fail
 closed, but it would not provide a usable upload facility.
+
+**This is not theoretical: it happened.** On 27 August 2026 a PR was merged
+whose web-app changes were deployed to Vercel before the matching Supabase
+migration had been pushed — merging to `main` deploys the app but does not
+apply migrations on its own. A live page crashed as a result. See
+[`docs/DEPLOYMENT-INCIDENT-2026-08-27.md`](../../docs/DEPLOYMENT-INCIDENT-2026-08-27.md)
+and [`AGENTS.md`](../../AGENTS.md) at the repo root.
