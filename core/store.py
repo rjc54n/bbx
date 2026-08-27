@@ -587,6 +587,47 @@ def refresh_facet_caches(conn) -> None:
         conn.autocommit = previous_autocommit
 
 
+# The catalogue read model (catalogue_mv) and the per-wine aggregate built on it
+# (wine_market_summary_mv). Same reasoning as the facet caches above: a sweep is
+# the only thing that changes private.skus/products/offers, so a cache refreshed
+# here is never staler than the data. Order matters -- wine_market_summary_mv is
+# built from catalogue_mv, so catalogue_mv must be current first.
+CATALOGUE_CACHE_MVIEWS = ("catalogue_mv", "wine_market_summary_mv")
+
+
+def refresh_catalogue_caches(conn) -> None:
+    """Refresh the catalogue read-model materialized views after a sweep commits.
+
+    Same mechanics and the same non-fatal contract as refresh_facet_caches:
+    REFRESH ... CONCURRENTLY cannot run inside a transaction block, so it runs in
+    autocommit mode and never blocks readers. Row counts are logged because a
+    refresh that silently produces an empty cache would otherwise look identical
+    to a successful one, and every catalogue surface reads through these.
+    """
+    if not is_postgres():
+        return
+    conn.commit()  # ensure no open transaction before switching to autocommit
+    previous_autocommit = conn.autocommit
+    conn.autocommit = True
+    try:
+        cur = conn.cursor()
+        try:
+            for mview in CATALOGUE_CACHE_MVIEWS:
+                cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY public.{mview}")
+                cur.execute(f"SELECT count(*) FROM public.{mview}")
+                (rows,) = cur.fetchone()
+                log.info("Refreshed %s: %d rows", mview, rows)
+                if rows == 0:
+                    log.warning(
+                        "%s refreshed to zero rows -- every catalogue surface "
+                        "reads through it and will now be empty", mview,
+                    )
+        finally:
+            cur.close()
+    finally:
+        conn.autocommit = previous_autocommit
+
+
 def _apply_disappearances(
     cur, entity_type, seen_keys, current, run_id, now,
     algolia_complete, rest_unchecked_skus, events,

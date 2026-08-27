@@ -134,6 +134,10 @@ INSERT INTO private.skus (
 VALUES ('20140000001', '06-00750', 6, 750, now(), now())
 ON CONFLICT (parent_sku, format_code) DO NOTHING;
 
+-- catalogue_view now reads a cache (20260827120000), so the fixture rows above
+-- are not visible to it -- or to anything downstream -- until it is rebuilt.
+SELECT private.rebuild_catalogue_caches();
+
 INSERT INTO public.release_offer_prices (
     import_id, source_row_number, fragment_index, raw_price_text,
     amount_p, currency, case_size, bottle_volume_ml, format_code,

@@ -1627,6 +1627,14 @@ export type Database = {
           },
         ]
       }
+      cellartracker_snapshot_totals_view: {
+        Row: {
+          bottles_bbr: number | null
+          bottles_home: number | null
+          record_count: number | null
+        }
+        Relationships: []
+      }
       current_bbr_holdings: {
         Row: {
           alcohol_percent: number | null

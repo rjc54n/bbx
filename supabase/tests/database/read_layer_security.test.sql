@@ -137,6 +137,10 @@ INSERT INTO private.offers (
     '41000000-0000-0000-0000-000000000001', now()
 );
 
+-- catalogue_view now reads a cache (20260827120000), so the fixture rows above
+-- are not visible to it -- or to anything downstream -- until it is rebuilt.
+SELECT private.rebuild_catalogue_caches();
+
 INSERT INTO private.observation_events (
     scan_run_id, observed_at, entity_type, entity_key, event_type,
     field_name, old_value_raw, new_value_raw

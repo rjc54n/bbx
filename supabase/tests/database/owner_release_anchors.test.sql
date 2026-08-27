@@ -34,6 +34,10 @@ INSERT INTO private.skus (
      '42000000-0000-0000-0000-000000000001', now(),
      '42000000-0000-0000-0000-000000000001', now());
 
+-- catalogue_view now reads a cache (20260827120000), so the fixture rows above
+-- are not visible to it -- or to anything downstream -- until it is rebuilt.
+SELECT private.rebuild_catalogue_caches();
+
 -- Grants / RLS surface -------------------------------------------------------
 SELECT is(has_table_privilege('anon', 'public.owner_release_anchors', 'SELECT'), FALSE,
     'anon cannot read owner release anchors');

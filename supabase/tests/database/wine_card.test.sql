@@ -21,6 +21,10 @@ VALUES ('90000000002', 'Dom. Gone 2019', 2019, 'Burgundy', 'White', 'Prod B', no
 INSERT INTO private.skus (parent_sku, format_code, case_size, bottle_volume_ml, least_listing_price_p, first_seen_at, last_seen_at, gone_since)
 VALUES ('90000000002', '06-00750', 6, 750, 15000, now(), now(), now());
 
+-- catalogue_view now reads a cache (20260827120000), so the fixture rows above
+-- are not visible to it -- or to anything downstream -- until it is rebuilt.
+SELECT private.rebuild_catalogue_caches();
+
 -- wine_card_view: one row per product, correct wine_ref, is_biddable by live sku.
 SELECT is(
   (SELECT COUNT(*) FROM public.wine_card_view WHERE parent_sku IN ('90000000001', '90000000002')),
