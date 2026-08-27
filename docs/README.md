@@ -70,9 +70,10 @@ Point-in-time snapshots. Read the date; do not assume a finding is still
 open or still fixed without checking.
 
 - [CODEBASE-REVIEW-2026-07-31.md](CODEBASE-REVIEW-2026-07-31.md) — defects
-  and maintenance order as of 31 July 2026. No dedicated response doc exists
-  for this one (unlike the 20 August batch below) — treat its items as
-  unconfirmed either way until checked against current code.
+  and maintenance order as of 31 July 2026. See
+  [CODEBASE-REVIEW-2026-07-31-RESPONSE.md](CODEBASE-REVIEW-2026-07-31-RESPONSE.md)
+  for the 27 August 2026 check against current code: 2 of 14 items fixed, 12
+  still open.
 - [INDEPENDENT-REVIEW-2026-08-20.md](INDEPENDENT-REVIEW-2026-08-20.md),
   [PERFORMANCE-REVIEW-2026-08-20.md](PERFORMANCE-REVIEW-2026-08-20.md),
   [REPOSITORY-HEALTH-2026-08-20.md](REPOSITORY-HEALTH-2026-08-20.md) — three
