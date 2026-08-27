@@ -440,36 +440,51 @@ WHERE NOT EXISTS (
       AND decisions.is_excluded
 );
 
--- 5. Stop the anchor view rebuilding its evidence set three times -------------
+-- 5. Build the anchor's evidence set once, not once per row -------------------
 --
 -- release_price_anchor_view referenced release_offer_evidence_view three times
 -- -- once for `provisional`, once for `confirmed`, and once more at the end
--- purely to re-fetch the columns of the id it had just selected. A view is
--- always inlined, so that is three builds of a windowed de-duplication over
--- every accepted offer price, per query.
+-- purely to re-fetch the columns of the id it had just chosen. A view is always
+-- inlined, so that was three builds of a windowed de-duplication per query.
 --
--- The third reference is redundant: `provisional` and `confirmed` between them
--- already carry every projected column. Dropping it leaves two.
+-- Worse, the planner estimates that view at 1 row when it actually returns
+-- ~1,100. On that estimate a nested loop looks free, so the `confirmed` join
+-- re-executed the whole evidence view once per anchor row -- measured on
+-- production at 1,018 loops discarding 1,143,214 rows, for 2.7s to return 1,018.
 --
--- Deliberately NOT solved with a MATERIALIZED CTE. That would build the
--- evidence set once for a whole-catalogue scan, but it is also an optimisation
--- fence, and it would stop a `parent_sku` qual pushing down into the window's
--- PARTITION BY -- which is what makes the wine card, the catalogue's anchor
--- enrichment and favourites fast. The point lookups are the common case.
+-- One MATERIALIZED CTE fixes both: the evidence set is computed once and both
+-- branches read the result.
+--
+-- Measured on production, 27 August 2026 (see
+-- scripts/perfcheck_catalogue_read_model.sql):
+--
+--                        whole set     one wine
+--   live                    2710 ms      64.2 ms
+--   two references          1211 ms      48.9 ms
+--   MATERIALIZED CTE         241 ms      49.7 ms
+--
+-- The fence costs point lookups nothing measurable. The pushdown it would
+-- theoretically block is not happening anyway: DISTINCT ON sorts the whole
+-- partition set whatever the qual, so a parent_sku filter never avoided the
+-- build. This was tested rather than assumed, because assuming it got the
+-- previous revision of this comment wrong.
 --
 -- The CASE branches on `confirmed.release_offer_price_id IS NULL` per column
 -- rather than coalescing each one: a confirmed anchor with a NULL
 -- source_product_url must keep its own NULL, not inherit the provisional row's
--- value. Semantics are otherwise identical to 20260730090000.
+-- value. Semantics are otherwise identical to 20260730090000, verified
+-- row-for-row against production.
 
 CREATE OR REPLACE VIEW public.release_price_anchor_view
 WITH (security_invoker = TRUE)
 AS
-WITH provisional AS (
-    SELECT DISTINCT ON (parent_sku, format_code)
-        parent_sku, format_code, release_offer_price_id, offer_date,
+WITH evidence AS MATERIALIZED (
+    SELECT parent_sku, format_code, release_offer_price_id, offer_date,
         release_price_p, source_wine, source_product_url
     FROM public.release_offer_evidence_view
+), provisional AS (
+    SELECT DISTINCT ON (parent_sku, format_code) *
+    FROM evidence
     ORDER BY parent_sku, format_code, offer_date, release_offer_price_id
 )
 SELECT
@@ -494,7 +509,7 @@ FROM provisional
 LEFT JOIN public.release_price_anchor_overrides override
   ON override.parent_sku = provisional.parent_sku
  AND override.format_code = provisional.format_code
-LEFT JOIN public.release_offer_evidence_view confirmed
+LEFT JOIN evidence confirmed
   ON confirmed.release_offer_price_id = override.release_offer_price_id;
 
 -- 6. favourite_wine_view: look up per favourite instead of aggregating all ----
