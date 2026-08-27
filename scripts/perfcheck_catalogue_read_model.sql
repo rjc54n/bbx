@@ -340,11 +340,13 @@ WHERE NOT EXISTS (
 );
 
 CREATE VIEW perfcheck.release_price_anchor_view AS
-WITH provisional AS (
-    SELECT DISTINCT ON (parent_sku, format_code)
-        parent_sku, format_code, release_offer_price_id, offer_date,
+WITH evidence AS MATERIALIZED (
+    SELECT parent_sku, format_code, release_offer_price_id, offer_date,
         release_price_p, source_wine, source_product_url
     FROM public.release_offer_evidence_view
+), provisional AS (
+    SELECT DISTINCT ON (parent_sku, format_code) *
+    FROM evidence
     ORDER BY parent_sku, format_code, offer_date, release_offer_price_id
 )
 SELECT
@@ -369,7 +371,7 @@ FROM provisional
 LEFT JOIN public.release_price_anchor_overrides override
   ON override.parent_sku = provisional.parent_sku
  AND override.format_code = provisional.format_code
-LEFT JOIN public.release_offer_evidence_view confirmed
+LEFT JOIN evidence confirmed
   ON confirmed.release_offer_price_id = override.release_offer_price_id;
 
 CREATE VIEW perfcheck.favourite_wine_view AS
