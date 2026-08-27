@@ -54,11 +54,10 @@ what the deployed code did.
 - [PHASE1A-entity-model.md](PHASE1A-entity-model.md) — entity model & API
   validation.
 - [PHASE2-catalogue-browser.md](PHASE2-catalogue-browser.md) — catalogue
-  browser plan. Still headed "planned, not started" as written — the
-  catalogue browser has clearly since shipped (it's the subject of the 27
-  August performance work); this status line looks stale and is worth
-  updating once someone verifies what of the plan matches what was actually
-  built.
+  browser plan, confirmed implemented (status line verified against current
+  code 27 August 2026; saved queries shipped as the larger server-side
+  "Saved Scenarios" feature rather than the browser-local version planned
+  here).
 - [PHASE3-4-IMPLEMENTATION.md](PHASE3-4-IMPLEMENTATION.md) — persistent
   catalogue and scanner.
 - [PHASE5-IMPLEMENTATION.md](PHASE5-IMPLEMENTATION.md) — cellar holdings and

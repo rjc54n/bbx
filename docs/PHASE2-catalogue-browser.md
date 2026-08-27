@@ -1,6 +1,16 @@
 # Phase 2 revision — Catalogue browser with bargain discovery as one mode
 
-**Status:** planned, not started. Implementation target: Sonnet.
+**Status:** implemented. Catalogue browsing, filters/facets, sort, pagination
+and the typed query-state architecture (Phases A–D, F below) all shipped as
+described — see `apps/web/src/lib/query/` and the catalogue-view migrations
+starting at `supabase/migrations/20260719120000_catalogue_read_model.sql`.
+Saved queries (Phase E) shipped as more than planned: a server-side,
+owner-only "Saved Scenarios" feature
+(`supabase/migrations/20260817150000_saved_scenarios.sql`,
+`apps/web/src/app/(protected)/scenarios/`), not the browser-local
+`localStorage` version described below. Verified against current code 27
+August 2026; the phases below are kept as the historical plan, not a live
+spec — check current code for anything that must be exact.
 **Scope guardrails (do NOT add in this revision):** authentication, a custom
 backend, wine detail pages, charts, live GraphQL pricing. Keep direct Supabase
 browser reads through curated, locked-down views.
