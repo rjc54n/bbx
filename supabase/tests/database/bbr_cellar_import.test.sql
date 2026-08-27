@@ -83,6 +83,10 @@ VALUES (
     now()
 );
 
+-- catalogue_view now reads a cache (20260827120000), so the fixture rows above
+-- are not visible to it -- or to anything downstream -- until it is rebuilt.
+SELECT private.rebuild_catalogue_caches();
+
 SELECT is(
     has_table_privilege('anon', 'public.cellar_imports', 'SELECT'),
     FALSE,

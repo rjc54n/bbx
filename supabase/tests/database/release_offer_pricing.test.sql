@@ -26,6 +26,10 @@ INSERT INTO private.skus (
     '21000000-0000-0000-0000-000000000001', now()
 );
 
+-- catalogue_view now reads a cache (20260827120000), so the fixture rows above
+-- are not visible to it -- or to anything downstream -- until it is rebuilt.
+SELECT private.rebuild_catalogue_caches();
+
 SELECT is(has_table_privilege('anon', 'public.release_offer_match_runs', 'SELECT'), FALSE, 'anon cannot read match runs');
 SELECT is(has_table_privilege('authenticated', 'public.release_offer_match_runs', 'SELECT'), TRUE, 'authenticated receives owner-gated match-run read access');
 SELECT is(has_table_privilege('authenticated', 'public.release_offer_resolution_events', 'INSERT'), FALSE, 'authenticated cannot forge resolution audit events');

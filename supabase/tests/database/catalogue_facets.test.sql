@@ -39,7 +39,15 @@ REFRESH MATERIALIZED VIEW public.facet_values_mv;
 REFRESH MATERIALIZED VIEW public.facet_ranges_mv;
 REFRESH MATERIALIZED VIEW public.format_options_mv;
 
+-- catalogue_view reads a cache too now (20260827120000), and it is the other
+-- side of every equivalence check below -- without this both sides would be
+-- stale and equal for the wrong reason.
+SELECT private.rebuild_catalogue_caches();
+
 -- Equivalence: each rewritten view must equal aggregation over catalogue_view.
+-- The facet caches aggregate private.skus/products directly while catalogue_view
+-- now comes from catalogue_mv, so these also check the cache against an
+-- independent path to the same numbers.
 SELECT set_eq(
   'SELECT facet, value, n FROM public.facet_values_view',
   $$

@@ -28,6 +28,10 @@ INSERT INTO private.skus (
     '44000000-0000-0000-0000-000000000001', now(),
     '44000000-0000-0000-0000-000000000001', now()
 );
+
+-- catalogue_view now reads a cache (20260827120000), so the fixture rows above
+-- are not visible to it -- or to anything downstream -- until it is rebuilt.
+SELECT private.rebuild_catalogue_caches();
 -- An owner anchor gives the format a release price, so the vs-release metrics
 -- are non-null and the scenario/format parity assertion is meaningful.
 INSERT INTO public.owner_release_anchors (wine_ref, format_code, release_price_p)
