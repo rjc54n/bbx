@@ -35,6 +35,7 @@ from core.store import (
     load_current_products,
     load_current_skus,
     mark_run_failed,
+    refresh_catalogue_caches,
     refresh_facet_caches,
     start_run,
     update_run_discovery,
@@ -811,8 +812,19 @@ def run_daily_sweep(
             rest_checked_parent_skus=rest_checked_parent_skus,
         )
 
-        # Refresh the catalogue facet caches now the scan has committed. Non-fatal:
-        # a stale facet cache is far better than failing an otherwise-good sweep.
+        # Refresh the read-model caches now the scan has committed. Both are
+        # non-fatal on their own: a stale cache is far better than failing an
+        # otherwise-good sweep, and the two are independent, so a failure in one
+        # must not skip the other.
+        try:
+            refresh_catalogue_caches(conn)
+        except Exception:
+            log.exception(
+                "Catalogue cache refresh failed after sweep %s; the catalogue, "
+                "favourites, scenarios and cellar surfaces may be stale until the "
+                "next sweep", run_id,
+            )
+
         try:
             refresh_facet_caches(conn)
         except Exception:
