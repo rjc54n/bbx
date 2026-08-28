@@ -88,3 +88,10 @@ open or still fixed without checking.
 - [DEPLOYMENT-INCIDENT-2026-08-27.md](DEPLOYMENT-INCIDENT-2026-08-27.md) —
   the catalogue-read-model deployment incident: root causes and the rules
   adopted from it (also folded into [`../AGENTS.md`](../AGENTS.md)).
+- [DEPLOYMENT-INCIDENT-2026-08-28.md](DEPLOYMENT-INCIDENT-2026-08-28.md) —
+  the next-day production outage that followed from it: the 27 August restart
+  was not a recovery, the instance stayed degraded overnight, and around the
+  ~03:00 UTC nightly backup it became fully unreachable for ~13 hours. The
+  causal mechanism (disk-I/O starvation) is a documented working hypothesis,
+  not a confirmed root cause; the timeline and ruled-out causes are
+  established. Rules also folded into [`../AGENTS.md`](../AGENTS.md).

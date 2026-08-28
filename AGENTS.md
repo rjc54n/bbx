@@ -51,6 +51,36 @@ CellarTracker page down in production on 27 August 2026; see
 - Ship database-migration-sized changes as independently deployable slices —
   one migration, pushed and smoke-tested, before the next — rather than
   batching several into one PR merged and deployed atomically.
+- **Delete throwaway database objects (verification schemas, temp tables) the
+  moment they are done with.** A leftover `perfcheck`-style schema on
+  production is both clutter and a sign the rule above was bent.
+
+## Recovering the production instance after an incident
+
+The project runs on a free-tier Supabase instance with no I/O or memory
+headroom. Learned from the 28 August 2026 outage
+([docs/DEPLOYMENT-INCIDENT-2026-08-28.md](docs/DEPLOYMENT-INCIDENT-2026-08-28.md)):
+
+- **A restart is not a recovery.** A green dashboard / `ACTIVE_HEALTHY` health
+  endpoint says nothing about whether the instance has recovered working
+  capacity. After any instance-level incident, confirm it: a trivial query
+  returns in milliseconds, recent checkpoint `write`/`sync` timings in the
+  logs are back to normal, and the disk-I/O metric has come down. Re-check a
+  few hours later.
+- **Treat ~02:00–05:00 UTC as a must-be-healthy window.** The daily physical
+  backup runs near 03:00 UTC and cannot be moved on the free plan; on the
+  working hypothesis for the 28 August outage it can compound an
+  already-degraded instance. If the instance looks degraded in the evening,
+  restart it before 02:00 UTC. Do not start diagnostic or verification work in
+  that window.
+- **If the instance is degraded, capture state before restarting** —
+  `pg_stat_activity`, connection counts, `SELECT now()` latency, and the
+  dashboard CPU / memory / disk-IO values. A restart wipes `pg_stat_*` and the
+  high-resolution metrics, which is why the 28 August root cause stayed a
+  hypothesis.
+- **Postgres GUCs are not incident-response tools.** Changing `wal_compression`
+  or any parameter under load, without a hypothesis that predicts the specific
+  symptom, just adds a variable.
 
 ## Domain facts worth knowing before touching pricing logic
 
