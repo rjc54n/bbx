@@ -184,71 +184,195 @@ utility to them.
 
 ---
 
-## Phase 2 — `wine_scenario_mv` and the expression tree
+## Phase 2 — a fast foundation, then the hybrid engine
 
-### 2a. Materialised scenario surface
+**Decisions (2026-08-29):**
 
-`wine_scenario_mv`: one flat row per `(parent_sku, format_code)`, every
-filterable and every derived column precomputed. Modelled on `catalogue_mv`:
+1. **Split.** Ship 2a (`wine_scenario_mv`, pure perf, no behaviour change)
+   first and verify it against the 2026-08-20 numbers. Then 2b (the engine) on
+   the fast foundation.
+2. **Hybrid builder, not a tree editor.** Keep today's flat AND-list of filter
+   rows. Add exactly two capabilities: a "compare to" right-hand side on range
+   rows (another field ± an amount or a percent), and OR-within-a-group for the
+   enum fields. A full nested and/or/not editor, `let` bindings, `score` and
+   result-grain stay deferred (Phase 4).
 
-- unique index on `(parent_sku, format_code)` for `REFRESH ... CONCURRENTLY`;
-- btree indexes on the common filter/sort columns;
-- refreshed by `core/store.py` after the daily sweep, in dependency order
-  after `catalogue_mv` — the sweep is the only writer to the base tables, so
-  the MV is never staler than the data.
+This section is the plan of record for both sub-phases. Pick up at 2a.
 
-Derived columns to precompute (so the engine never computes them per query):
-`ask_per_75cl_p`, `release_per_75cl_p`, `headroom_p`, `headroom_pct`,
-`ask_vs_release_pct`, `bid_vs_release_pct`, `price_vs_market_pct`,
-`price_vs_last_pct`, `days_since_anchor`.
+---
 
-### 2b. Definition shape
+### Phase 2a — `wine_scenario_mv`
+
+**Goal:** collapse the live 5-level view stack
+(`wine_scenario_view → wine_card_format_view → resolved_release_anchor_view →
+release_price_anchor_view → release_offer_evidence_view`; measured 1.4 s warm
+filtered, 6.7 s unfiltered, ~648k buffers for 50 rows on 2026-08-20) to a
+nightly refresh. **No column changes, no behaviour changes** — `SELECT * FROM
+wine_scenario_view` returns byte-identical rows before and after, just faster.
+
+**Migration** `NNNNNNNNNNNNNN_wine_scenario_mv.sql`:
+
+- `CREATE MATERIALIZED VIEW public.wine_scenario_mv AS SELECT <the current
+  wine_scenario_view body>` — the exact projection from
+  `20260817150000` + the four `*_per_75cl_p` columns from
+  `20260829120000`. Copy the SELECT verbatim; do not add or rename columns
+  here (derived columns are a 2b concern).
+- `CREATE UNIQUE INDEX wine_scenario_mv_key ON public.wine_scenario_mv
+  (parent_sku, format_code)` — required for `REFRESH ... CONCURRENTLY`, and the
+  pagination tiebreaker every scenario query already appends.
+- **No speculative filter/sort indexes.** Follow the reasoning in
+  `20260827120000` (the catalogue_mv index comment): a scan of the precomputed
+  rows is cheap, the sorts need composite per-field-and-direction indexes to be
+  used at all, and every index is nightly `REFRESH CONCURRENTLY` cost. Add from
+  measured `EXPLAIN (ANALYZE, BUFFERS)` / `index_advisor` after 2b lands, not
+  before.
+- Consider `name`/`producer` trgm GIN indexes only if the hybrid builder gains
+  a free-text row (it does not in the first cut) — defer.
+- `CREATE OR REPLACE VIEW public.wine_scenario_view WITH (security_invoker =
+  TRUE) AS SELECT <same column list> FROM public.wine_scenario_mv` — keeps the
+  view name, its grants, and `evaluate.ts` / the pgTAP suite unchanged.
+  `REVOKE ALL ... FROM anon; GRANT SELECT ON public.wine_scenario_mv TO
+  authenticated` (match the current view's grants; the data is not
+  per-user, single-owner app, no RLS on an MV needed — same pattern as
+  `catalogue_view → catalogue_mv`).
+- `COMMENT ON MATERIALIZED VIEW` mirroring `catalogue_mv`'s.
+
+**Refresh wiring** (`core/store.py`):
+
+- Append `"wine_scenario_mv"` to `CATALOGUE_CACHE_MVIEWS` **after**
+  `catalogue_mv` and `wine_market_summary_mv` (it derives from
+  `wine_card_format_view → catalogue_view → catalogue_mv`, and from
+  `wine_card_view`). `refresh_catalogue_caches` then does
+  `REFRESH ... CONCURRENTLY` + the zero-row warning for it automatically.
+- No new code path — it rides the existing non-fatal, ambiguous-failure-aware
+  loop.
+
+**pgTAP** (`supabase/tests/database/saved_scenarios.test.sql`): the fixture
+already calls `private.rebuild_catalogue_caches()` after its writes and
+`test_pgtap_catalogue_cache_refresh.py` already lists `wine_scenario_view` as a
+cached read, so the existing rebuild call covers the MV. Add one assertion:
+`wine_scenario_mv` row count equals `wine_card_format_view` row count (parity is
+already asserted for the view; assert it survives materialisation). Bump
+`plan()`.
+
+**Also fold in the deferred Phase 0/1 item:** a
+`wine_scenario_ranges_view` — a single-row aggregate
+(`min`/`percentile_cont(0.5)`/`max` per range column) over `wine_scenario_mv`,
+for the builder's min/median/max input placeholders. Cheap now that it reads the
+MV. Shape it like `facet_ranges_view`; fetch it like `fetchFacetRanges`.
+
+**Verification:**
+
+- `supabase db push --linked --dry-run` then apply **before** the web deploy
+  (2a's view is drop-in, but keep the ordering habit).
+- Re-run the 2026-08-20 measurements: the filtered-first-50 and the
+  no-filter-first-50 scenario queries, warm, as the `authenticated` owner.
+  Record them in `PERFORMANCE-REVIEW`-style. Target: both well under 300 ms.
+- Diff a `SELECT *` sample (first 500 rows by the key) view-vs-MV — must be
+  identical.
+- Watch the first nightly sweep's log for the `Refreshed wine_scenario_mv: N
+  rows` line and no zero-row warning.
+
+**Blast radius:** `wine_scenario_view` is read only by `evaluate.ts` and the
+pgTAP suite. Nothing else depends on it. Rollback is `CREATE OR REPLACE VIEW`
+back to the join.
+
+---
+
+### Phase 2b — the hybrid expression engine
+
+Built on `wine_scenario_mv`. Delivers field-vs-field and derived comparisons
+(the reported "ask < release × 1.12" case) and OR without a tree editor.
+
+**Definition shape.** Evolve `AppliedFilter`, do not replace it. The stored
+definition stays a flat `filters: []` array; two members gain optional power:
 
 ```jsonc
 {
-  "let": {
-    "headroom_pct": { "expr": "100 * (release_price_p - lowest_ask_p) / release_price_p" }
-  },
-  "where": {
-    "all": [
-      { "field": "is_biddable", "eq": true },
-      { "any": [ { "field": "region", "in": ["Bordeaux", "Burgundy"] } ] },
-      { "lhs": "lowest_ask_p", "op": "<", "rhs": { "expr": "release_price_p * 1.12" } },
-      { "field": "highest_bid_p", "op": ">=", "rhs": 0, "nulls": "exclude" }
-    ]
-  },
-  "score": { "expr": "0.7 * headroom_pct + 0.3 * bid_vs_release_pct" },
-  "grain": "best_format_per_wine",
-  "sort": [ { "by": "score", "dir": "desc" } ]
+  "filters": [
+    { "kind": "boolean", "field": "is_biddable", "value": true },
+
+    // OR within one enum group (already an array; add an explicit mode)
+    { "kind": "enum", "field": "region", "value": ["Bordeaux", "Burgundy"] },
+
+    // range vs a constant — unchanged
+    { "kind": "range", "field": "bid_vs_release_pct", "min": -20, "max": 5, "includeNulls": false },
+
+    // NEW: range vs another field, optionally scaled/offset
+    { "kind": "compare", "field": "lowest_ask_per_75cl_p", "op": "lt",
+      "rhs": { "field": "release_price_per_75cl_p", "mul": 1.12 } }
+    //  → lowest_ask_per_75cl_p < release_price_per_75cl_p * 1.12
+    //  rhs: { field, mul?: number, add_p?: number }  (add_p in canonical units)
+  ],
+  "sort": { "field": "ask_vs_release_pct", "dir": "asc" }
 }
 ```
 
-- **Group nodes:** `all` / `any` / `not`, nestable.
-- **Leaf predicate:** `{ lhs, op, rhs, nulls }` where `lhs` and `rhs` are
-  expressions; `field`/`in`/`eq` stay as sugar for the common case.
-- **Expressions** are a small whitelisted grammar: column refs, numeric
-  literals with units (`GBP 250/case`, `GBP 30/btl`, `12%`), `+ - * /`,
-  `abs()`, `coalesce()`, `pct_change(field, '7d')`, `least()` / `greatest()`.
-  No arbitrary SQL, no subqueries.
-- **`nulls`** is required on every predicate over a nullable operand:
-  `exclude` (today's silent behaviour, now explicit) | `include` |
-  `treat_as(0)`.
-- **`let`** binds a named expression usable in `where`, `score` and `sort`.
+- **`kind: "compare"`** is the only genuinely new node. `op ∈ {lt, lte, gt,
+  gte}`. `rhs` references one whitelisted column with an optional `mul`
+  (unitless) and `add_p` (canonical units, entered in the field's display
+  unit and converted by `units.ts`). `nulls` handling as per `range`
+  (default: drop rows where either side is NULL; explicit "include missing"
+  toggle).
+- **OR groups:** enum `value` arrays are already OR internally. The only change
+  is UI labelling ("any of") plus allowing two rows on the *same* enum field to
+  mean OR across their union — or simpler, keep one row per field and rely on
+  the multi-value input. Decide during build; no schema change either way.
+- **AND across rows** stays the top-level semantics. No nesting.
+- Deferred: `let`, `score`, `grain`, `not`, arbitrary `+ - * /`, `pct_change`,
+  literals-with-units in free text.
 
-### 2c. Execution
+**Execution — `evaluate_scenario` RPC.** A `range`/`enum`/`boolean`/`text`
+scenario can still go through PostgREST + `applyFilters`. A definition
+containing a `compare` node **cannot** (PostgREST has no column-vs-expression
+filter), so route the whole evaluation through one RPC when any `compare` is
+present — or unconditionally, for a single code path. Recommended: **one RPC,
+always**, replacing `evaluate.ts`'s PostgREST call for scenarios.
 
-One `SECURITY DEFINER` RPC over `wine_scenario_mv` that takes the validated
-JSON tree and builds a single parametrised statement. PostgREST `.or()`
-string-building does not scale to nested groups and is an injection surface;
-the RPC replaces `applyFilters` for scenarios (the catalogue browser keeps
-`applyFilters` unchanged).
+```
+CREATE FUNCTION public.evaluate_scenario(p_definition jsonb, p_from int, p_to int)
+RETURNS SETOF public.wine_scenario_mv   -- or a narrower row type
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+```
 
-Guardrails inside the RPC:
+- Validates `p_definition` against a **column + operator whitelist** built from
+  the same registry contract the TS `parseScenarioDefinition` uses (keep them
+  in sync — a pgTAP test asserts every `SCENARIO_FILTERS` field is whitelisted).
+- Builds the `WHERE` with `format()` + `quote_literal` / `quote_ident` per
+  node; never string-concatenates a raw value. `mul`/`add_p` are cast to
+  numeric before interpolation.
+- `SET LOCAL statement_timeout = '5s'`; hard cap on filter count (e.g. 20) and
+  reject unknown keys.
+- `is_app_owner()` check at the top (defence in depth; the route already
+  requires the owner).
+- Called from `evaluate.ts` via `supabase.rpc("evaluate_scenario", …)`, still
+  wrapped in `timeProtectedQuery(route, "scenario_eval", …)`. Keep the
+  fetch-one-extra pagination (`scenarioPreviewRange`) — pass `p_to = to + 1`.
 
-- column and function whitelist, sourced from the extended registry;
-- `SET LOCAL statement_timeout`;
-- hard cap on predicate count and expression depth;
-- its own `timeProtectedQuery` label so a regression shows up in routeTiming.
+**Builder UI** (`ScenarioEditor.tsx`):
+
+- Range rows gain a small mode switch: **value** (today's min/max) vs
+  **compare** (`op` select + field select + optional `× n` and `+ £/%` inputs).
+  Reuse `FilterControl`; add a `CompareControl`.
+- The compare field list is the registry's range fields of the same `type`
+  (money compares to money, percent to percent).
+- `parseScenarioDefinition` gains a `compare` branch: validate `field` and
+  `rhs.field` are in the registry and range-kind, `op` in the set, coerce
+  `mul`/`add_p` to finite numbers, drop the node otherwise (same
+  fail-soft contract as every other kind).
+- `summarise()` in `scenarios/page.tsx` renders compares
+  ("Ask < Release price × 1.12").
+
+**Legacy / migration:** additive. Every existing definition still parses and
+runs. No `saved_scenarios` data change.
+
+**pgTAP:** registry/whitelist parity; a `compare` predicate returns the rows a
+hand-written `WHERE a < b * 1.12` returns; `statement_timeout` and the
+filter-count cap fire; a non-owner gets `42501`.
+
+**Verification:** the reported scenario — Biddable = Yes, `Ask (£/75cl) <
+Release price (£/75cl)` — returns the wines it should, fast, and the funnel
+(Phase 3) can then show why any predicate empties the set.
 
 ---
 
