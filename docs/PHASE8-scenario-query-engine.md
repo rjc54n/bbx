@@ -140,9 +140,10 @@ The definition is `AND(predicate…)` where each predicate is
 
 ## Phase 1 — Typed unit boundary
 
-**Status:** app code done, commit pending; the migration
-(`20260829120000_scenario_per_75cl_money.sql`) needs `supabase db push --linked`
-after CI is green.
+**Status:** shipped 2026-08-29 (`80f509f`). Migration
+`20260829120000_scenario_per_75cl_money.sql` applied to prod before the web
+deploy; CI (lint/tsc/vitest) and the database-migration replay + pgTAP both
+green.
 
 Money is stored as integer pence per case. **The owner thinks in pounds per
 75cl-equivalent bottle** — that is the grain the results table shows, and the
