@@ -50,9 +50,21 @@ describe("parseScenarioDefinition", () => {
   });
 
   it("normalises sort and rejects an out-of-registry sort field", () => {
-    expect(parseScenarioDefinition({ sort: { field: "lowest_ask_p", dir: "desc" } }).sort)
-      .toEqual({ field: "lowest_ask_p", dir: "desc" });
+    expect(parseScenarioDefinition({ sort: { field: "lowest_ask_per_75cl_p", dir: "desc" } }).sort)
+      .toEqual({ field: "lowest_ask_per_75cl_p", dir: "desc" });
     expect(parseScenarioDefinition({ sort: { field: "hacker", dir: "sideways" } }).sort)
+      .toEqual({ field: "ask_vs_release_pct", dir: "asc" });
+  });
+
+  it("drops the retired pre-Phase-1 per-case money filters", () => {
+    expect(parseScenarioDefinition({
+      filters: [
+        { field: "lowest_ask_p", kind: "range", max: 3000000 },
+        { field: "release_price_p", kind: "range", min: 1000000 },
+      ],
+    }).filters).toEqual([]);
+    // A legacy sort on one of them falls back to the default.
+    expect(parseScenarioDefinition({ sort: { field: "release_price_p", dir: "asc" } }).sort)
       .toEqual({ field: "ask_vs_release_pct", dir: "asc" });
   });
 

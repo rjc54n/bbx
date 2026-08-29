@@ -42,28 +42,28 @@ export const SCENARIO_FILTERS = {
     field: "anchor_status", label: "Anchor", group: "Price", kind: "enum", estimate: false,
     explanation: "Release-anchor provenance: owner, confirmed or provisional.",
   },
-  lowest_ask_p: {
-    field: "lowest_ask_p", label: "Ask", group: "Price", kind: "range", units: "pence / case", estimate: false,
-    explanation: "Lowest current listing price, per case, in pence, as of the last scan. The results table shows this per 75cl in pounds.",
+  lowest_ask_per_75cl_p: {
+    field: "lowest_ask_per_75cl_p", label: "Ask", group: "Price", kind: "range", type: "money", nullable: true, units: "£ / 75cl", estimate: false,
+    explanation: "Lowest current listing price, per 75cl-equivalent bottle, as of the last scan.",
   },
-  release_price_p: {
-    field: "release_price_p", label: "Release price", group: "Price", kind: "range", units: "pence / case", estimate: false,
-    explanation: "Resolved release anchor (owner ahead of imported), per case, in pence.",
+  release_price_per_75cl_p: {
+    field: "release_price_per_75cl_p", label: "Release price", group: "Price", kind: "range", type: "money", nullable: true, units: "£ / 75cl", estimate: false,
+    explanation: "Resolved release anchor (owner ahead of imported), per 75cl-equivalent bottle.",
   },
   ask_vs_release_pct: {
-    field: "ask_vs_release_pct", label: "Ask vs release", group: "Price", kind: "range", units: "%", estimate: false,
-    explanation: "Ask vs the release anchor. Negative means below release.",
+    field: "ask_vs_release_pct", label: "Ask vs release", group: "Price", kind: "range", type: "percent", nullable: true, units: "%", estimate: false,
+    explanation: "Ask vs the release anchor. Negative means below release. Needs a release anchor.",
   },
   bid_vs_release_pct: {
-    field: "bid_vs_release_pct", label: "Bid vs release", group: "Price", kind: "range", units: "%", estimate: false,
-    explanation: "Highest bid vs the release anchor.",
+    field: "bid_vs_release_pct", label: "Bid vs release", group: "Price", kind: "range", type: "percent", nullable: true, units: "%", estimate: false,
+    explanation: "Highest bid vs the release anchor. Needs both a live bid and a release anchor.",
   },
   price_vs_market_pct: {
-    field: "price_vs_market_pct", label: "Ask vs market", group: "Price", kind: "range", units: "%", estimate: false,
+    field: "price_vs_market_pct", label: "Ask vs market", group: "Price", kind: "range", type: "percent", nullable: true, units: "%", estimate: false,
     explanation: "Ask vs BBX market price. Negative means ask is cheaper than market.",
   },
   price_vs_last_pct: {
-    field: "price_vs_last_pct", label: "Ask vs last tx", group: "Price", kind: "range", units: "%", estimate: false,
+    field: "price_vs_last_pct", label: "Ask vs last tx", group: "Price", kind: "range", type: "percent", nullable: true, units: "%", estimate: false,
     explanation: "Ask vs the last recorded transaction price. Negative means cheaper.",
   },
 } as const satisfies Record<string, FilterMeta>;
@@ -82,10 +82,10 @@ export const SCENARIO_SORT_FIELDS = [
   "bid_vs_release_pct",
   "price_vs_market_pct",
   "price_vs_last_pct",
-  "lowest_ask_p",
-  "highest_bid_p",
-  "market_price_p",
-  "release_price_p",
+  "lowest_ask_per_75cl_p",
+  "highest_bid_per_75cl_p",
+  "market_price_per_75cl_p",
+  "release_price_per_75cl_p",
   "vintage",
   "name",
 ] as const;
@@ -97,10 +97,10 @@ export const SCENARIO_SORT_LABELS: Record<ScenarioSortField, string> = {
   bid_vs_release_pct: "Bid vs release",
   price_vs_market_pct: "Ask vs market",
   price_vs_last_pct: "Ask vs last tx",
-  lowest_ask_p: "Ask",
-  highest_bid_p: "Highest bid",
-  market_price_p: "Market",
-  release_price_p: "Release price",
+  lowest_ask_per_75cl_p: "Ask",
+  highest_bid_per_75cl_p: "Highest bid",
+  market_price_per_75cl_p: "Market",
+  release_price_per_75cl_p: "Release price",
   vintage: "Vintage",
   name: "Wine name",
 };

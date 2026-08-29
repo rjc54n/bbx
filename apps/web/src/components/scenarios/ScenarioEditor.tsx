@@ -7,6 +7,7 @@ import type { FilterMeta } from "@/lib/query/registry";
 import type { AppliedFilter } from "@/lib/query/applyFilters";
 import type { SortDir } from "@/lib/scenarios/definition";
 import { parseScenarioDefinition } from "@/lib/scenarios/definition";
+import { fromInputValue, toInputValue } from "@/lib/scenarios/units";
 import {
   SCENARIO_ANCHOR_STATUSES,
   SCENARIO_FILTERS,
@@ -121,9 +122,9 @@ export function ScenarioEditor({
 function FilterControl({ filter, onChange }: { filter: AppliedFilter; onChange: (next: AppliedFilter) => void }) {
   if (filter.kind === "range") {
     return <>
-      <input type="number" inputMode="decimal" value={filter.min ?? ""} placeholder="min" onChange={(event) => onChange({ ...filter, min: event.target.value === "" ? undefined : Number(event.target.value) })} className="w-24 rounded border border-border px-2 py-1.5 text-sm" />
+      <input type="number" inputMode="decimal" value={toInputValue(filter.field, filter.min) ?? ""} placeholder="min" onChange={(event) => onChange({ ...filter, min: fromInputValue(filter.field, event.target.value) })} className="w-24 rounded border border-border px-2 py-1.5 text-sm" />
       <span className="text-ink-muted">to</span>
-      <input type="number" inputMode="decimal" value={filter.max ?? ""} placeholder="max" onChange={(event) => onChange({ ...filter, max: event.target.value === "" ? undefined : Number(event.target.value) })} className="w-24 rounded border border-border px-2 py-1.5 text-sm" />
+      <input type="number" inputMode="decimal" value={toInputValue(filter.field, filter.max) ?? ""} placeholder="max" onChange={(event) => onChange({ ...filter, max: fromInputValue(filter.field, event.target.value) })} className="w-24 rounded border border-border px-2 py-1.5 text-sm" />
       <label className="flex items-center gap-1 text-xs text-ink-muted" title="Also keep rows where this value is missing. Off by default, a range excludes them.">
         <input type="checkbox" checked={filter.includeNulls ?? false} onChange={(event) => onChange({ ...filter, includeNulls: event.target.checked || undefined })} />
         include missing

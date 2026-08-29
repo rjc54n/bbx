@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { perBottleP } from "@/lib/favourites/browser";
 import { formatFormat, formatPence, formatSignedPct } from "@/lib/format";
 import { wineHref } from "@/lib/nav/origin";
 import { Pagination } from "@/components/nav/Pagination";
@@ -48,8 +47,8 @@ export function ScenarioMatches({
                   <span className="block text-xs text-ink-muted">{row.vintage ?? "Vintage unavailable"}</span>
                 </td>
                 <td className="px-3 py-2">{formatFormat(row.case_size, row.bottle_volume_ml)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPence(perBottleP(row.lowest_ask_p, row.case_size, row.bottle_volume_ml))}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPence(perBottleP(row.release_price_p, row.case_size, row.bottle_volume_ml))}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatPence(row.lowest_ask_per_75cl_p)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatPence(row.release_price_per_75cl_p)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatSignedPct(row.ask_vs_release_pct)}</td>
                 <td className="px-3 py-2 text-xs text-ink-muted">{row.anchor_status ?? "–"}</td>
               </tr>)}

@@ -35,6 +35,11 @@ function toStringList(value: unknown): string[] {
 function parseFilter(raw: unknown): AppliedFilter | null {
   if (!isRecord(raw)) return null;
   const field = raw.field;
+  // Unknown fields are dropped, not thrown. This also retires the pre-Phase-1
+  // money fields `lowest_ask_p` / `release_price_p` (per case, pence): a stored
+  // per-case bound cannot be converted to the new per-75cl `£` fields without
+  // the row's format, so a legacy money filter is dropped and the owner re-adds
+  // it. See docs/PHASE8-scenario-query-engine.md Phase 1.
   if (typeof field !== "string" || !(field in SCENARIO_FILTERS)) return null;
   // Kind is taken from the registry, never from the untrusted input, so a stored
   // definition can never point a filter at the wrong operator.

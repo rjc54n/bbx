@@ -3,7 +3,7 @@
 -- wine_scenario_view surface (identity + metric parity with wine_card_format_view).
 
 BEGIN;
-SELECT plan(16);
+SELECT plan(17);
 
 INSERT INTO auth.users (id) VALUES
     ('43000000-0000-0000-0000-000000000001'),
@@ -82,6 +82,11 @@ SELECT is(
     (SELECT count(*) FROM public.wine_scenario_view),
     (SELECT count(*) FROM public.wine_card_format_view),
     'scenario view has exactly one row per card format');
+-- Phase 1 unit boundary: 45000p per 6x750ml case -> 7500p per 75cl bottle.
+SELECT is(
+    (SELECT lowest_ask_per_75cl_p FROM public.wine_scenario_view
+     WHERE parent_sku = '44000000001' AND format_code = '06-00750'),
+    7500, 'scenario view exposes the ask per 75cl in pence');
 
 -- A non-owner sees and writes nothing ----------------------------------------
 SELECT set_config('request.jwt.claims', '{"sub":"43000000-0000-0000-0000-000000000002","role":"authenticated"}', TRUE);

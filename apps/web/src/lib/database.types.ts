@@ -2315,12 +2315,15 @@ export type Database = {
           country: string | null
           format_code: string | null
           highest_bid_p: number | null
+          highest_bid_per_75cl_p: number | null
           is_biddable: boolean | null
           is_listed: boolean | null
           last_rest_checked_at: string | null
           last_transaction_p: number | null
           lowest_ask_p: number | null
+          lowest_ask_per_75cl_p: number | null
           market_price_p: number | null
+          market_price_per_75cl_p: number | null
           name: string | null
           parent_sku: string | null
           price_vs_last_pct: number | null
@@ -2329,6 +2332,7 @@ export type Database = {
           region: string | null
           release_offer_date: string | null
           release_price_p: number | null
+          release_price_per_75cl_p: number | null
           subregion: string | null
           vintage: number | null
           wine_ref: string | null

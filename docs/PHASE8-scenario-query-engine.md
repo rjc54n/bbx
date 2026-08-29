@@ -140,22 +140,46 @@ The definition is `AND(predicate…)` where each predicate is
 
 ## Phase 1 — Typed unit boundary
 
-Money is stored as integer pence per case. The **contract and display unit is
-pounds.** Conversion happens in exactly one typed place.
+**Status:** app code done, commit pending; the migration
+(`20260829120000_scenario_per_75cl_money.sql`) needs `supabase db push --linked`
+after CI is green.
 
-- Extend each `SCENARIO_FILTERS` entry with `type`
-  (`money | percent | integer | enum | boolean | text | date`), `canonicalUnit`
-  (`pence_per_case`), `displayUnit` (`gbp_per_case` or `gbp_per_75cl`),
-  `nullable`, and `allowedOps`.
-- The builder renders and parses inputs in `displayUnit`; a shared converter
-  (extending `format.ts` / `perBottleP`) maps to `canonicalUnit` before the
-  definition is serialised, and back when it is loaded for editing.
-- Apply the same discipline the percentage convention already states
-  (`PHASE2-catalogue-browser.md`, "Percentage convention"): signed, computed
-  in SQL, negative = cheaper.
-- Migration note for stored definitions: existing `saved_scenarios.definition`
-  rows hold raw pence in `min`/`max` for money ranges. Add a one-off
-  normalisation, or version the definition shape and convert on read.
+Money is stored as integer pence per case. **The owner thinks in pounds per
+75cl-equivalent bottle** — that is the grain the results table shows, and the
+pack size (3/6/12) is not something the owner tracks, so a per-case price has no
+utility to them.
+
+- **Migration.** `wine_scenario_view` gains four appended per-75cl columns
+  (`lowest_ask_per_75cl_p`, `highest_bid_per_75cl_p`, `market_price_per_75cl_p`,
+  `release_price_per_75cl_p`), computed
+  `round(value_p * 750 / (case_size * bottle_volume_ml))` — the same arithmetic
+  as `perBottleP` and `catalogue_mv`'s `*_per_bottle_p`. A per-bottle threshold
+  cannot be applied to a per-case column without the row's format, so these have
+  to be real columns for PostgREST to filter/sort on. The per-case columns stay
+  for other consumers.
+- **Registry.** `FilterMeta` gains `type?: "money" | "percent"` and
+  `nullable?: boolean`. The two money filters and the four money sort fields
+  repoint from `*_p` (per case) to `*_per_75cl_p`. `allowedOps` /
+  `canonicalUnit` / `displayUnit` are **not** added yet — nothing consumes them
+  until the Phase 2 expression tree.
+- **Boundary.** `apps/web/src/lib/scenarios/units.ts` is the one place that
+  converts: money fields are entered and shown in pounds, stored in pence. The
+  stored definition stays canonical (pence), so `applyFilters` /
+  `evaluateScenario` are unchanged. `ScenarioMatches` now reads the per-75cl
+  columns directly instead of recomputing client-side, so the filter and the
+  displayed value are provably the same number.
+- **Percentage convention** (`PHASE2-catalogue-browser.md`) already holds:
+  the `*_pct` columns are signed and computed in SQL, negative = cheaper. Their
+  explanations now name the NULL dependency ("needs a release anchor" / "needs a
+  live bid").
+- **Legacy definitions.** A stored per-case bound (`lowest_ask_p`,
+  `release_price_p`) cannot be converted to the per-75cl `£` field without the
+  format, so `parseScenarioDefinition` drops a legacy money filter (and a legacy
+  money sort falls back to the default). Single owner, ~1–2 scenarios, and the
+  dropped values were the ones behind the original bug — a versioned migration
+  is not worth it. The owner re-adds the filter in `£`.
+- **Deferred to Phase 2:** the live min / median / max placeholder — it needs a
+  scenario ranges aggregate, cheap only once `wine_scenario_mv` exists.
 
 ---
 

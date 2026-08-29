@@ -3,6 +3,7 @@ import { requireOwner } from "@/lib/auth/owner";
 import { formatDate } from "@/lib/format";
 import { parseScenarioDefinition } from "@/lib/scenarios/definition";
 import { SCENARIO_FILTERS, type ScenarioFilterField } from "@/lib/scenarios/registry";
+import { formatBound } from "@/lib/scenarios/units";
 import { timeProtectedQuery } from "@/lib/observability/routeTiming";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,10 @@ function summarise(definition: unknown): string {
   return filters.map((filter) => {
     const label = SCENARIO_FILTERS[filter.field as ScenarioFilterField]?.label ?? filter.field;
     if (filter.kind === "range") {
-      const parts = [filter.min !== undefined ? `≥ ${filter.min}` : null, filter.max !== undefined ? `≤ ${filter.max}` : null].filter(Boolean).join(" and ");
+      const parts = [
+        filter.min !== undefined ? `≥ ${formatBound(filter.field, filter.min)}` : null,
+        filter.max !== undefined ? `≤ ${formatBound(filter.field, filter.max)}` : null,
+      ].filter(Boolean).join(" and ");
       return `${label} ${parts}${filter.includeNulls ? " or missing" : ""}`;
     }
     if (filter.kind === "boolean") return filter.value ? label : `not ${label}`;

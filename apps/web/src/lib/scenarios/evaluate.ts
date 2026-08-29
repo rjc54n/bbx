@@ -13,14 +13,14 @@ export type ScenarioResultRow = {
   vintage: number | null;
   case_size: number | null;
   bottle_volume_ml: number | null;
-  lowest_ask_p: number | null;
-  release_price_p: number | null;
+  lowest_ask_per_75cl_p: number | null;
+  release_price_per_75cl_p: number | null;
   ask_vs_release_pct: number | null;
   anchor_status: string | null;
 };
 
 const COLUMNS =
-  "parent_sku,format_code,name,vintage,case_size,bottle_volume_ml,lowest_ask_p,release_price_p,ask_vs_release_pct,anchor_status";
+  "parent_sku,format_code,name,vintage,case_size,bottle_volume_ml,lowest_ask_per_75cl_p,release_price_per_75cl_p,ask_vs_release_pct,anchor_status";
 
 // One bounded page of the wines a scenario definition matches. Shared by the
 // saved-scenario detail page and the "Run" preview on both the detail and the

@@ -19,6 +19,15 @@ export interface FilterMeta {
   units?: string;
   min?: number;
   max?: number;
+  /**
+   * Value type for a kind: "range" field, beyond the raw column type. Drives the
+   * scenario builder's unit boundary (money is entered in pounds, stored in
+   * pence) -- see apps/web/src/lib/scenarios/units.ts. Absent means "a plain
+   * number, entered and stored as-is".
+   */
+  type?: "money" | "percent";
+  /** True when the column is nullable and a range over it drops the NULL rows. */
+  nullable?: boolean;
   /** True when the underlying value is a stored estimate, not a live/observed fact. */
   estimate: boolean;
   explanation: string;
