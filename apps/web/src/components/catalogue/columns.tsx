@@ -1,6 +1,10 @@
+"use client";
+
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
+import { currentLocation, wineHref } from "@/lib/nav/origin";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { bbrProductUrl, wineSearcherUrl } from "@/lib/listingLinks";
 import type { CatalogueMetricField, PriceChangeSortField } from "@/lib/query/registry";
@@ -44,6 +48,9 @@ function WineCell({
 }) {
   const bbrUrl = bbrProductUrl(productUrl);
   const wineSearcher = wineSearcherUrl(name, vintage);
+  // So the wine card can offer "Back to results" that returns to this exact
+  // filtered/sorted/paged view rather than a reset catalogue.
+  const from = currentLocation(usePathname(), useSearchParams());
 
   // The name now opens the consolidated wine card; BBR and Wine-Searcher become
   // secondary out-links rather than the primary click.
@@ -51,7 +58,7 @@ function WineCell({
     <div className="max-w-xs">
       <div className="font-medium text-ink">
         {parentSku ? (
-          <Link href={`/wine/parent/${parentSku}`} className="hover:text-accent hover:underline">
+          <Link href={wineHref(parentSku, from)} className="hover:text-accent hover:underline">
             {name ?? "–"}
           </Link>
         ) : name ?? "–"}

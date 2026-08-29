@@ -202,6 +202,10 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
     ],
     [showFormatAdjusted, favourites],
   );
+  // Stable per view (mode + filters + sort + page): powers row-scroll
+  // restoration when the user returns from a wine card.
+  const scrollMemoryKey = useMemo(() => serialize(queryState).toString(), [queryState]);
+
   const visiblePriceChangeColumns = useMemo(
     () => [
       ...PRICE_CHANGE_COLUMNS,
@@ -281,6 +285,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
           emptyMessage="No price changes match this view."
           errorMessage={error}
           onRetry={retryResults}
+          scrollMemoryKey={scrollMemoryKey}
         />
       ) : (
         <DataTable
@@ -293,6 +298,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
           emptyMessage="No results match these filters."
           errorMessage={error}
           onRetry={retryResults}
+          scrollMemoryKey={scrollMemoryKey}
         />
       )}
 

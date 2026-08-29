@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackToOrigin } from "@/components/wine/BackToOrigin";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { requireOwner } from "@/lib/auth/owner";
 import { isTargetFavourited } from "@/lib/favourites/server";
@@ -215,6 +217,10 @@ export default async function WinePage({ params }: {
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <div className="mx-auto max-w-6xl space-y-5 p-5">
+      <Suspense fallback={null}>
+        <BackToOrigin />
+      </Suspense>
+
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Wine</p>

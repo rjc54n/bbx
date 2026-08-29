@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOwner } from "@/lib/auth/owner";
+import { wineHref } from "@/lib/nav/origin";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { isTargetFavourited } from "@/lib/favourites/server";
 import { targetForRecord } from "@/lib/favourites/target";
@@ -134,7 +135,7 @@ export default async function ReleaseOfferDetailPage({
         <div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Release offer record</p><h1 className="mt-1 text-2xl font-semibold">{source.source_wine}</h1><p className="mt-1 text-sm text-ink-muted">Offer date {formatDate(source.offer_date)} · source row {source.source_row_number}</p></div>
         <div className="flex items-center gap-3">
           {favouriteTarget && <FavouriteStar target={favouriteTarget} favourite={favourited} label={source.source_wine} />}
-          {resolution?.parent_sku && <Link href={`/wine/parent/${resolution.parent_sku}`} className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">View wine card ↗</Link>}
+          {resolution?.parent_sku && <Link href={wineHref(resolution.parent_sku, `/release-prices/offers/${importId}/${sourceRowNumber}`)} className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">View wine card ↗</Link>}
           <Link href="/release-prices" className="rounded border border-accent px-3 py-2 text-sm text-accent">All accepted offers</Link>
         </div>
       </header>

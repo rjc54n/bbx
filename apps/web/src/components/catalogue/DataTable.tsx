@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import type { SortDir } from "@/lib/query/types";
+import { useScrollMemory } from "@/lib/nav/useScrollMemory";
 import type { Column } from "./columns";
 
 interface DataTableProps<Row, SortField extends string> {
@@ -13,6 +15,9 @@ interface DataTableProps<Row, SortField extends string> {
   emptyMessage: string;
   errorMessage?: string | null;
   onRetry?: () => void;
+  /** Identifies the current view so the row scroll offset can be restored when
+   *  the user returns from a wine card. Omit to disable scroll memory. */
+  scrollMemoryKey?: string;
 }
 
 export function DataTable<Row, SortField extends string>({
@@ -25,14 +30,18 @@ export function DataTable<Row, SortField extends string>({
   emptyMessage,
   errorMessage,
   onRetry,
+  scrollMemoryKey,
 }: DataTableProps<Row, SortField>) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollMemory(scrollRef, scrollMemoryKey ?? "", !loading && scrollMemoryKey !== undefined);
+
   function handleHeaderClick(column: Column<Row, SortField>) {
     if (!column.sortField) return;
     onSortChange(column.sortField, column.sortField === sort.field && sort.dir === "asc" ? "desc" : "asc");
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
       <table className="w-full min-w-max border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_var(--border)]">
           <tr>

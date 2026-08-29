@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useMemo } from "react";
+import { type FormEvent, useMemo, useRef } from "react";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
+import { currentLocation, wineHref } from "@/lib/nav/origin";
+import { useScrollMemory } from "@/lib/nav/useScrollMemory";
 import { formatDate, formatPence, formatSignedPct } from "@/lib/format";
 import {
   filterAndSortFavourites,
@@ -46,6 +48,10 @@ export function FavouritesBrowser({ wines, pending }: {
   const searchParams = useSearchParams();
   const query = useMemo(() => parseFavouriteQuery(new URLSearchParams(searchParams)), [searchParams]);
   const rows = useMemo(() => filterAndSortFavourites(wines, query), [wines, query]);
+
+  const from = currentLocation(pathname, searchParams.toString());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollMemory(scrollRef, `favourites?${searchParams.toString()}`);
 
   function push(next: Parameters<typeof serializeFavouriteQuery>[0]) {
     const params = serializeFavouriteQuery(next).toString();
@@ -125,7 +131,7 @@ export function FavouritesBrowser({ wines, pending }: {
       {rows.length.toLocaleString()} of {wines.length.toLocaleString()} favourited wines
     </div>
 
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
       <table className="w-full min-w-max border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_var(--border)]">
           <tr>
@@ -148,7 +154,7 @@ export function FavouritesBrowser({ wines, pending }: {
           </td></tr> : rows.map((row) => (
             <tr key={row.parent_sku} className="border-t border-border hover:bg-accent-soft/50">
               <td className="max-w-sm px-3 py-2 align-top">
-                <Link href={`/wine/parent/${row.parent_sku}`} className="font-medium text-accent underline-offset-2 hover:underline">
+                <Link href={wineHref(row.parent_sku, from)} className="font-medium text-accent underline-offset-2 hover:underline">
                   {row.wine_name ?? row.parent_sku}
                 </Link>
                 <p className="text-xs text-ink-muted">{row.producer ?? "Producer unavailable"} · Parent {row.parent_sku}</p>

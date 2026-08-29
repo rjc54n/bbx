@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { scenarioPreviewHref } from "@/lib/scenarios/preview";
 import type { FilterMeta } from "@/lib/query/registry";
 import type { AppliedFilter } from "@/lib/query/applyFilters";
 import type { SortDir } from "@/lib/scenarios/definition";
@@ -29,16 +31,21 @@ function defaultFilter(field: ScenarioFilterField): AppliedFilter {
 export function ScenarioEditor({
   action,
   submitLabel,
+  previewBasePath,
   initialName = "",
   initialFilters = [],
   initialSort = { field: "ask_vs_release_pct", dir: "asc" },
 }: {
   action: (formData: FormData) => void | Promise<void>;
   submitLabel: string;
+  /** Path the "Run" button previews against, e.g. "/scenarios/{id}" or
+   *  "/scenarios/new". Omit to hide "Run" (save-only editors). */
+  previewBasePath?: string;
   initialName?: string;
   initialFilters?: AppliedFilter[];
   initialSort?: { field: ScenarioSortField; dir: SortDir };
 }) {
+  const router = useRouter();
   const [name, setName] = useState(initialName);
   const [filters, setFilters] = useState<AppliedFilter[]>(initialFilters);
   const [sort, setSort] = useState(initialSort);
@@ -99,6 +106,12 @@ export function ScenarioEditor({
             <option value="desc">Descending</option>
           </select>
         </label>
+        {previewBasePath && <button
+          type="button"
+          disabled={!hasValidFilter}
+          onClick={() => router.push(scenarioPreviewHref(previewBasePath, { filters, sort }))}
+          className="rounded border border-accent px-4 py-2 text-sm font-medium text-accent disabled:cursor-not-allowed disabled:opacity-50"
+        >Run</button>}
         <button type="submit" disabled={!hasValidFilter} className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:cursor-not-allowed disabled:opacity-50">{submitLabel}</button>
       </div>
     </form>

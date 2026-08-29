@@ -4,6 +4,7 @@ import { confirmReleasePriceAnchor } from "@/app/(protected)/cellar/imports/rele
 import { clearOwnerReleaseAnchor, setOwnerReleaseAnchor } from "./actions";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { requireOwner } from "@/lib/auth/owner";
+import { wineHref } from "@/lib/nav/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export default async function ReleasePriceHistoryPage({
     <div className="mx-auto max-w-6xl space-y-5 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/release-prices" className="text-sm text-accent underline-offset-2 hover:underline">Back to release prices</Link>
-        <Link href={`/wine/parent/${parentSku}`} className="text-sm text-accent underline-offset-2 hover:underline">View wine card ↗</Link>
+        <Link href={wineHref(parentSku, `/release-prices/${parentSku}/${formatCode}`)} className="text-sm text-accent underline-offset-2 hover:underline">View wine card ↗</Link>
       </div>
       {query.confirmed && <p role="status" className="rounded border border-green-700/30 bg-green-50 px-4 py-3 text-sm text-green-900">The selected evidence is now the confirmed release anchor.</p>}
       {query.confirm_error && <p role="alert" className="rounded border border-accent/30 bg-background px-4 py-3 text-sm text-accent">The release anchor could not be confirmed.</p>}

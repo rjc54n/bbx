@@ -4,6 +4,8 @@ import { formatPence } from "@/lib/format";
 import { buildFavouriteState, isFavourited, targetForRecord } from "@/lib/favourites/target";
 import { cellarTrackerRecordsPageCount } from "@/lib/cellartracker/recordsBrowser";
 import { Pagination } from "@/components/nav/Pagination";
+import { ScrollMemory } from "@/components/nav/ScrollMemory";
+import { currentLocation, wineHref } from "@/lib/nav/origin";
 
 export type CellarTrackerMarketRow = {
   import_id: string;
@@ -59,6 +61,11 @@ export function CellarTrackerRecordsBrowser({
   const pageCount = cellarTrackerRecordsPageCount(totalRows);
   const resultLabel = search ? "matching records" : "records";
 
+  const listParams = new URLSearchParams();
+  if (search) listParams.set("q", search);
+  if (page > 1) listParams.set("page", String(page));
+  const from = currentLocation("/cellartracker", listParams);
+
   return <div className="flex min-h-0 flex-1 flex-col">
     <header className="border-b border-border bg-accent-soft px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -109,7 +116,7 @@ export function CellarTrackerRecordsBrowser({
       </form>
     </div>
 
-    <div className="min-h-0 flex-1 overflow-auto">
+    <ScrollMemory memoryKey={from} className="min-h-0 flex-1 overflow-auto">
       <table className="w-full min-w-max border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_var(--border)]">
           <tr>
@@ -132,7 +139,7 @@ export function CellarTrackerRecordsBrowser({
                 {/* Linked rows read at the canonical wine card; unlinked ones have
                     nowhere else to go, so they open the record page to be matched. */}
                 {row.link_status === "linked" && row.parent_sku
-                  ? <Link href={`/wine/parent/${row.parent_sku}`} className="font-medium text-accent underline-offset-2 hover:underline">{row.source_wine}</Link>
+                  ? <Link href={wineHref(row.parent_sku, from)} className="font-medium text-accent underline-offset-2 hover:underline">{row.source_wine}</Link>
                   : <Link href={`/cellartracker/${row.import_id}/${row.source_row_number}`} className="font-medium text-accent underline-offset-2 hover:underline">{row.source_wine}</Link>}
                 <p className="text-xs text-ink-muted">
                   {row.vintage ?? "Vintage unavailable"}
@@ -146,7 +153,7 @@ export function CellarTrackerRecordsBrowser({
               <td className="px-3 py-2 text-right align-top tabular-nums">{formatPence(row.highest_bid_per_bottle_p)}</td>
               <td className="px-3 py-2 align-top">
                 {row.link_status === "linked" && row.parent_sku
-                  ? <><Link href={`/wine/parent/${row.parent_sku}`} className="text-accent underline-offset-2 hover:underline">{row.parent_sku}</Link><span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span><Link href={`/cellartracker/${row.import_id}/${row.source_row_number}`} className="block text-xs text-accent underline-offset-2 hover:underline">Manage ↗</Link></>
+                  ? <><Link href={wineHref(row.parent_sku, from)} className="text-accent underline-offset-2 hover:underline">{row.parent_sku}</Link><span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span><Link href={`/cellartracker/${row.import_id}/${row.source_row_number}`} className="block text-xs text-accent underline-offset-2 hover:underline">Manage ↗</Link></>
                   : <span className="text-ink-muted">{row.link_status === "suppressed" ? "Suppressed" : "Unlinked"}</span>}
               </td>
               <td className="px-3 py-2 text-center align-top">{(() => {
@@ -158,7 +165,7 @@ export function CellarTrackerRecordsBrowser({
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollMemory>
 
     <Pagination
       page={page}
