@@ -6,7 +6,7 @@ import { recentListedRange, type ListedDays } from "./freshness";
 // same engine serves both surfaces and, later, the agent's evaluation path.
 export type AppliedFilter =
   | { kind: "enum"; field: string; value: string[] }
-  | { kind: "range"; field: string; min?: number; max?: number }
+  | { kind: "range"; field: string; min?: number; max?: number; includeNulls?: boolean }
   | { kind: "date"; field: string; days?: ListedDays; min?: string; max?: string }
   | { kind: "text"; field: string; value: string }
   | { kind: "typeahead"; field: string; value: string }
@@ -36,10 +36,24 @@ export function applyFilters<Q>(query: Q, filters: readonly AppliedFilter[]): Q 
       case "enum":
         if (filter.value.length > 0) q = q.in(filter.field, filter.value);
         break;
-      case "range":
+      case "range": {
+        if (filter.min === undefined && filter.max === undefined) break;
+        if (filter.includeNulls) {
+          // Keep rows in the bound(s) OR rows where the column is NULL, so a
+          // range over a nullable derived column (ask_vs_release_pct, …) does
+          // not silently become an "is not null" filter. The bounds stay AND'd
+          // to each other inside the or() logic tree.
+          const bounds: string[] = [];
+          if (filter.min !== undefined) bounds.push(`${filter.field}.gte.${filter.min}`);
+          if (filter.max !== undefined) bounds.push(`${filter.field}.lte.${filter.max}`);
+          const inRange = bounds.length > 1 ? `and(${bounds.join(",")})` : bounds[0];
+          q = q.or(`${inRange},${filter.field}.is.null`);
+          break;
+        }
         if (filter.min !== undefined) q = q.gte(filter.field, filter.min);
         if (filter.max !== undefined) q = q.lte(filter.field, filter.max);
         break;
+      }
       case "date":
         if (filter.days !== undefined) {
           q = q.gte(filter.field, recentListedRange(filter.days).min);

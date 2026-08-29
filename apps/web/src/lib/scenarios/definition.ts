@@ -45,7 +45,9 @@ function parseFilter(raw: unknown): AppliedFilter | null {
       const min = typeof raw.min === "number" && Number.isFinite(raw.min) ? raw.min : undefined;
       const max = typeof raw.max === "number" && Number.isFinite(raw.max) ? raw.max : undefined;
       if (min === undefined && max === undefined) return null;
-      return { kind: "range", field, min, max };
+      return raw.includeNulls === true
+        ? { kind: "range", field, min, max, includeNulls: true }
+        : { kind: "range", field, min, max };
     }
     case "enum": {
       let value = toStringList(raw.value);

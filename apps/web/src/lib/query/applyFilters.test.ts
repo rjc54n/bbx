@@ -31,6 +31,18 @@ describe("applyFilters", () => {
     ]);
   });
 
+  it("keeps NULL rows alongside the bounds when includeNulls is set", () => {
+    const { builder, calls } = makeBuilder();
+    applyFilters(builder, [
+      { kind: "range", field: "bid_vs_release_pct", min: -90, max: 10, includeNulls: true },
+      { kind: "range", field: "lowest_ask_p", max: 30, includeNulls: true },
+    ]);
+    expect(calls).toEqual([
+      { method: "or", args: ["and(bid_vs_release_pct.gte.-90,bid_vs_release_pct.lte.10),bid_vs_release_pct.is.null"] },
+      { method: "or", args: ["lowest_ask_p.lte.30,lowest_ask_p.is.null"] },
+    ]);
+  });
+
   it("skips an empty enum and an open range", () => {
     const { builder, calls } = makeBuilder();
     applyFilters(builder, [

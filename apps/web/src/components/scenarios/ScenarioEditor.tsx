@@ -124,12 +124,16 @@ function FilterControl({ filter, onChange }: { filter: AppliedFilter; onChange: 
       <input type="number" inputMode="decimal" value={filter.min ?? ""} placeholder="min" onChange={(event) => onChange({ ...filter, min: event.target.value === "" ? undefined : Number(event.target.value) })} className="w-24 rounded border border-border px-2 py-1.5 text-sm" />
       <span className="text-ink-muted">to</span>
       <input type="number" inputMode="decimal" value={filter.max ?? ""} placeholder="max" onChange={(event) => onChange({ ...filter, max: event.target.value === "" ? undefined : Number(event.target.value) })} className="w-24 rounded border border-border px-2 py-1.5 text-sm" />
+      <label className="flex items-center gap-1 text-xs text-ink-muted" title="Also keep rows where this value is missing. Off by default, a range excludes them.">
+        <input type="checkbox" checked={filter.includeNulls ?? false} onChange={(event) => onChange({ ...filter, includeNulls: event.target.checked || undefined })} />
+        include missing
+      </label>
     </>;
   }
   if (filter.kind === "boolean") {
     return <select value={filter.value ? "true" : "false"} onChange={(event) => onChange({ ...filter, value: event.target.value === "true" })} className="rounded border border-border px-2 py-1.5 text-sm">
-      <option value="true">Listed</option>
-      <option value="false">Unlisted</option>
+      <option value="true">Yes</option>
+      <option value="false">No</option>
     </select>;
   }
   if (filter.kind === "text") {

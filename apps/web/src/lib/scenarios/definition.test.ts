@@ -10,6 +10,20 @@ describe("parseScenarioDefinition", () => {
     expect(parsed.sort).toEqual({ field: "ask_vs_release_pct", dir: "asc" });
   });
 
+  it("keeps includeNulls on a range only when it is exactly true", () => {
+    expect(parseScenarioDefinition({
+      filters: [{ field: "bid_vs_release_pct", kind: "range", min: -90, max: 10, includeNulls: true }],
+    }).filters).toEqual([{ kind: "range", field: "bid_vs_release_pct", min: -90, max: 10, includeNulls: true }]);
+    expect(parseScenarioDefinition({
+      filters: [{ field: "bid_vs_release_pct", kind: "range", max: 10, includeNulls: "yes" }],
+    }).filters).toEqual([{ kind: "range", field: "bid_vs_release_pct", min: undefined, max: 10 }]);
+  });
+
+  it("accepts is_biddable as a boolean filter", () => {
+    expect(parseScenarioDefinition({ filters: [{ field: "is_biddable", kind: "boolean", value: true }] }).filters)
+      .toEqual([{ kind: "boolean", field: "is_biddable", value: true }]);
+  });
+
   it("takes the operator from the registry, not the input", () => {
     // Field is an enum in the registry; a claimed range kind is ignored.
     const parsed = parseScenarioDefinition({ filters: [{ field: "colour", kind: "range", value: ["Red", "White"] }] });

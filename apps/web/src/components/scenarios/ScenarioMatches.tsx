@@ -39,7 +39,7 @@ export function ScenarioMatches({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center text-ink-muted">No biddable format matches this scenario.</td></tr>
+            {rows.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center text-ink-muted">No format matches this scenario.</td></tr>
               : rows.map((row) => <tr key={`${row.parent_sku}-${row.format_code}`} className="border-t border-border">
                 <td className="px-5 py-2">
                   {row.parent_sku

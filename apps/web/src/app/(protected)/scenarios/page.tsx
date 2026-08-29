@@ -16,7 +16,7 @@ function summarise(definition: unknown): string {
     const label = SCENARIO_FILTERS[filter.field as ScenarioFilterField]?.label ?? filter.field;
     if (filter.kind === "range") {
       const parts = [filter.min !== undefined ? `≥ ${filter.min}` : null, filter.max !== undefined ? `≤ ${filter.max}` : null].filter(Boolean).join(" and ");
-      return `${label} ${parts}`;
+      return `${label} ${parts}${filter.includeNulls ? " or missing" : ""}`;
     }
     if (filter.kind === "boolean") return filter.value ? label : `not ${label}`;
     if (filter.kind === "enum") return `${label}: ${filter.value.join(", ")}`;
@@ -46,8 +46,9 @@ export default async function ScenariosPage({
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Scenarios</p>
           <h1 className="mt-1 text-2xl font-semibold">Saved scenarios</h1>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-            Named filters over every biddable format, evaluated live against the wine card metrics
-            (ask, bid, release, market). Open one to run it and see the wines it matches.
+            Named filters over every format, evaluated live against the wine card metrics
+            (ask, bid, release, market). Add the <strong>Biddable</strong> filter to limit one to
+            biddable wines. Open one to run it and see the wines it matches.
           </p>
         </div>
         <Link href="/scenarios/new" className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">New scenario</Link>

@@ -34,17 +34,21 @@ export const SCENARIO_FILTERS = {
     field: "is_listed", label: "Listed", group: "Format", kind: "boolean", estimate: false,
     explanation: "Whether the format currently has a live ask on BBX.",
   },
+  is_biddable: {
+    field: "is_biddable", label: "Biddable", group: "Wine", kind: "boolean", estimate: false,
+    explanation: "Whether the wine is in BBX's biddable universe. The view is not scoped to biddable wines, so add this filter to limit a scenario to them.",
+  },
   anchor_status: {
     field: "anchor_status", label: "Anchor", group: "Price", kind: "enum", estimate: false,
     explanation: "Release-anchor provenance: owner, confirmed or provisional.",
   },
   lowest_ask_p: {
-    field: "lowest_ask_p", label: "Ask", group: "Price", kind: "range", units: "pence", estimate: false,
-    explanation: "Lowest current listing price (per case), as of the last scan.",
+    field: "lowest_ask_p", label: "Ask", group: "Price", kind: "range", units: "pence / case", estimate: false,
+    explanation: "Lowest current listing price, per case, in pence, as of the last scan. The results table shows this per 75cl in pounds.",
   },
   release_price_p: {
-    field: "release_price_p", label: "Release price", group: "Price", kind: "range", units: "pence", estimate: false,
-    explanation: "Resolved release anchor (owner ahead of imported), per case.",
+    field: "release_price_p", label: "Release price", group: "Price", kind: "range", units: "pence / case", estimate: false,
+    explanation: "Resolved release anchor (owner ahead of imported), per case, in pence.",
   },
   ask_vs_release_pct: {
     field: "ask_vs_release_pct", label: "Ask vs release", group: "Price", kind: "range", units: "%", estimate: false,
