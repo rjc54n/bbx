@@ -26,8 +26,13 @@ type MatchGroupRpcKey = Exclude<MatchGroupOp, "manual">;
 export type MatchAdapter = {
   /** Section label used in headers and the queue-summary chips. */
   label: string;
-  /** The matching route for this source (also the primary revalidation path). */
+  /**
+   * The unified matching route (also the primary revalidation path). Shared by
+   * both sources since Slice 3; the per-source view is a `?source=` filter on it.
+   */
   matchPath: string;
+  /** The unified route pre-filtered to this source, for header / favourites links. */
+  sourceMatchHref: string;
   /** The source's non-matching route, revalidated alongside every mutation. */
   siblingPath: string;
   /**
@@ -45,7 +50,8 @@ export type MatchAdapter = {
 export const MATCH_ADAPTERS: Record<MatchSource, MatchAdapter> = {
   release_offer: {
     label: "Release offers",
-    matchPath: "/release-prices/matches",
+    matchPath: "/matches",
+    sourceMatchHref: "/matches?source=release_offer",
     siblingPath: "/release-prices",
     detailPathPattern: /^\/release-prices\/offers\/[0-9a-f-]{36}\/\d+(?:\?.*)?$/i,
     groupRpc: {
@@ -61,7 +67,8 @@ export const MATCH_ADAPTERS: Record<MatchSource, MatchAdapter> = {
   },
   cellartracker: {
     label: "CellarTracker",
-    matchPath: "/cellartracker/matches",
+    matchPath: "/matches",
+    sourceMatchHref: "/matches?source=cellartracker",
     siblingPath: "/cellartracker",
     detailPathPattern: null,
     groupRpc: {

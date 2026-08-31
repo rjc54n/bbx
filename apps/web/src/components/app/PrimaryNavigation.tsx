@@ -25,6 +25,7 @@ const tabs = [
     label: "Release prices",
     href: "/release-prices",
   },
+  { id: "matching", label: "Matching", href: "/matches" },
   { id: "favourites", label: "Favourites", href: "/favourites" },
   { id: "scenarios", label: "Scenarios", href: "/scenarios" },
 ] as const;
@@ -34,6 +35,8 @@ export function PrimaryNavigation() {
   const searchParams = useSearchParams();
   const active = pathname.startsWith("/scenarios")
     ? "scenarios"
+    : pathname.startsWith("/matches")
+    ? "matching"
     : pathname.startsWith("/favourites")
     ? "favourites"
     : pathname.startsWith("/release-prices") || pathname.startsWith("/cellar/imports/release-offers")

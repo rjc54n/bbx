@@ -36,7 +36,9 @@ function Chip({ children }: { children: string }) {
 }
 
 function matchPath(source: string): string {
-  return source === "cellartracker" ? "/cellartracker/matches" : "/release-prices/matches";
+  return source === "cellartracker"
+    ? "/matches?source=cellartracker"
+    : "/matches?source=release_offer";
 }
 
 export function FavouritesBrowser({ wines, pending }: {

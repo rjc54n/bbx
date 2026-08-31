@@ -8,7 +8,15 @@ Slice 2 (shared `source`-parameterised components + `ADAPTERS` map behind the
 existing routes, no URL change) built 31 Aug 2026 — `src/lib/matching/`,
 `src/components/matching/`; both `/release-prices/matches` and
 `/cellartracker/matches` now render through one `MatchGroupList`. Vitest:
-`adapters.test.ts`, `cellartrackerPanels.test.ts`. Slices 3–4 not started.
+`adapters.test.ts`, `cellartrackerPanels.test.ts`.
+Slice 3 (unified `/matches` route, nav entry, 308 redirect contract) built
+31 Aug 2026 — `src/app/(protected)/matches/page.tsx` on the union view +
+`wine_match_queue_summary`; both old routes are `permanentRedirect`s driven by
+`src/lib/matching/redirectContract.ts`. Vitest: `redirectContract.test.ts` (9).
+The formal p50/p95 latency harness + 1.25× budget gate (§10) is **deferred** by
+the owner (minimise Supabase compute after a production incident the week of
+25 Aug); filter push-down and summary cost were instead confirmed by plain
+`EXPLAIN` (no `ANALYZE`) on production — see §8. Slice 4 not started.
 
 **Revised twice after external review:**
 [`MATCHING-FUNCTIONAL-SPEC-REVIEW.md`](MATCHING-FUNCTIONAL-SPEC-REVIEW.md)
@@ -444,7 +452,36 @@ Original plan:
   CellarTracker fetch issues one query for N cards.
 - Gates: `cd apps/web && npm run lint && npm run test && npm run build`.
 
-### Slice 3: `/matches` page, nav, redirects (app)
+### Slice 3: `/matches` page, nav, redirects (app) — BUILT 31 Aug 2026
+
+Landed as planned. `src/app/(protected)/matches/page.tsx` reads
+`wine_match_review_view` (rows + exact pagination count) and
+`wine_match_queue_summary(p_source)` (state chips), with `source`
+(`all`/`release_offer`/`cellartracker`) and `state` (`needs-review`/
+`with-suggestions`/`linked`/`no-suitable-match`/`all`) filters, default
+`all`/`needs-review`. Ordering: `last_error_at DESC NULLS LAST`
+(failed-run groups first), then `suggestion_count DESC`,
+`top_match_score DESC NULLS LAST`, then `source`, `match_group_key`. Per-source
+detail (offer dates, producer/region, panels, full suggestion rows) is fetched
+per visible page from the per-source views — the union carries only the common
+projection. `MatchRunControl` / `CellarTrackerMatchRunControl` render per the
+`source` filter (both when `all`); the two match-run pipelines stay per-source
+(unifying them is out of scope, §5). `src/lib/matching/adapters.ts` `matchPath`
+is now `/matches` for both sources (revalidation + return-path target).
+
+`src/lib/matching/redirectContract.ts` + `redirectContract.test.ts` implement
+§3.7: both old routes are `permanentRedirect` (308); each sets its own source,
+remaps state, carries validated `q` + positive-int `page`, drops the rest.
+Nav entry "Matching" added to `PrimaryNavigation` (after "Release prices").
+Header links in `AcceptedOfferBrowser` / `CellarTrackerRecordsBrowser` and the
+`FavouritesBrowser` deep-link now point at `/matches?source=…`.
+
+Performance (§10) is **deferred** — see the status note and §8. No data branch
+was created. Filter push-down and summary-function cost were confirmed with
+plain `EXPLAIN` on production instead.
+
+Original plan:
+
 
 - New route reading the union view and summary function; `source` + `state`
   filters; source-specific panels.
@@ -504,6 +541,43 @@ Throwaway DB objects (any perf scratch schema) are dropped immediately
     be within **1.25×** the slower current page's p95. If it is not, Slice 3
     does not merge until the summary function is replaced by the maintained
     table fallback (§3.2) and re-measured.
+
+### Slice 3 verification, 31 Aug 2026
+
+Criteria 1, 3, 4, 5, 6, 7 are served by Slice 1's DB tests + Slice 2/3 unit
+tests + the shared component behaviour (unchanged from Slice 2). Criterion 2 is
+covered by `redirectContract.test.ts` (drives `buildMatchesRedirect` on the
+exact URLs in the acceptance text). Criterion 9: no schema change in Slice 3,
+so `database.types.ts` is unchanged and still matches.
+
+Criterion 8 / 10 (the data-branch latency harness) is **not done** — the owner
+directed us to minimise Supabase compute after a production incident, and a
+billed data branch was not created. Instead, on production (read-only, plain
+`EXPLAIN`, no `ANALYZE`, zero execution):
+
+- **`source` push-down confirmed.** `wine_match_review_view WHERE source =
+  'cellartracker' AND (unresolved_row_count > 0 OR last_run_status = 'failed')`
+  plans as a scan of the CellarTracker branch only — the `release_offer_*`
+  tables do not appear in the plan. The `UNION ALL` + constant `source`
+  discriminator lets Postgres prune the other branch. Total planner cost ≈ 524
+  for a 50-row page.
+- **Summary-function cost is small.** The all-sources single pass
+  (`count(*) FILTER …` over the union) plans as one `Append` of the two branch
+  subqueries under an `Aggregate`, total planner cost ≈ 1714. Largest inputs:
+  a seq scan of `release_offer_source_rows` (~3.5k rows) and a sort of
+  `release_offer_match_run_groups` (~4.9k rows). No matview refresh, no
+  unbounded scan. At the current data scale (~3,300 groups) this is
+  sub-second.
+- **Summary totals reconcile.** `wine_match_queue_summary()` returns
+  needs_review 2202 / with_suggestions 554 / linked 1100 / no_suitable_match 2
+  / all_groups 3304; the per-source calls sum to the same
+  (release 1837 + cellar 365 = 2202 needs_review, 861 + 239 = 1100 linked,
+  2700 + 604 = 3304 total).
+
+The formal p50/p95 comparison and the 1.25× gate remain open. Given the
+push-down works and the dataset is small, the risk of shipping the route is
+low; if the landing render is slow in practice, the fallback is the maintained
+summary table in §3.2, measured then.
 
 ---
 

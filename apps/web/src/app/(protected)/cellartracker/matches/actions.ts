@@ -9,7 +9,9 @@ import { searchCellarTrackerGroups } from "@/lib/releaseOffers/algoliaServer";
 // @/lib/matching/actions. What stays here is the CellarTracker match-run
 // pipeline: its Algolia ranking and result RPC differ from release offers'.
 
-const MATCH_PATH = "/cellartracker/matches";
+// The matching queue now lives at the unified /matches route (Slice 3); the old
+// path is a 308 redirect, so revalidating it would do nothing.
+const MATCH_PATH = "/matches";
 const MATCH_BATCH_SIZE = 20;
 
 export type CellarTrackerMatchProgress = {

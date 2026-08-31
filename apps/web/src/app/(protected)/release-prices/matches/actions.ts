@@ -12,7 +12,9 @@ import type { HistoricOfferMatchGroup } from "@/lib/releaseOffers/algoliaMatchin
 // RPCs differ from CellarTracker's) and the per-record exclude/restore the
 // offer-record and excluded-records pages use.
 
-const MATCH_PATH = "/release-prices/matches";
+// The matching queue now lives at the unified /matches route (Slice 3); the old
+// path is a 308 redirect, so revalidating it would do nothing.
+const MATCH_PATH = "/matches";
 const MATCH_BATCH_SIZE = 25;
 
 export type MatchRunProgress = {

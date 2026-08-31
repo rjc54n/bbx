@@ -31,7 +31,7 @@ export type PaginationProps = {
   totalCount?: number;
   /** Noun for the total, e.g. "wines" / "groups". Defaults to "total". */
   label?: string;
-  /** Link mode: path without query, e.g. "/release-prices/matches". */
+  /** Link mode: path without query, e.g. "/matches". */
   basePath?: string;
   /** Link mode: query params to carry across page changes (page is set for you). */
   query?: Record<string, string>;

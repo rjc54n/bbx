@@ -18,7 +18,7 @@ function recordPath(importId: string, sourceRowNumber: number) {
 
 function revalidateRecord(importId: string, sourceRowNumber: number) {
   revalidatePath(LIST_PATH);
-  revalidatePath("/cellartracker/matches");
+  revalidatePath("/matches");
   revalidatePath(recordPath(importId, sourceRowNumber));
 }
 
@@ -135,7 +135,7 @@ export async function restoreCellarTrackerRecord(
     p_source_wine: sourceWine,
   });
   revalidatePath(LIST_PATH);
-  revalidatePath("/cellartracker/matches");
+  revalidatePath("/matches");
   revalidatePath("/cellartracker/excluded");
   redirect(`/cellartracker/excluded?${error ? "restore_error" : "restored"}=1`);
 }

@@ -78,7 +78,7 @@ export function CellarTrackerRecordsBrowser({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/cellartracker/matches" className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">Match records</Link>
+          <Link href="/matches?source=cellartracker" className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">Match records</Link>
           <Link href="/cellar/imports" className="rounded border border-accent px-3 py-2 text-sm font-medium text-accent hover:bg-background">Import data</Link>
         </div>
       </div>

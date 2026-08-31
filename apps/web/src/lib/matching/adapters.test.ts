@@ -54,20 +54,22 @@ describe("group RPC dispatch", () => {
 });
 
 describe("safeMatchReturnPath", () => {
-  it("keeps a release-offer path on its own routes and rejects anything else", () => {
-    expect(safeMatchReturnPath("release_offer", "/release-prices/matches?state=linked&page=2"))
-      .toBe("/release-prices/matches?state=linked&page=2");
+  it("keeps a release-offer path on the unified route or an offer record, rejects anything else", () => {
+    expect(safeMatchReturnPath("release_offer", "/matches?source=release_offer&state=linked&page=2"))
+      .toBe("/matches?source=release_offer&state=linked&page=2");
+    expect(safeMatchReturnPath("release_offer", "/matches"))
+      .toBe("/matches");
     expect(safeMatchReturnPath("release_offer", "/release-prices/offers/00000000-0000-0000-0000-000000000000/7"))
       .toBe("/release-prices/offers/00000000-0000-0000-0000-000000000000/7");
-    expect(safeMatchReturnPath("release_offer", "/evil")).toBe("/release-prices/matches");
-    expect(safeMatchReturnPath("release_offer", "https://example.com")).toBe("/release-prices/matches");
+    expect(safeMatchReturnPath("release_offer", "/evil")).toBe("/matches");
+    expect(safeMatchReturnPath("release_offer", "https://example.com")).toBe("/matches");
   });
 
   it("does not let a CellarTracker return path reach the offer-record route", () => {
-    expect(safeMatchReturnPath("cellartracker", "/cellartracker/matches?state=all"))
-      .toBe("/cellartracker/matches?state=all");
+    expect(safeMatchReturnPath("cellartracker", "/matches?source=cellartracker&state=all"))
+      .toBe("/matches?source=cellartracker&state=all");
     expect(safeMatchReturnPath("cellartracker", "/release-prices/offers/00000000-0000-0000-0000-000000000000/7"))
-      .toBe("/cellartracker/matches");
+      .toBe("/matches");
   });
 });
 

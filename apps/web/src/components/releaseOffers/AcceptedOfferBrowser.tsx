@@ -62,7 +62,7 @@ export function AcceptedOfferBrowser({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/release-prices/matches" className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">Match offers</Link>
+          <Link href="/matches?source=release_offer" className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">Match offers</Link>
           <Link href="/cellar/imports" className="rounded border border-accent px-3 py-2 text-sm font-medium text-accent hover:bg-background">Import data</Link>
         </div>
       </div>

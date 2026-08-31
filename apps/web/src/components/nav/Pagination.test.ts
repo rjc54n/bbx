@@ -3,8 +3,8 @@ import { clampPage, pageHref } from "./Pagination";
 
 describe("pageHref", () => {
   it("sets the page param and preserves the rest", () => {
-    expect(pageHref("/release-prices/matches", { state: "unresolved", q: "tinto" }, 3))
-      .toBe("/release-prices/matches?state=unresolved&q=tinto&page=3");
+    expect(pageHref("/matches", { source: "release_offer", state: "needs-review", q: "tinto" }, 3))
+      .toBe("/matches?source=release_offer&state=needs-review&q=tinto&page=3");
   });
 
   it("adds page when there is no other query", () => {
