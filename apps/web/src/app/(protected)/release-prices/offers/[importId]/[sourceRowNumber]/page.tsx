@@ -6,15 +6,13 @@ import { formatDate, formatFormat, formatPence } from "@/lib/format";
 import { isTargetFavourited } from "@/lib/favourites/server";
 import { targetForRecord } from "@/lib/favourites/target";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
-import { CatalogueCandidateSearch } from "@/components/releaseOffers/CatalogueCandidateSearch";
+import { CatalogueCandidateSearch } from "@/components/matching/CatalogueCandidateSearch";
 import { ExcludeHistoricOfferRecordForm } from "@/components/releaseOffers/ExcludeHistoricOfferRecordForm";
 import {
-  confirmHistoricOfferCandidate,
-  confirmManualHistoricOfferMatch,
-  restoreHistoricOfferGroup,
-  suppressHistoricOfferGroup,
-  unlinkHistoricOfferGroup,
-} from "@/app/(protected)/release-prices/matches/actions";
+  confirmMatchCandidate,
+  linkMatchGroupManually,
+  mutateMatchGroup,
+} from "@/lib/matching/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -193,7 +191,7 @@ export default async function ReleaseOfferDetailPage({
                       {candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}
                     </p>
                   </div>
-                  <form action={confirmHistoricOfferCandidate.bind(null, source.match_group_key, candidate.parent_sku, returnPath)}>
+                  <form action={confirmMatchCandidate.bind(null, "release_offer", source.match_group_key, candidate.parent_sku, returnPath)}>
                     <button className="rounded border border-accent px-2 py-1 text-xs text-accent">Confirm group</button>
                   </form>
                 </article>
@@ -201,10 +199,10 @@ export default async function ReleaseOfferDetailPage({
             </div>
           </section>
         )}
-        {unresolved && <div className="mt-4 flex flex-wrap gap-3"><form action={confirmManualHistoricOfferMatch.bind(null, source.match_group_key, returnPath)} className="flex gap-2"><label className="sr-only" htmlFor="parent-sku">Parent ID</label><input id="parent-sku" name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-sm" required /><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Link manually</button></form><form action={suppressHistoricOfferGroup.bind(null, source.match_group_key, returnPath)}><button className="rounded border border-border px-3 py-1.5 text-sm">Reject and suppress group</button></form></div>}
-        {resolution?.status === "linked" && <form action={unlinkHistoricOfferGroup.bind(null, source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Unlink group and retry later</button></form>}
-        {resolution?.status === "ignored" && <form action={restoreHistoricOfferGroup.bind(null, source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-border px-3 py-1.5 text-sm">Restore group to unmatched</button></form>}
-        {unresolved && <CatalogueCandidateSearch matchGroupKey={source.match_group_key} sourceWine={source.source_wine} sourceVintage={source.source_vintage} returnPath={returnPath} />}
+        {unresolved && <div className="mt-4 flex flex-wrap gap-3"><form action={linkMatchGroupManually.bind(null, "release_offer", source.match_group_key, returnPath)} className="flex gap-2"><label className="sr-only" htmlFor="parent-sku">Parent ID</label><input id="parent-sku" name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-sm" required /><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Link manually</button></form><form action={mutateMatchGroup.bind(null, "release_offer", "suppress", source.match_group_key, returnPath)}><button className="rounded border border-border px-3 py-1.5 text-sm">Reject and suppress group</button></form></div>}
+        {resolution?.status === "linked" && <form action={mutateMatchGroup.bind(null, "release_offer", "unlink", source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Unlink group and retry later</button></form>}
+        {resolution?.status === "ignored" && <form action={mutateMatchGroup.bind(null, "release_offer", "restore", source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-border px-3 py-1.5 text-sm">Restore group to unmatched</button></form>}
+        {unresolved && <CatalogueCandidateSearch source="release_offer" matchGroupKey={source.match_group_key} defaultQuery={source.source_wine} sourceVintage={source.source_vintage} returnPath={returnPath} />}
       </section>
 
       <section aria-labelledby="exclude-record" className="rounded-lg border border-border bg-background p-5">

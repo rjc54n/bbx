@@ -2,29 +2,32 @@
 
 import { useActionState } from "react";
 import {
-  confirmHistoricOfferCandidate,
-  searchHistoricOfferCatalogue,
-  type CatalogueSearchState,
-} from "@/app/(protected)/release-prices/matches/actions";
+  confirmMatchCandidate,
+  searchMatchCatalogue,
+  type MatchCatalogueSearchState,
+} from "@/lib/matching/actions";
+import type { MatchSource } from "@/lib/matching/adapters";
 
-const initialState: CatalogueSearchState = { results: [] };
+const initialState: MatchCatalogueSearchState = { results: [] };
 
 export function CatalogueCandidateSearch({
+  source,
   matchGroupKey,
-  sourceWine,
+  defaultQuery,
   sourceVintage,
   returnPath,
 }: {
+  source: MatchSource;
   matchGroupKey: string;
-  sourceWine: string;
+  defaultQuery: string;
   sourceVintage: number | null;
   returnPath: string;
 }) {
-  const [state, action, pending] = useActionState(searchHistoricOfferCatalogue, initialState);
+  const [state, action, pending] = useActionState(searchMatchCatalogue, initialState);
   return <details className="mt-3">
     <summary className="cursor-pointer text-xs text-accent">Search the wider BBR catalogue</summary>
     <form action={action} className="mt-2 flex flex-wrap gap-2">
-      <input type="search" name="query" defaultValue={sourceWine} className="min-w-64 flex-1 rounded border border-border px-2 py-1.5 text-sm" />
+      <input type="search" name="query" defaultValue={defaultQuery} className="min-w-64 flex-1 rounded border border-border px-2 py-1.5 text-sm" />
       <input type="hidden" name="vintage" value={sourceVintage ?? ""} />
       <button disabled={pending} className="rounded border border-accent px-3 py-1.5 text-xs text-accent disabled:opacity-60">{pending ? "Searching…" : "Search"}</button>
     </form>
@@ -32,7 +35,7 @@ export function CatalogueCandidateSearch({
     {state.results.length > 0 && <ul className="mt-2 divide-y divide-border rounded border border-border">
       {state.results.map((candidate) => <li key={candidate.parent_sku} className="flex items-start justify-between gap-3 p-2 text-xs">
         <div><p className="font-medium">{candidate.name}</p><p className="text-ink-muted">Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"} · {candidate.stock_origin ?? "Stock origin unavailable"}</p></div>
-        <form action={confirmHistoricOfferCandidate.bind(null, matchGroupKey, candidate.parent_sku, returnPath)}><button className="rounded border border-accent px-2 py-1 text-accent">Confirm</button></form>
+        <form action={confirmMatchCandidate.bind(null, source, matchGroupKey, candidate.parent_sku, returnPath)}><button className="rounded border border-accent px-2 py-1 text-accent">Confirm</button></form>
       </li>)}
     </ul>}
   </details>;

@@ -2,20 +2,15 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth/owner";
 import { loadGroupFavourites } from "@/lib/favourites/server";
 import { isFavourited, targetForRecord } from "@/lib/favourites/target";
-import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { cellarTrackerCatalogueQuery } from "@/lib/cellar/cellartrackerMatching";
-import { CellarTrackerCatalogueSearch } from "./CatalogueCandidateSearch";
-import { ExcludeCellarTrackerGroupForm } from "./ExcludeCellarTrackerGroupForm";
-import { CellarTrackerMatchRunControl } from "./MatchRunControl";
 import {
-  confirmCellarTrackerCandidate,
-  confirmManualCellarTrackerMatch,
-  editCellarTrackerGroup,
-  restoreCellarTrackerGroup,
-  suppressCellarTrackerGroup,
-  unlinkCellarTrackerGroup,
-  type CellarTrackerMatchProgress,
-} from "./actions";
+  loadCellarTrackerPanels,
+  type CellarTrackerEvidenceRow,
+} from "@/lib/matching/cellartrackerPanels";
+import { MatchGroupList, type MatchGroupView } from "@/components/matching/MatchGroupList";
+import { Pagination } from "@/components/nav/Pagination";
+import { CellarTrackerMatchRunControl } from "./MatchRunControl";
+import { type CellarTrackerMatchProgress } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -69,16 +64,6 @@ function applyStateFilter<T extends {
   return query;
 }
 
-function displayMethod(value: string | null) {
-  const labels: Record<string, string> = {
-    local_exact: "Local exact",
-    algolia_exact: "Algolia exact",
-    algolia_confirmed: "Algolia confirmed",
-    manual: "Manual",
-  };
-  return value ? labels[value] ?? value.replaceAll("_", " ") : "Mixed methods";
-}
-
 function runProgress(row: Record<string, unknown> | null): CellarTrackerMatchProgress | null {
   if (!row || typeof row.id !== "string") return null;
   return {
@@ -91,6 +76,14 @@ function runProgress(row: Record<string, unknown> | null): CellarTrackerMatchPro
     localExactLinks: Number(row.local_exact_link_count),
     algoliaExactLinks: Number(row.algolia_exact_link_count),
   };
+}
+
+function subtitleFor(group: MatchGroupRow): string {
+  const vintage = group.source_vintage ?? "Vintage unavailable";
+  const producer = group.source_producer ?? "Producer unavailable";
+  const region = group.source_region ?? "Region unavailable";
+  const records = `${group.source_row_count.toLocaleString()} source record${group.source_row_count === 1 ? "" : "s"}`;
+  return `${vintage} · ${producer} · ${region} · ${records}`;
 }
 
 export default async function CellarTrackerMatchesPage({
@@ -128,13 +121,24 @@ export default async function CellarTrackerMatchesPage({
   if (rowsResult.error) throw new Error("CellarTracker match groups could not be loaded.");
   const groups = (rowsResult.data ?? []) as MatchGroupRow[];
   const groupKeys = groups.map((group) => group.match_group_key);
+
   const { data: suggestionData, error: suggestionError } = groupKeys.length === 0
     ? { data: [], error: null }
     : await supabase.from("cellartracker_match_suggestion_view").select("*")
       .in("match_group_key", groupKeys).order("match_group_key").order("rank");
   if (suggestionError) throw new Error("CellarTracker suggestions could not be loaded.");
   const suggestions = (suggestionData ?? []) as SuggestionRow[];
-  // Scoped to the visible page: this is a work queue, not a favourites list.
+
+  // One query for the whole visible page (§3.4): producer / region / holding
+  // quantities / snapshot date, grouped client-side — never a request per card.
+  const panels = await loadCellarTrackerPanels(async (keys) => {
+    const { data, error } = await supabase.from("current_cellartracker_records")
+      .select("match_group_key,quantity_home,quantity_bbr,total_quantity,accepted_at,producer,region")
+      .in("match_group_key", [...keys]);
+    if (error) throw new Error("CellarTracker holdings could not be loaded.");
+    return (data ?? []) as CellarTrackerEvidenceRow[];
+  }, groupKeys);
+
   const favourites = await loadGroupFavourites(owner, "cellartracker", groups);
   const byGroup = new Map<string, SuggestionRow[]>();
   for (const suggestion of suggestions) {
@@ -142,6 +146,49 @@ export default async function CellarTrackerMatchesPage({
     values.push(suggestion);
     byGroup.set(suggestion.match_group_key, values);
   }
+
+  const groupViews: MatchGroupView[] = groups.map((group) => {
+    const target = targetForRecord("cellartracker", group.parent_sku ? "linked" : null, group.parent_sku, group.match_group_key);
+    const panel = panels.get(group.match_group_key);
+    return {
+      source: "cellartracker",
+      match_group_key: group.match_group_key,
+      source_wine: group.source_wine,
+      source_vintage: group.source_vintage,
+      subtitle: subtitleFor(group),
+      source_row_count: group.source_row_count,
+      unresolved_row_count: group.unresolved_row_count,
+      linked_row_count: group.linked_row_count,
+      suppressed_row_count: group.suppressed_row_count,
+      parent_sku: group.parent_sku,
+      match_method: group.match_method,
+      is_bbx_eligible: group.is_biddable,
+      candidates: (byGroup.get(group.match_group_key) ?? []).map((candidate) => ({
+        parent_sku: candidate.parent_sku,
+        rank: candidate.rank,
+        name: candidate.name,
+        producer: candidate.producer,
+        region: candidate.region,
+        stock_origin: candidate.stock_origin,
+        purchase_mode: candidate.purchase_mode,
+        typo_count: candidate.typo_count,
+        is_bbx_eligible: candidate.is_biddable,
+        match_score: candidate.match_score,
+      })),
+      catalogueSearchQuery: cellarTrackerCatalogueQuery(group.source_wine, group.source_producer),
+      panel: {
+        kind: "cellartracker",
+        producer: panel?.producer ?? group.source_producer,
+        region: panel?.region ?? group.source_region,
+        quantityHome: panel?.quantityHome ?? 0,
+        quantityBbr: panel?.quantityBbr ?? 0,
+        totalQuantity: panel?.totalQuantity ?? 0,
+        acceptedAt: panel?.acceptedAt ?? null,
+      },
+      favouriteTarget: target,
+      isFavourite: target ? isFavourited(favourites, target) : false,
+    };
+  });
 
   const totalForState = rowsResult.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalForState / PAGE_SIZE));
@@ -169,34 +216,15 @@ export default async function CellarTrackerMatchesPage({
           <button className="rounded border border-accent px-3 py-2 text-sm text-accent">Search</button>
           {search && <Link href={`${MATCH_PATH}?state=${state}`} className="rounded border border-border px-3 py-2 text-sm">Clear</Link>}
         </form>
-        <div className="divide-y divide-border">
-          {groups.map((group) => {
-            const candidates = byGroup.get(group.match_group_key) ?? [];
-            return <article key={group.match_group_key} className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1"><h2 className="font-semibold">{group.source_wine}</h2><p className="mt-1 text-xs text-ink-muted">{group.source_vintage ?? "Vintage unavailable"} · {group.source_producer ?? "Producer unavailable"} · {group.source_region ?? "Region unavailable"} · {group.source_row_count.toLocaleString()} source record{group.source_row_count === 1 ? "" : "s"}</p></div>
-                {(() => {
-                  const target = targetForRecord("cellartracker", group.parent_sku ? "linked" : null, group.parent_sku, group.match_group_key);
-                  return target && <FavouriteStar target={target} favourite={isFavourited(favourites, target)} label={group.source_wine} />;
-                })()}
-                <div className="text-right text-xs"><p>{group.unresolved_row_count} unresolved · {group.linked_row_count} linked · {group.suppressed_row_count} suppressed</p>{group.parent_sku && <p className="mt-1 font-medium">Parent {group.parent_sku} · {displayMethod(group.match_method)}</p>}{group.parent_sku && <p className="text-ink-muted">{group.is_biddable ? "Currently in the BBX-eligible catalogue" : "Found in BBR catalogue, not currently BBX-eligible"}</p>}</div>
-              </div>
-              {group.unresolved_row_count > 0 && candidates.length > 0 && <div className="mt-3 grid gap-2 lg:grid-cols-2">
-                {candidates.map((candidate) => <div key={candidate.parent_sku} className="flex items-start justify-between gap-3 rounded border border-border p-3 text-xs"><div><p className="font-medium">#{candidate.rank} {candidate.name}</p><p className="mt-1 text-ink-muted">Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"}</p><p className="text-ink-muted">{candidate.stock_origin ?? "Stock origin unavailable"} · {candidate.purchase_mode ?? "Purchase mode unavailable"} · {candidate.is_biddable ? "BBX-eligible" : "not currently BBX-eligible"}{candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}{typeof candidate.match_score === "number" ? ` · ${Math.round(candidate.match_score * 100)}% name match` : ""}</p></div><form action={confirmCellarTrackerCandidate.bind(null, group.match_group_key, candidate.parent_sku, returnPath)}><button className="rounded border border-accent px-2 py-1 text-accent">Confirm group</button></form></div>)}
-              </div>}
-              {group.unresolved_row_count > 0 && <div className="mt-3 flex flex-wrap items-start gap-3">
-                <form action={confirmManualCellarTrackerMatch.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><button className="rounded border border-border px-2 py-1.5 text-xs">Link manually</button></form>
-                <form action={suppressCellarTrackerGroup.bind(null, group.match_group_key, returnPath)}><button className="rounded border border-border px-2 py-1.5 text-xs">Reject and suppress</button></form>
-              </div>}
-              {group.linked_row_count > 0 && <div className="mt-3 flex flex-wrap gap-2"><form action={editCellarTrackerGroup.bind(null, group.match_group_key, returnPath)} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" defaultValue={group.parent_sku ?? ""} className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><button className="rounded border border-border px-2 py-1.5 text-xs">Edit linked Parent ID</button></form><form action={unlinkCellarTrackerGroup.bind(null, group.match_group_key, returnPath)}><button className="rounded border border-accent px-2 py-1.5 text-xs text-accent">Unlink and retry later</button></form></div>}
-              {group.suppressed_row_count > 0 && <form action={restoreCellarTrackerGroup.bind(null, group.match_group_key, returnPath)} className="mt-3"><button className="rounded border border-border px-2 py-1.5 text-xs">Restore to unmatched</button></form>}
-              {group.unresolved_row_count > 0 && <CellarTrackerCatalogueSearch matchGroupKey={group.match_group_key} sourceWine={group.source_wine} defaultQuery={cellarTrackerCatalogueQuery(group.source_wine, group.source_producer)} sourceVintage={group.source_vintage} returnPath={returnPath} />}
-              <div className="mt-3 border-t border-border pt-3"><ExcludeCellarTrackerGroupForm matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
-            </article>;
-          })}
-          {groups.length === 0 && <p className="p-6 text-sm text-ink-muted">No match groups meet this filter.</p>}
-        </div>
-        <nav className="flex items-center justify-between border-t border-border p-4 text-sm"><span>Page {page} of {totalPages}</span><div className="flex gap-2">{page > 1 && <Link href={`${MATCH_PATH}?state=${state}&page=${page - 1}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className="rounded border border-border px-3 py-1.5">Previous</Link>}{page < totalPages && <Link href={`${MATCH_PATH}?state=${state}&page=${page + 1}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className="rounded border border-border px-3 py-1.5">Next</Link>}</div></nav>
+        <MatchGroupList groups={groupViews} state={state} returnPath={returnPath} />
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalForState}
+          label="groups"
+          basePath={MATCH_PATH}
+          query={search ? { state, q: search } : { state }}
+        />
       </section>
     </div>
   </main>;

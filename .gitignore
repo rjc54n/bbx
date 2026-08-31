@@ -16,3 +16,6 @@ __pycache__/
 
 # Test / tooling caches
 .pytest_cache/
+
+# Node (root-hoisted deps + tool caches; apps/web has its own .gitignore too)
+node_modules/

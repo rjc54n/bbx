@@ -1,9 +1,14 @@
 # Wine matching, Part A: unified surface
 
-**Status:** in implementation. Slice 1 (union views, summary function, exclusion
-fix) shipped to production 31 Aug 2026 — migration
-`20260831120000_wine_match_unified_surface.sql`, pgTAP
-`wine_match_unified_surface.test.sql` (53 assertions). Slices 2–4 not started.
+**Status:** in implementation.
+Slice 1 (union views, summary function, exclusion fix) shipped to production
+31 Aug 2026 — migration `20260831120000_wine_match_unified_surface.sql`, pgTAP
+`wine_match_unified_surface.test.sql` (53 assertions).
+Slice 2 (shared `source`-parameterised components + `ADAPTERS` map behind the
+existing routes, no URL change) built 31 Aug 2026 — `src/lib/matching/`,
+`src/components/matching/`; both `/release-prices/matches` and
+`/cellartracker/matches` now render through one `MatchGroupList`. Vitest:
+`adapters.test.ts`, `cellartrackerPanels.test.ts`. Slices 3–4 not started.
 
 **Revised twice after external review:**
 [`MATCHING-FUNCTIONAL-SPEC-REVIEW.md`](MATCHING-FUNCTIONAL-SPEC-REVIEW.md)
@@ -409,7 +414,28 @@ Original plan:
   `supabase migration list --linked` shows the migration in `remote`;
   regenerate `apps/web/src/lib/database.types.ts`.
 
-### Slice 2: shared component and action layer (app, behind existing routes)
+### Slice 2: shared component and action layer (app, behind existing routes) — BUILT 31 Aug 2026
+
+Landed as planned. `src/lib/matching/adapters.ts` is the closed `source`
+allowlist → typed record of literal RPC names + routes + exclude-prompt copy;
+`resolveMatchAdapter` throws on anything off the list. `src/lib/matching/
+actions.ts` (`"use server"`) is the one source-parameterised mutation surface
+(`runMatchGroupMutation` for the optimistic list; `mutateMatchGroup` /
+`confirmMatchCandidate` / `linkMatchGroupManually` / `editMatchGroupParent` for
+the redirecting forms; `searchMatchCatalogue`). One `MatchGroupList` /
+`CatalogueCandidateSearch` / `ExcludeMatchGroupForm` under
+`src/components/matching/`. The CellarTracker page now also renders through
+`MatchGroupList` (so it gains the optimistic card removal the release page had)
+with a source-specific evidence panel — producer / region / holding quantities /
+snapshot date from **one** `current_cellartracker_records` query per visible
+page (`loadCellarTrackerPanels`, spec §3.4). The offer-record detail page was
+repointed to the shared actions. `MatchRunControl` and the two match-run
+pipelines were left per-source (different Algolia search + result RPCs); fold
+them in with Slice 3. Count-mode drift (§2.1) is untouched — Slice 3's
+`wine_match_queue_summary` fixes it. No migration.
+
+Original plan:
+
 
 - One `MatchGroupList` / `CatalogueCandidateSearch` / exclude form,
   `source`-parameterised, rendered by both existing pages with URLs unchanged.

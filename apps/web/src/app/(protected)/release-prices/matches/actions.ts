@@ -3,8 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getOwnerContext } from "@/lib/auth/owner";
-import { searchBbrCatalogue, searchHistoricOfferGroups } from "@/lib/releaseOffers/algoliaServer";
+import { searchHistoricOfferGroups } from "@/lib/releaseOffers/algoliaServer";
 import type { HistoricOfferMatchGroup } from "@/lib/releaseOffers/algoliaMatching";
+
+// Group mutations, the catalogue search and the optimistic list action now live
+// in the source-parameterised @/lib/matching/actions. What stays here is
+// release-offer-only: the match-run pipeline (its Algolia search and result
+// RPCs differ from CellarTracker's) and the per-record exclude/restore the
+// offer-record and excluded-records pages use.
 
 const MATCH_PATH = "/release-prices/matches";
 const MATCH_BATCH_SIZE = 25;
@@ -33,12 +39,6 @@ type MatchRunRow = {
   local_exact_link_count: number;
   algolia_exact_link_count: number;
 };
-
-function safeReturnPath(value: string) {
-  if (value === MATCH_PATH || value.startsWith(`${MATCH_PATH}?`)) return value;
-  if (/^\/release-prices\/offers\/[0-9a-f-]{36}\/\d+(?:\?.*)?$/i.test(value)) return value;
-  return MATCH_PATH;
-}
 
 async function loadProgress(
   context: NonNullable<Awaited<ReturnType<typeof getOwnerContext>>>,
@@ -123,97 +123,6 @@ export async function processHistoricOfferMatchBatch(runId: string): Promise<Mat
   return loadProgress(context, runId);
 }
 
-async function mutateGroup(
-  rpc: "confirm_release_offer_match_group" | "suppress_release_offer_match_group" | "unlink_release_offer_match_group" | "restore_release_offer_match_group" | "edit_release_offer_match_group" | "exclude_release_offer_match_group",
-  args: Record<string, string>,
-  returnPath: string,
-): Promise<never> {
-  const context = await getOwnerContext();
-  if (!context) redirect("/login");
-  const { error } = await context.supabase.rpc(rpc, args as never);
-  revalidatePath(MATCH_PATH);
-  revalidatePath("/release-prices");
-  redirect(`${safeReturnPath(returnPath)}${returnPath.includes("?") ? "&" : "?"}${error ? "action_error" : "changed"}=1`);
-}
-
-// Non-redirecting sibling of mutateGroup for the optimistic matches list: it
-// runs the same RPCs and revalidates, but returns a result instead of
-// redirect()ing, so the client can remove the group's card on click and let the
-// background revalidation confirm it. The redirecting variants above stay for
-// the offer-record page and the catalogue/exclude forms, which navigate away.
-export type MatchMutation =
-  | { op: "confirm" | "manual" | "edit"; matchGroupKey: string; parentSku: string }
-  | { op: "suppress" | "unlink" | "restore" | "exclude"; matchGroupKey: string };
-
-export async function runMatchGroupMutation(m: MatchMutation): Promise<{ ok: boolean; error?: string }> {
-  const context = await getOwnerContext();
-  if (!context) return { ok: false, error: "Your owner session has expired." };
-  if ((m.op === "confirm" || m.op === "manual" || m.op === "edit") && !/^\d{5,30}$/.test(m.parentSku)) {
-    return { ok: false, error: "Enter a valid Parent ID (5–30 digits)." };
-  }
-
-  const rpc = ({
-    confirm: "confirm_release_offer_match_group",
-    manual: "confirm_release_offer_match_group",
-    edit: "edit_release_offer_match_group",
-    suppress: "suppress_release_offer_match_group",
-    unlink: "unlink_release_offer_match_group",
-    restore: "restore_release_offer_match_group",
-    exclude: "exclude_release_offer_match_group",
-  } as const)[m.op];
-
-  const args: Record<string, string> = { p_match_group_key: m.matchGroupKey };
-  if (m.op === "confirm" || m.op === "manual") { args.p_parent_sku = m.parentSku; args.p_method = m.op === "confirm" ? "algolia_confirmed" : "manual"; }
-  if (m.op === "edit") args.p_parent_sku = m.parentSku;
-
-  const { error } = await context.supabase.rpc(rpc, args as never);
-  revalidatePath(MATCH_PATH);
-  revalidatePath("/release-prices");
-  return error ? { ok: false, error: "The match decision could not be saved." } : { ok: true };
-}
-
-export async function confirmHistoricOfferCandidate(
-  matchGroupKey: string,
-  parentSku: string,
-  returnPath: string,
-): Promise<never> {
-  return mutateGroup("confirm_release_offer_match_group", {
-    p_match_group_key: matchGroupKey,
-    p_parent_sku: parentSku,
-    p_method: "algolia_confirmed",
-  }, returnPath);
-}
-
-export async function confirmManualHistoricOfferMatch(
-  matchGroupKey: string,
-  returnPath: string,
-  formData: FormData,
-): Promise<never> {
-  const parentSku = String(formData.get("parent_sku") ?? "").trim();
-  if (!/^\d{5,30}$/.test(parentSku)) redirect(`${safeReturnPath(returnPath)}?action_error=1`);
-  return mutateGroup("confirm_release_offer_match_group", {
-    p_match_group_key: matchGroupKey,
-    p_parent_sku: parentSku,
-    p_method: "manual",
-  }, returnPath);
-}
-
-export async function suppressHistoricOfferGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("suppress_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
-export async function unlinkHistoricOfferGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("unlink_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
-export async function restoreHistoricOfferGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("restore_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
-export async function excludeHistoricOfferGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("exclude_release_offer_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
 export async function excludeHistoricOfferRecord(importId: string, sourceRowNumber: number): Promise<never> {
   if (!/^[0-9a-f-]{36}$/i.test(importId) || !Number.isSafeInteger(sourceRowNumber) || sourceRowNumber <= 0) {
     redirect("/release-prices");
@@ -240,49 +149,4 @@ export async function restoreHistoricOfferRecord(contentFingerprint: string): Pr
   revalidatePath("/release-prices");
   revalidatePath("/release-prices/excluded");
   redirect(`/release-prices/excluded?${error ? "restore_error" : "restored"}=1`);
-}
-
-export async function editHistoricOfferGroup(
-  matchGroupKey: string,
-  returnPath: string,
-  formData: FormData,
-): Promise<never> {
-  const parentSku = String(formData.get("parent_sku") ?? "").trim();
-  if (!/^\d{5,30}$/.test(parentSku)) redirect(`${safeReturnPath(returnPath)}?action_error=1`);
-  return mutateGroup("edit_release_offer_match_group", {
-    p_match_group_key: matchGroupKey,
-    p_parent_sku: parentSku,
-  }, returnPath);
-}
-
-export type CatalogueSearchState = {
-  results: Array<{
-    parent_sku: string;
-    name: string;
-    vintage: number | null;
-    producer: string | null;
-    region: string | null;
-    stock_origin: string | null;
-    purchase_mode: string | null;
-  }>;
-  error?: string;
-};
-
-export async function searchHistoricOfferCatalogue(
-  _previous: CatalogueSearchState,
-  formData: FormData,
-): Promise<CatalogueSearchState> {
-  const context = await getOwnerContext();
-  if (!context) return { results: [], error: "Your owner session has expired." };
-  const query = String(formData.get("query") ?? "").trim();
-  const vintageText = String(formData.get("vintage") ?? "").trim();
-  const vintage = /^\d{4}$/.test(vintageText) ? Number(vintageText) : null;
-  if (query.length < 3 || query.length > 300) {
-    return { results: [], error: "Enter at least three characters." };
-  }
-  try {
-    return { results: await searchBbrCatalogue(query, vintage) };
-  } catch {
-    return { results: [], error: "The BBR catalogue search could not be completed." };
-  }
 }

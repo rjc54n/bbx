@@ -1,10 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { getOwnerContext } from "@/lib/auth/owner";
 import { rankCellarTrackerCandidates, type CellarTrackerMatchGroup } from "@/lib/cellar/cellartrackerMatching";
-import { searchBbrCatalogue, searchCellarTrackerGroups } from "@/lib/releaseOffers/algoliaServer";
+import { searchCellarTrackerGroups } from "@/lib/releaseOffers/algoliaServer";
+
+// Group mutations and the catalogue search now live in the source-parameterised
+// @/lib/matching/actions. What stays here is the CellarTracker match-run
+// pipeline: its Algolia ranking and result RPC differ from release offers'.
 
 const MATCH_PATH = "/cellartracker/matches";
 const MATCH_BATCH_SIZE = 20;
@@ -31,10 +34,6 @@ type MatchRunRow = {
   local_exact_link_count: number;
   algolia_exact_link_count: number;
 };
-
-function safeReturnPath(value: string) {
-  return value === MATCH_PATH || value.startsWith(`${MATCH_PATH}?`) ? value : MATCH_PATH;
-}
 
 async function loadProgress(
   context: NonNullable<Awaited<ReturnType<typeof getOwnerContext>>>,
@@ -124,95 +123,4 @@ export async function processCellarTrackerMatchBatch(runId: string): Promise<Cel
   revalidatePath(MATCH_PATH);
   revalidatePath("/cellartracker");
   return loadProgress(context, runId);
-}
-
-type GroupRpc =
-  | "confirm_cellartracker_match_group"
-  | "suppress_cellartracker_match_group"
-  | "unlink_cellartracker_match_group"
-  | "restore_cellartracker_match_group"
-  | "edit_cellartracker_match_group"
-  | "exclude_cellartracker_match_group";
-
-async function mutateGroup(rpc: GroupRpc, args: Record<string, string>, returnPath: string): Promise<never> {
-  const context = await getOwnerContext();
-  if (!context) redirect("/login");
-  const { error } = await context.supabase.rpc(rpc, args as never);
-  revalidatePath(MATCH_PATH);
-  revalidatePath("/cellartracker");
-  const target = safeReturnPath(returnPath);
-  redirect(`${target}${target.includes("?") ? "&" : "?"}${error ? "action_error" : "changed"}=1`);
-}
-
-export async function confirmCellarTrackerCandidate(matchGroupKey: string, parentSku: string, returnPath: string): Promise<never> {
-  return mutateGroup("confirm_cellartracker_match_group", {
-    p_match_group_key: matchGroupKey,
-    p_parent_sku: parentSku,
-    p_method: "algolia_confirmed",
-  }, returnPath);
-}
-
-export async function confirmManualCellarTrackerMatch(matchGroupKey: string, returnPath: string, formData: FormData): Promise<never> {
-  const parentSku = String(formData.get("parent_sku") ?? "").trim();
-  if (!/^\d{5,30}$/.test(parentSku)) redirect(`${safeReturnPath(returnPath)}?action_error=1`);
-  return mutateGroup("confirm_cellartracker_match_group", {
-    p_match_group_key: matchGroupKey,
-    p_parent_sku: parentSku,
-    p_method: "manual",
-  }, returnPath);
-}
-
-export async function suppressCellarTrackerGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("suppress_cellartracker_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
-export async function unlinkCellarTrackerGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("unlink_cellartracker_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
-export async function restoreCellarTrackerGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("restore_cellartracker_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
-export async function excludeCellarTrackerGroup(matchGroupKey: string, returnPath: string): Promise<never> {
-  return mutateGroup("exclude_cellartracker_match_group", { p_match_group_key: matchGroupKey }, returnPath);
-}
-
-export async function editCellarTrackerGroup(matchGroupKey: string, returnPath: string, formData: FormData): Promise<never> {
-  const parentSku = String(formData.get("parent_sku") ?? "").trim();
-  if (!/^\d{5,30}$/.test(parentSku)) redirect(`${safeReturnPath(returnPath)}?action_error=1`);
-  return mutateGroup("edit_cellartracker_match_group", {
-    p_match_group_key: matchGroupKey,
-    p_parent_sku: parentSku,
-  }, returnPath);
-}
-
-export type CellarTrackerCatalogueSearchState = {
-  results: Array<{
-    parent_sku: string;
-    name: string;
-    vintage: number | null;
-    producer: string | null;
-    region: string | null;
-    stock_origin: string | null;
-    purchase_mode: string | null;
-  }>;
-  error?: string;
-};
-
-export async function searchCellarTrackerCatalogue(
-  _previous: CellarTrackerCatalogueSearchState,
-  formData: FormData,
-): Promise<CellarTrackerCatalogueSearchState> {
-  const context = await getOwnerContext();
-  if (!context) return { results: [], error: "Your owner session has expired." };
-  const query = String(formData.get("query") ?? "").trim();
-  const vintageText = String(formData.get("vintage") ?? "").trim();
-  const vintage = /^\d{4}$/.test(vintageText) ? Number(vintageText) : null;
-  if (query.length < 3 || query.length > 300) return { results: [], error: "Enter at least three characters." };
-  try {
-    return { results: await searchBbrCatalogue(query, vintage) };
-  } catch {
-    return { results: [], error: "The BBR catalogue search could not be completed." };
-  }
 }

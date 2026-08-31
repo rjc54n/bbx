@@ -3,12 +3,13 @@ import { requireOwner } from "@/lib/auth/owner";
 import { loadGroupFavourites } from "@/lib/favourites/server";
 import { isFavourited, targetForRecord } from "@/lib/favourites/target";
 import { MatchRunControl } from "@/components/releaseOffers/MatchRunControl";
-import { MatchGroupList, type MatchGroupView } from "@/components/releaseOffers/MatchGroupList";
+import { MatchGroupList, type MatchGroupView } from "@/components/matching/MatchGroupList";
 import { Pagination } from "@/components/nav/Pagination";
 import { type MatchRunProgress } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+const MATCH_PATH = "/release-prices/matches";
 const PAGE_SIZE = 50;
 const states = ["unresolved", "candidates", "linked", "suppressed", "all"] as const;
 type StateFilter = typeof states[number];
@@ -94,6 +95,12 @@ function runProgress(row: Record<string, unknown> | null): MatchRunProgress | nu
   };
 }
 
+function subtitleFor(group: MatchGroupRow): string {
+  const vintage = group.source_vintage ?? "Vintage unavailable";
+  const records = `${group.source_row_count.toLocaleString()} source record${group.source_row_count === 1 ? "" : "s"}`;
+  return `${vintage} · ${records} · offers ${group.earliest_offer_date} to ${group.latest_offer_date}`;
+}
+
 export default async function HistoricOfferMatchesPage({
   searchParams,
 }: {
@@ -168,18 +175,18 @@ export default async function HistoricOfferMatchesPage({
   const groupViews: MatchGroupView[] = groups.map((group) => {
     const target = targetForRecord("release_offer", group.parent_sku ? "linked" : null, group.parent_sku, group.match_group_key);
     return {
+      source: "release_offer",
       match_group_key: group.match_group_key,
       source_wine: group.source_wine,
       source_vintage: group.source_vintage,
-      earliest_offer_date: group.earliest_offer_date,
-      latest_offer_date: group.latest_offer_date,
+      subtitle: subtitleFor(group),
       source_row_count: group.source_row_count,
       unresolved_row_count: group.unresolved_row_count,
       linked_row_count: group.linked_row_count,
       suppressed_row_count: group.suppressed_row_count,
       parent_sku: group.parent_sku,
       match_method: group.match_method,
-      is_biddable: group.is_biddable,
+      is_bbx_eligible: group.is_biddable,
       candidates: (byGroup.get(group.match_group_key) ?? []).map((candidate) => ({
         parent_sku: candidate.parent_sku,
         rank: candidate.rank,
@@ -189,18 +196,22 @@ export default async function HistoricOfferMatchesPage({
         stock_origin: candidate.stock_origin,
         purchase_mode: candidate.purchase_mode,
         typo_count: candidate.typo_count,
-        is_biddable: candidate.is_biddable,
+        is_bbx_eligible: candidate.is_biddable,
         match_score: candidate.match_score,
       })),
-      records: (recordsByGroup.get(group.match_group_key) ?? []).filter(hasReleaseInfo).map((record) => ({
-        import_id: record.import_id,
-        source_row_number: record.source_row_number,
-        offer_date: record.offer_date,
-        source_price_text: record.source_price_text,
-        source_product_url: record.source_product_url,
-        tasting_notes: record.tasting_notes,
-        description: record.description,
-      })),
+      catalogueSearchQuery: group.source_wine,
+      panel: {
+        kind: "release_offer",
+        records: (recordsByGroup.get(group.match_group_key) ?? []).filter(hasReleaseInfo).map((record) => ({
+          import_id: record.import_id,
+          source_row_number: record.source_row_number,
+          offer_date: record.offer_date,
+          source_price_text: record.source_price_text,
+          source_product_url: record.source_product_url,
+          tasting_notes: record.tasting_notes,
+          description: record.description,
+        })),
+      },
       favouriteTarget: target,
       isFavourite: target ? isFavourited(favourites, target) : false,
     };
@@ -245,5 +256,3 @@ export default async function HistoricOfferMatchesPage({
     </div>
   </main>;
 }
-
-const MATCH_PATH = "/release-prices/matches";
