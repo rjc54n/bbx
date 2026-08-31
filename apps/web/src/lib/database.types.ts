@@ -1546,6 +1546,8 @@ export type Database = {
       cellartracker_match_review_view: {
         Row: {
           is_biddable: boolean | null
+          last_error_at: string | null
+          last_run_status: string | null
           linked_row_count: number | null
           match_group_key: string | null
           match_method: string | null
@@ -1558,6 +1560,7 @@ export type Database = {
           suggestion_count: number | null
           suggestions_observed_at: string | null
           suppressed_row_count: number | null
+          top_match_score: number | null
           unresolved_row_count: number | null
         }
         Relationships: []
@@ -2011,6 +2014,8 @@ export type Database = {
         Row: {
           earliest_offer_date: string | null
           is_biddable: boolean | null
+          last_error_at: string | null
+          last_run_status: string | null
           latest_offer_date: string | null
           linked_row_count: number | null
           match_group_key: string | null
@@ -2022,6 +2027,7 @@ export type Database = {
           suggestion_count: number | null
           suggestions_observed_at: string | null
           suppressed_row_count: number | null
+          top_match_score: number | null
           unresolved_row_count: number | null
         }
         Relationships: []
@@ -2298,6 +2304,44 @@ export type Database = {
           subregion?: string | null
           vintage?: number | null
           wine_ref?: never
+        }
+        Relationships: []
+      }
+      wine_match_review_view: {
+        Row: {
+          is_bbx_eligible: boolean | null
+          last_error_at: string | null
+          last_run_status: string | null
+          linked_row_count: number | null
+          match_group_key: string | null
+          match_method: string | null
+          parent_sku: string | null
+          source: string | null
+          source_row_count: number | null
+          source_vintage: number | null
+          source_wine: string | null
+          suggestion_count: number | null
+          suggestions_observed_at: string | null
+          suppressed_row_count: number | null
+          top_match_score: number | null
+          unresolved_row_count: number | null
+          wine_ref: string | null
+        }
+        Relationships: []
+      }
+      wine_match_suggestion_view: {
+        Row: {
+          is_bbx_eligible: boolean | null
+          match_group_key: string | null
+          match_score: number | null
+          name: string | null
+          observed_at: string | null
+          parent_sku: string | null
+          producer: string | null
+          rank: number | null
+          region: string | null
+          source: string | null
+          vintage: number | null
         }
         Relationships: []
       }
@@ -2605,6 +2649,16 @@ export type Database = {
           p_source_row_number: number
         }
         Returns: Json
+      }
+      wine_match_queue_summary: {
+        Args: { p_source?: string }
+        Returns: {
+          all_groups: number
+          linked: number
+          needs_review: number
+          no_suitable_match: number
+          with_suggestions: number
+        }[]
       }
     }
     Enums: {

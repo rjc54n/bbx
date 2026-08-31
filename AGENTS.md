@@ -107,3 +107,14 @@ headroom. Learned from the 28 August 2026 outage
 - Default to committing small, low-risk fixes straight to `main`. Reach for a
   branch and PR only when there's a stated reason (a large or risky change,
   or the owner asks for review) — and get explicit permission first.
+
+## Written deliverables: Markdown, not HTML
+
+- Specs, functional papers, review responses, design notes and planning
+  documents live in `docs/*.md` as plain Markdown, indexed in
+  `docs/README.md`. That is the default and the expected format.
+- Do **not** produce HTML artifacts (or other rich renderings) for these. They
+  cost far more to generate and revise than the equivalent Markdown, the
+  review loop runs on the `.md` files in the repo, and the extra formatting
+  adds no value here. Match the existing `docs/` house style: a dated status
+  line, prose, real object names, `---` dividers.

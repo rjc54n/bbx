@@ -38,6 +38,19 @@ against the current migrations/code for anything load-bearing.
   CellarTracker import, matching and comparison. Explicitly says its
   deployment statements are dated observations to be checked against the
   live migration ledger before release.
+- [MATCHING-FUNCTIONAL-SPEC.md](MATCHING-FUNCTIONAL-SPEC.md) — Part A:
+  consolidating the two matching pages into one `/matches` surface.
+  Implementation plan, pending final review; no code yet. Revised twice
+  after the reviews below.
+- [MATCHING-RECONCILIATION-SPEC.md](MATCHING-RECONCILIATION-SPEC.md) —
+  Part B: reacting when a wine gets a live ask (release-offer buy-side only).
+  Design paper; two decisions (scope, latency target) gate the schema.
+- [MATCHING-FUNCTIONAL-SPEC-REVIEW.md](MATCHING-FUNCTIONAL-SPEC-REVIEW.md) —
+  first external adversarial review of the original single paper
+  (30 Aug 2026); the split into Parts A and B is its main recommendation.
+- [MATCHING-SPECS-SECOND-REVIEW.md](MATCHING-SPECS-SECOND-REVIEW.md) —
+  second review, of the split docs (31 Aug 2026): Part A needs a contract
+  cleanup, Part B needs its two decisions closed.
 
 ## Roadmap
 
