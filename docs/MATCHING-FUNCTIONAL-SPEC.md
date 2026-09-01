@@ -16,7 +16,15 @@ Slice 3 (unified `/matches` route, nav entry, 308 redirect contract) built
 The formal p50/p95 latency harness + 1.25× budget gate (§10) is **deferred** by
 the owner (minimise Supabase compute after a production incident the week of
 25 Aug); filter push-down and summary cost were instead confirmed by plain
-`EXPLAIN` (no `ANALYZE`) on production — see §8. Slice 4 not started.
+`EXPLAIN` (no `ANALYZE`) on production — see §8.
+Slice 4 (relabel sweep) built 1 Sep 2026 — "Reject and suppress" → **"No
+suitable match"** on the `/matches` list and both record-detail pages, the
+always-visible helper text contrasting it with Exclude (§3.8), the two
+"cannot link" actions grouped and separated from the linking actions with
+Exclude the heavier control, and the `ignored` / `suppressed` status cells in
+the accepted-offer and CellarTracker record browsers now read "No suitable
+match". Label-only: no status enum, RPC or constraint change. **Part A
+complete.**
 
 **Revised twice after external review:**
 [`MATCHING-FUNCTIONAL-SPEC-REVIEW.md`](MATCHING-FUNCTIONAL-SPEC-REVIEW.md)
@@ -496,7 +504,23 @@ Original plan:
 - Gates: web lint/test/build; signed-in smoke test of `/matches` and both
   redirects (full URLs) on the deployed route, separate from local checks.
 
-### Slice 4: relabel sweep (app)
+### Slice 4: relabel sweep (app) — BUILT 1 Sep 2026
+
+Landed as planned, label-only. `MatchGroupList` now renders the two "cannot
+link" decisions in one bordered block below the linking actions and the
+catalogue search: the §3.8 helper text, then a plain-bordered "No suitable
+match" button and the accent-bordered `ExcludeMatchGroupForm` (the heavier
+control). `displayMethod`'s `suppressed` label and the RO/CT record-detail
+"Current status" strings read "No suitable match"; the RO detail page gained
+the same helper text and moved its suppress control below the catalogue search;
+both detail pages' Exclude sections open with "Use this when the source row
+itself is wrong" and state the everywhere-and-future-imports scope. The
+`ignored` / `suppressed` status cells in `AcceptedOfferBrowser` /
+`CellarTrackerRecordsBrowser` read "No suitable match". `/matches` state chip
+was already "No suitable match" (Slice 3). No confirm-dialog copy changed.
+
+Original plan:
+
 
 - "Reject and suppress" → "No suitable match" across the list and both detail
   pages; helper text; action grouping; status-text and filter-chip strings.

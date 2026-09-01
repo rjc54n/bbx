@@ -154,7 +154,7 @@ export function CellarTrackerRecordsBrowser({
               <td className="px-3 py-2 align-top">
                 {row.link_status === "linked" && row.parent_sku
                   ? <><Link href={wineHref(row.parent_sku, from)} className="text-accent underline-offset-2 hover:underline">{row.parent_sku}</Link><span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span><Link href={`/cellartracker/${row.import_id}/${row.source_row_number}`} className="block text-xs text-accent underline-offset-2 hover:underline">Manage ↗</Link></>
-                  : <span className="text-ink-muted">{row.link_status === "suppressed" ? "Suppressed" : "Unlinked"}</span>}
+                  : <span className="text-ink-muted">{row.link_status === "suppressed" ? "No suitable match" : "Unlinked"}</span>}
               </td>
               <td className="px-3 py-2 text-center align-top">{(() => {
                 const target = targetForRecord("cellartracker", row.link_status, row.parent_sku, row.match_group_key);

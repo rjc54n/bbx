@@ -134,7 +134,7 @@ export function AcceptedOfferBrowser({
               <td className="px-3 py-2 align-top">
                 {row.link_status === "linked"
                   ? <>{row.parent_sku}<span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span></>
-                  : <span className="text-ink-muted">{row.link_status === "ignored" ? "Ignored" : "Unlinked"}</span>}
+                  : <span className="text-ink-muted">{row.link_status === "ignored" ? "No suitable match" : "Unlinked"}</span>}
               </td>
               <td className="px-3 py-2 text-center align-top">{(() => {
                 const target = targetForRecord("release_offer", row.link_status, row.parent_sku, row.match_group_key);

@@ -167,7 +167,7 @@ export default async function ReleaseOfferDetailPage({
           {resolution?.status === "linked"
             ? `Linked to Parent ${resolution.parent_sku} by ${methodLabel(resolution.match_method)}`
             : resolution?.status === "ignored"
-              ? "Rejected and suppressed"
+              ? "No suitable match"
               : candidates.length > 0
                 ? "Provisional candidates available, not linked"
                 : "Unlinked"}
@@ -199,15 +199,19 @@ export default async function ReleaseOfferDetailPage({
             </div>
           </section>
         )}
-        {unresolved && <div className="mt-4 flex flex-wrap gap-3"><form action={linkMatchGroupManually.bind(null, "release_offer", source.match_group_key, returnPath)} className="flex gap-2"><label className="sr-only" htmlFor="parent-sku">Parent ID</label><input id="parent-sku" name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-sm" required /><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Link manually</button></form><form action={mutateMatchGroup.bind(null, "release_offer", "suppress", source.match_group_key, returnPath)}><button className="rounded border border-border px-3 py-1.5 text-sm">Reject and suppress group</button></form></div>}
+        {unresolved && <div className="mt-4 flex flex-wrap gap-3"><form action={linkMatchGroupManually.bind(null, "release_offer", source.match_group_key, returnPath)} className="flex gap-2"><label className="sr-only" htmlFor="parent-sku">Parent ID</label><input id="parent-sku" name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-sm" required /><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Link manually</button></form></div>}
         {resolution?.status === "linked" && <form action={mutateMatchGroup.bind(null, "release_offer", "unlink", source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-accent px-3 py-1.5 text-sm text-accent">Unlink group and retry later</button></form>}
         {resolution?.status === "ignored" && <form action={mutateMatchGroup.bind(null, "release_offer", "restore", source.match_group_key, returnPath)} className="mt-4"><button className="rounded border border-border px-3 py-1.5 text-sm">Restore group to unmatched</button></form>}
         {unresolved && <CatalogueCandidateSearch source="release_offer" matchGroupKey={source.match_group_key} defaultQuery={source.source_wine} sourceVintage={source.source_vintage} returnPath={returnPath} />}
+        {unresolved && <div className="mt-4 border-t border-border pt-4">
+          <p className="text-sm text-ink-muted"><strong className="font-medium text-ink">No suitable match:</strong> the wine is genuine but you cannot link it right now; it leaves this queue and stays in the corpus. <strong className="font-medium text-ink">Exclude</strong> (below): the source row itself is wrong; it is removed everywhere.</p>
+          <form action={mutateMatchGroup.bind(null, "release_offer", "suppress", source.match_group_key, returnPath)} className="mt-2"><button className="rounded border border-border px-3 py-1.5 text-sm">No suitable match</button></form>
+        </div>}
       </section>
 
       <section aria-labelledby="exclude-record" className="rounded-lg border border-border bg-background p-5">
         <h2 id="exclude-record" className="text-lg font-semibold">Exclude record</h2>
-        <p className="mt-1 text-sm text-ink-muted">This hides only this offer record and stops its parsed prices feeding the release-price anchor. Other records in the same match group are retained, and a later file repeating this offer is filtered out. Restore it from <Link href="/release-prices/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
+        <p className="mt-1 text-sm text-ink-muted">Use this when the source row itself is wrong. It removes this evidence from release prices everywhere, and from future imports — a later file repeating this offer is filtered out. Other records in the same match group are retained. Restore it from <Link href="/release-prices/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
         <div className="mt-4"><ExcludeHistoricOfferRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
       </section>
 

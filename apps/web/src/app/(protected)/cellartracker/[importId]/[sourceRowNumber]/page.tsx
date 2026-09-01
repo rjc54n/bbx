@@ -177,7 +177,7 @@ export default async function CellarTrackerRecordPage({
           {resolution?.status === "linked"
             ? `Linked to Parent ${resolution.parent_sku} by ${methodLabel(resolution.match_method)}`
             : resolution?.status === "suppressed"
-              ? "Rejected and suppressed"
+              ? "No suitable match"
               : candidates.length > 0
                 ? "Provisional candidates available, not linked"
                 : "Unlinked"}
@@ -225,7 +225,7 @@ export default async function CellarTrackerRecordPage({
 
       <section aria-labelledby="exclude-record" className="rounded-lg border border-border bg-background p-5">
         <h2 id="exclude-record" className="text-lg font-semibold">Exclude record</h2>
-        <p className="mt-1 text-sm text-ink-muted">This hides only this record from the CellarTracker snapshot, and leaves it out of every snapshot you accept from now on. Other records in the same wine-and-vintage match group are retained. Restore it from <Link href="/cellartracker/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
+        <p className="mt-1 text-sm text-ink-muted">Use this when the source row itself is wrong. It removes this record from the CellarTracker snapshot everywhere, and from every snapshot you accept from now on. Other records in the same wine-and-vintage match group are retained. Restore it from <Link href="/cellartracker/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
         <div className="mt-4"><ExcludeCellarTrackerRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
       </section>
 

@@ -77,7 +77,7 @@ function displayMethod(value: string | null) {
     algolia_exact: "Algolia exact",
     algolia_confirmed: "Algolia confirmed",
     manual: "Manual",
-    suppressed: "Suppressed",
+    suppressed: "No suitable match",
   };
   return value ? labels[value] ?? value.replaceAll("_", " ") : "Mixed methods";
 }
@@ -161,12 +161,19 @@ export function MatchGroupList({
         </div>}
         {group.unresolved_row_count > 0 && <div className="mt-3 flex flex-wrap items-start gap-3">
           <form action={(formData) => submit({ source: group.source, op: "manual", matchGroupKey: group.match_group_key, parentSku: String(formData.get("parent_sku") ?? "").trim() })} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><SubmitButton pendingLabel="Linking…" className="rounded border border-border px-2 py-1.5 text-xs">Link manually</SubmitButton></form>
-          <form action={() => submit({ source: group.source, op: "suppress", matchGroupKey: group.match_group_key })}><SubmitButton pendingLabel="Suppressing…" className="rounded border border-border px-2 py-1.5 text-xs">Reject and suppress</SubmitButton></form>
         </div>}
         {group.linked_row_count > 0 && <div className="mt-3 flex flex-wrap gap-2"><form action={(formData) => submit({ source: group.source, op: "edit", matchGroupKey: group.match_group_key, parentSku: String(formData.get("parent_sku") ?? "").trim() })} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" defaultValue={group.parent_sku ?? ""} className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><SubmitButton pendingLabel="Saving…" className="rounded border border-border px-2 py-1.5 text-xs">Edit linked Parent ID</SubmitButton></form><form action={() => submit({ source: group.source, op: "unlink", matchGroupKey: group.match_group_key })}><SubmitButton pendingLabel="Unlinking…" className="rounded border border-accent px-2 py-1.5 text-xs text-accent">Unlink and retry later</SubmitButton></form></div>}
         {group.suppressed_row_count > 0 && <form action={() => submit({ source: group.source, op: "restore", matchGroupKey: group.match_group_key })} className="mt-3"><SubmitButton pendingLabel="Restoring…" className="rounded border border-border px-2 py-1.5 text-xs">Restore to unmatched</SubmitButton></form>}
         {group.unresolved_row_count > 0 && <CatalogueCandidateSearch source={group.source} matchGroupKey={group.match_group_key} defaultQuery={group.catalogueSearchQuery} sourceVintage={group.source_vintage} returnPath={returnPath} />}
-        <div className="mt-3 border-t border-border pt-3"><ExcludeMatchGroupForm source={group.source} matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} /></div>
+        {/* The two "cannot link" decisions, grouped and separated from the linking
+            actions above, with Exclude styled as the heavier one (spec §3.8). */}
+        <div className="mt-3 border-t border-border pt-3">
+          {group.unresolved_row_count > 0 && <p className="text-xs text-ink-muted"><strong className="font-medium text-ink">No suitable match:</strong> the wine is genuine but you cannot link it right now; it leaves this queue and stays in the corpus. <strong className="font-medium text-ink">Exclude:</strong> the source row itself is wrong; it is removed everywhere.</p>}
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {group.unresolved_row_count > 0 && <form action={() => submit({ source: group.source, op: "suppress", matchGroupKey: group.match_group_key })}><SubmitButton pendingLabel="Saving…" className="rounded border border-border px-2 py-1.5 text-xs">No suitable match</SubmitButton></form>}
+            <ExcludeMatchGroupForm source={group.source} matchGroupKey={group.match_group_key} recordCount={group.source_row_count} returnPath={returnPath} />
+          </div>
+        </div>
       </article>)}
     </div>
   </>;
