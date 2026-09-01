@@ -17,14 +17,15 @@
 --                  2015|beta     linked to 20140000001 (in catalogue)
 --                  2016|gamma    suppressed
 --                  2017|delta    linked to 20990000001 (NOT in catalogue), last run failed
---                  2018|epsilon  mixed: 1 linked, 1 unresolved
+--                  2018|epsilon  mixed: 1 linked, 1 unresolved, no suggestions
 --                  2019|zeta     1 row, excluded -> group disappears
+--                  2023|eta      1 row, unresolved, no suggestions, last run failed
 --   cellartracker  2020|ct alpha unresolved, 1 suggestion
 --                  2021|ct beta  linked to 20140000001
 --                  2022|ct gamma excluded -> group disappears
 
 BEGIN;
-SELECT plan(53);
+SELECT plan(56);
 
 INSERT INTO auth.users (id) VALUES
     ('11111111-1111-1111-1111-111111111111'),
@@ -68,7 +69,8 @@ VALUES
     ('33333333-3333-3333-3333-333333333331', 5, '{}'::JSONB, DATE '2026-01-15', 'Delta Wine', 2017, 'delta', '£700 per 6', repeat('e', 64)),
     ('33333333-3333-3333-3333-333333333331', 6, '{}'::JSONB, DATE '2026-01-15', 'Epsilon Wine', 2018, 'epsilon', '£800 per 6', repeat('f', 64)),
     ('33333333-3333-3333-3333-333333333331', 7, '{}'::JSONB, DATE '2026-01-16', 'Epsilon Wine', 2018, 'epsilon', '£810 per 6', repeat('0', 64)),
-    ('33333333-3333-3333-3333-333333333331', 8, '{}'::JSONB, DATE '2026-01-15', 'Zeta Wine', 2019, 'zeta', '£400 per 6', repeat('1', 64));
+    ('33333333-3333-3333-3333-333333333331', 8, '{}'::JSONB, DATE '2026-01-15', 'Zeta Wine', 2019, 'zeta', '£400 per 6', repeat('1', 64)),
+    ('33333333-3333-3333-3333-333333333331', 9, '{}'::JSONB, DATE '2026-01-17', 'Eta Wine', 2023, 'eta', '£1000 per 6', repeat('2', 64));
 
 -- Row 2 of the alpha group and the whole zeta group are excluded by content.
 INSERT INTO public.release_offer_record_exclusions (content_fingerprint)
@@ -91,7 +93,8 @@ INSERT INTO public.release_offer_match_run_groups (
 )
 VALUES
     ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2014|alpha', 'alpha', 2014, 'Alpha Wine', 2, 'processed', TIMESTAMPTZ '2026-01-20 10:00+00'),
-    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2017|delta', 'delta', 2017, 'Delta Wine', 1, 'failed', TIMESTAMPTZ '2026-01-20 10:05+00');
+    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2017|delta', 'delta', 2017, 'Delta Wine', 1, 'failed', TIMESTAMPTZ '2026-01-20 10:05+00'),
+    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2023|eta', 'eta', 2023, 'Eta Wine', 1, 'failed', TIMESTAMPTZ '2026-01-20 10:10+00');
 
 INSERT INTO public.release_offer_match_suggestions (
     match_group_key, parent_sku, source_run_id, rank, name, was_biddable_at_observation, observed_at, match_score
@@ -272,7 +275,7 @@ SELECT is(
 SELECT is(
     (SELECT unresolved_row_count FROM public.wine_match_review_view WHERE source = 'release_offer' AND match_group_key = '2017|delta'),
     0,
-    'the failed group is fully resolved, so it only reaches needs-review via last_run_status'
+    'the delta group is fully resolved despite the failed run, so it is linked, not a queue item'
 );
 
 SELECT is(
@@ -301,13 +304,31 @@ SELECT is(
 
 SELECT is(
     (SELECT needs_review FROM public.wine_match_queue_summary(NULL)),
-    (SELECT count(*) FROM public.wine_match_review_view WHERE unresolved_row_count > 0 OR last_run_status = 'failed'),
-    'summary needs_review equals a direct count'
+    (SELECT count(*) FROM public.wine_match_review_view WHERE unresolved_row_count > 0),
+    'summary needs_review equals the unresolved backlog'
 );
 SELECT is(
     (SELECT with_suggestions FROM public.wine_match_queue_summary(NULL)),
-    (SELECT count(*) FROM public.wine_match_review_view WHERE (unresolved_row_count > 0 OR last_run_status = 'failed') AND suggestion_count > 0),
+    (SELECT count(*) FROM public.wine_match_review_view
+       WHERE unresolved_row_count > 0 AND last_run_status IS DISTINCT FROM 'failed' AND suggestion_count > 0),
     'summary with_suggestions equals a direct count'
+);
+SELECT is(
+    (SELECT no_suggestions FROM public.wine_match_queue_summary(NULL)),
+    (SELECT count(*) FROM public.wine_match_review_view
+       WHERE unresolved_row_count > 0 AND last_run_status IS DISTINCT FROM 'failed' AND suggestion_count = 0),
+    'summary no_suggestions equals a direct count'
+);
+SELECT is(
+    (SELECT errors FROM public.wine_match_queue_summary(NULL)),
+    (SELECT count(*) FROM public.wine_match_review_view
+       WHERE unresolved_row_count > 0 AND last_run_status = 'failed'),
+    'summary errors equals a direct count'
+);
+SELECT is(
+    (SELECT with_suggestions + no_suggestions + errors FROM public.wine_match_queue_summary(NULL)),
+    (SELECT needs_review FROM public.wine_match_queue_summary(NULL)),
+    'the three queue buckets partition needs_review exactly'
 );
 SELECT is(
     (SELECT linked FROM public.wine_match_queue_summary(NULL)),
@@ -336,15 +357,17 @@ SELECT is(
 );
 
 -- Explicit bucket values for this fixture set:
---   needs_review: 2014|alpha, 2017|delta, 2018|epsilon, 2020|ct alpha  = 4
---   with_suggestions: 2014|alpha, 2020|ct alpha                        = 2
---   linked: 2015|beta, 2017|delta, 2021|ct beta                        = 3
---   no_suitable_match: 2016|gamma                                      = 1
---   all_groups: alpha,beta,gamma,delta,epsilon + ct alpha,ct beta      = 7
+--   needs_review (unresolved > 0): 2014|alpha, 2018|epsilon, 2023|eta, 2020|ct alpha  = 4
+--   with_suggestions: 2014|alpha, 2020|ct alpha                                       = 2
+--   no_suggestions: 2018|epsilon                                                      = 1
+--   errors: 2023|eta                                                                  = 1
+--   linked: 2015|beta, 2017|delta, 2021|ct beta                                       = 3
+--   no_suitable_match: 2016|gamma                                                     = 1
+--   all_groups: alpha,beta,gamma,delta,epsilon,eta + ct alpha,ct beta                 = 8
 SELECT results_eq(
-    $$ SELECT needs_review, with_suggestions, linked, no_suitable_match, all_groups
+    $$ SELECT needs_review, with_suggestions, no_suggestions, errors, linked, no_suitable_match, all_groups
        FROM public.wine_match_queue_summary(NULL) $$,
-    $$ VALUES (4::BIGINT, 2::BIGINT, 3::BIGINT, 1::BIGINT, 7::BIGINT) $$,
+    $$ VALUES (4::BIGINT, 2::BIGINT, 1::BIGINT, 1::BIGINT, 3::BIGINT, 1::BIGINT, 8::BIGINT) $$,
     'the summary buckets match the hand-computed fixture totals'
 );
 
@@ -396,7 +419,7 @@ SELECT isnt(
 );
 SELECT is(
     (SELECT all_groups FROM public.wine_match_queue_summary(NULL)),
-    7::BIGINT,
+    8::BIGINT,
     'the owner gets the real summary through RLS'
 );
 RESET ROLE;

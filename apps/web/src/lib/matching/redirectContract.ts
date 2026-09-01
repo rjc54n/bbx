@@ -9,8 +9,10 @@ import type { MatchSource } from "@/lib/matching/adapters";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-// old `state` value -> new `state` value. Anything absent or unrecognised
-// lands on `needs-review`, the new default.
+// old `state` value -> new `state` value. `needs-review` is the whole
+// unresolved backlog — still a valid URL (so old `unresolved` bookmarks keep
+// their meaning) though no longer a tile. Anything absent or unrecognised lands
+// there too, matching the old pages' `unresolved` default.
 const STATE_MAP: Record<string, string> = {
   unresolved: "needs-review",
   candidates: "with-suggestions",

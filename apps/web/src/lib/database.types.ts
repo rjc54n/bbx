@@ -2654,8 +2654,10 @@ export type Database = {
         Args: { p_source?: string }
         Returns: {
           all_groups: number
+          errors: number
           linked: number
           needs_review: number
+          no_suggestions: number
           no_suitable_match: number
           with_suggestions: number
         }[]

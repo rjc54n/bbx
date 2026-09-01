@@ -21,8 +21,22 @@ export const dynamic = "force-dynamic";
 const MATCH_PATH = "/matches";
 const PAGE_SIZE = 50;
 
-const STATES = ["needs-review", "with-suggestions", "linked", "no-suitable-match", "all"] as const;
+// `needs-review` stays a valid URL (the whole unresolved backlog, for old
+// bookmarks) but is not a tile — the three disjoint queue buckets that partition
+// it are. Tiles render in this order minus `needs-review`.
+const STATES = [
+  "with-suggestions", "no-suggestions", "errors",
+  "linked", "no-suitable-match", "all", "needs-review",
+] as const;
 type StateFilter = (typeof STATES)[number];
+const DEFAULT_STATE: StateFilter = "with-suggestions";
+const TILE_STATES: StateFilter[] = [
+  "with-suggestions", "no-suggestions", "errors", "linked", "no-suitable-match", "all",
+];
+
+type SortKey = "queue" | "match";
+// The score-first sort only makes sense where groups carry scores.
+const SORTABLE_STATES: StateFilter[] = ["with-suggestions", "all", "needs-review"];
 
 const SOURCE_FILTERS = ["all", ...MATCH_SOURCES] as const;
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
@@ -34,11 +48,13 @@ const SOURCE_LABEL: Record<SourceFilter, string> = {
 };
 
 const STATE_LABEL: Record<StateFilter, string> = {
-  "needs-review": "Needs review",
   "with-suggestions": "With suggestions",
+  "no-suggestions": "No suggestions",
+  errors: "Errors",
   linked: "Linked",
   "no-suitable-match": "No suitable match",
   all: "All groups",
+  "needs-review": "All unresolved",
 };
 
 // The common projection of public.wine_match_review_view (spec §3.2). Source
@@ -104,18 +120,21 @@ function hasReleaseInfo(record: ReleaseRecordRow): boolean {
   );
 }
 
-// State predicates on the union view. `needs-review` is
-// `unresolved_row_count > 0 OR last_run_status = 'failed'` (spec §3.5); the
-// others are single-column comparisons.
-const NEEDS_REVIEW_OR = "unresolved_row_count.gt.0,last_run_status.eq.failed";
+// State predicates on the union view (spec §3.5). `needs-review` is the whole
+// unresolved backlog; the three queue buckets partition it — `errors` is the
+// failed slice, `with-`/`no-suggestions` split the rest by whether the matcher
+// found candidates. "not failed" must include NULL, hence the explicit OR.
+const NOT_FAILED_OR = "last_run_status.is.null,last_run_status.neq.failed";
 
 function applyStateFilter<T extends {
   or(filters: string): T;
   gt(column: string, value: number): T;
-  eq(column: string, value: number): T;
+  eq(column: string, value: string | number): T;
 }>(query: T, state: StateFilter): T {
-  if (state === "needs-review") return query.or(NEEDS_REVIEW_OR);
-  if (state === "with-suggestions") return query.or(NEEDS_REVIEW_OR).gt("suggestion_count", 0);
+  if (state === "needs-review") return query.gt("unresolved_row_count", 0);
+  if (state === "errors") return query.gt("unresolved_row_count", 0).eq("last_run_status", "failed");
+  if (state === "with-suggestions") return query.gt("unresolved_row_count", 0).gt("suggestion_count", 0).or(NOT_FAILED_OR);
+  if (state === "no-suggestions") return query.gt("unresolved_row_count", 0).eq("suggestion_count", 0).or(NOT_FAILED_OR);
   if (state === "linked") return query.gt("linked_row_count", 0).eq("unresolved_row_count", 0);
   if (state === "no-suitable-match") return query.gt("suppressed_row_count", 0).eq("unresolved_row_count", 0);
   return query;
@@ -177,7 +196,9 @@ export default async function MatchesPage({
     ? sourceParam
     : "all";
   const stateParam = firstParam(params.state);
-  const state: StateFilter = STATES.includes(stateParam as StateFilter) ? (stateParam as StateFilter) : "needs-review";
+  const state: StateFilter = STATES.includes(stateParam as StateFilter) ? (stateParam as StateFilter) : DEFAULT_STATE;
+  const sortParam = firstParam(params.sort);
+  const sort: SortKey = sortParam === "match" && SORTABLE_STATES.includes(state) ? "match" : "queue";
   const search = firstParam(params.q)?.trim().slice(0, 200) ?? "";
   const page = Math.max(1, Number(firstParam(params.page) ?? "1") || 1);
 
@@ -186,14 +207,25 @@ export default async function MatchesPage({
 
   // --- Wave 1: the union list, the exact-count summary, and the run banners ---
 
-  let rowsQuery = supabase.from("wine_match_review_view").select("*", { count: "exact" })
-    // Ordering (spec §3.5): failed runs first (last_error_at is only set when a
-    // run failed), then most-suggested / best-scored, then the identity.
-    .order("last_error_at", { ascending: false, nullsFirst: false })
-    .order("suggestion_count", { ascending: false })
-    .order("top_match_score", { ascending: false, nullsFirst: false })
-    .order("source", { ascending: true })
-    .order("match_group_key", { ascending: true });
+  let rowsQuery = supabase.from("wine_match_review_view").select("*", { count: "exact" });
+  if (sort === "match") {
+    // "Best name match": the group's best suggestion score first. Only offered
+    // for single-source views (the two backends score on different scales).
+    rowsQuery = rowsQuery
+      .order("top_match_score", { ascending: false, nullsFirst: false })
+      .order("suggestion_count", { ascending: false })
+      .order("source", { ascending: true })
+      .order("match_group_key", { ascending: true });
+  } else {
+    // Queue order (spec §3.5): failed runs first (last_error_at is only set when
+    // a run failed), then most-suggested / best-scored, then the identity.
+    rowsQuery = rowsQuery
+      .order("last_error_at", { ascending: false, nullsFirst: false })
+      .order("suggestion_count", { ascending: false })
+      .order("top_match_score", { ascending: false, nullsFirst: false })
+      .order("source", { ascending: true })
+      .order("match_group_key", { ascending: true });
+  }
   if (sourceFilter !== "all") rowsQuery = rowsQuery.eq("source", sourceFilter);
   rowsQuery = applyStateFilter(rowsQuery, state);
   if (search) rowsQuery = rowsQuery.ilike("source_wine", `%${escapeLike(search)}%`);
@@ -217,7 +249,8 @@ export default async function MatchesPage({
 
   const groups = (rowsResult.data ?? []) as ReviewRow[];
   const summary = summaryResult.data?.[0] ?? {
-    needs_review: 0, with_suggestions: 0, linked: 0, no_suitable_match: 0, all_groups: 0,
+    needs_review: 0, with_suggestions: 0, no_suggestions: 0, errors: 0,
+    linked: 0, no_suitable_match: 0, all_groups: 0,
   };
 
   const releaseGroups = groups.filter((group) => group.source === "release_offer");
@@ -389,24 +422,36 @@ export default async function MatchesPage({
   const returnParams = new URLSearchParams();
   returnParams.set("source", sourceFilter);
   returnParams.set("state", state);
+  if (sort !== "queue") returnParams.set("sort", sort);
   if (search) returnParams.set("q", search);
   returnParams.set("page", String(page));
   const returnPath = `${MATCH_PATH}?${returnParams.toString()}`;
 
-  const stateChips: Array<[StateFilter, number]> = [
-    ["needs-review", Number(summary.needs_review)],
-    ["with-suggestions", Number(summary.with_suggestions)],
-    ["linked", Number(summary.linked)],
-    ["no-suitable-match", Number(summary.no_suitable_match)],
-    ["all", Number(summary.all_groups)],
-  ];
+  const tileCount: Record<StateFilter, number> = {
+    "with-suggestions": Number(summary.with_suggestions),
+    "no-suggestions": Number(summary.no_suggestions),
+    errors: Number(summary.errors),
+    linked: Number(summary.linked),
+    "no-suitable-match": Number(summary.no_suitable_match),
+    all: Number(summary.all_groups),
+    "needs-review": Number(summary.needs_review),
+  };
 
   function sourceHref(next: SourceFilter): string {
     const query = new URLSearchParams({ source: next, state });
+    if (sort !== "queue") query.set("sort", sort);
     return `${MATCH_PATH}?${query.toString()}`;
   }
   function stateHref(next: StateFilter): string {
     const query = new URLSearchParams({ source: sourceFilter, state: next });
+    // Carry the score sort only into states where it still applies.
+    if (sort !== "queue" && SORTABLE_STATES.includes(next)) query.set("sort", sort);
+    return `${MATCH_PATH}?${query.toString()}`;
+  }
+  function sortHref(next: SortKey): string {
+    const query = new URLSearchParams({ source: sourceFilter, state });
+    if (next !== "queue") query.set("sort", next);
+    if (search) query.set("q", search);
     return `${MATCH_PATH}?${query.toString()}`;
   }
 
@@ -433,18 +478,26 @@ export default async function MatchesPage({
       {wantRelease && <MatchRunControl latest={runProgress(releaseRunResult.data as Record<string, unknown> | null)} />}
       {wantCellar && <CellarTrackerMatchRunControl latest={runProgress(cellarRunResult.data as Record<string, unknown> | null)} />}
 
-      <section className="grid gap-3 sm:grid-cols-5">
-        {stateChips.map(([value, count]) => <Link key={value} href={stateHref(value)} className={`rounded-lg border p-4 ${state === value ? "border-accent bg-background" : "border-border bg-background"}`}><p className="text-xs uppercase text-ink-muted">{STATE_LABEL[value]}</p><p className="mt-1 text-xl font-semibold">{count.toLocaleString()}</p></Link>)}
+      <section className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {TILE_STATES.map((value) => <Link key={value} href={stateHref(value)} aria-current={state === value ? "true" : undefined} className={`rounded-lg border p-4 ${state === value ? "border-accent bg-background" : "border-border bg-background"}`}><p className="text-xs uppercase text-ink-muted">{STATE_LABEL[value]}</p><p className="mt-1 text-xl font-semibold">{tileCount[value].toLocaleString()}</p></Link>)}
       </section>
+      {state === "needs-review" && <p className="text-xs text-ink-muted">Showing the whole unresolved backlog. The tiles above split it into confirmable candidates, groups needing a manual search, and failed runs.</p>}
 
       <section className="rounded-lg border border-border bg-background">
-        <form className="flex flex-wrap gap-2 border-b border-border p-4">
+        <form className="flex flex-wrap items-center gap-2 border-b border-border p-4">
           <input type="hidden" name="source" value={sourceFilter} />
           <input type="hidden" name="state" value={state} />
+          {sort !== "queue" && <input type="hidden" name="sort" value={sort} />}
           <input type="search" name="q" defaultValue={search} placeholder="Search source wine" className="min-w-64 flex-1 rounded border border-border px-3 py-2 text-sm" />
           <button className="rounded border border-accent px-3 py-2 text-sm text-accent">Search</button>
           {search && <Link href={stateHref(state)} className="rounded border border-border px-3 py-2 text-sm">Clear</Link>}
+          {SORTABLE_STATES.includes(state) && <span className="ml-auto flex items-center gap-1 text-xs text-ink-muted">
+            <span>Sort:</span>
+            <Link href={sortHref("queue")} aria-current={sort === "queue" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "queue" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Queue order</Link>
+            <Link href={sortHref("match")} aria-current={sort === "match" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "match" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Best name match</Link>
+          </span>}
         </form>
+        {sort === "match" && sourceFilter === "all" && <p className="border-b border-border px-4 py-2 text-xs text-ink-muted">Ranked by best name-match score within each source; the two sources score on different scales, so cross-source order is approximate.</p>}
         <MatchGroupList groups={groupViews} state={state} returnPath={returnPath} />
         <Pagination
           page={page}
@@ -452,7 +505,12 @@ export default async function MatchesPage({
           totalCount={totalForState}
           label="groups"
           basePath={MATCH_PATH}
-          query={search ? { source: sourceFilter, state, q: search } : { source: sourceFilter, state }}
+          query={{
+            source: sourceFilter,
+            state,
+            ...(sort !== "queue" ? { sort } : {}),
+            ...(search ? { q: search } : {}),
+          }}
         />
       </section>
     </div>

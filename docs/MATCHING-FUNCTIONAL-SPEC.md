@@ -26,6 +26,16 @@ the accepted-offer and CellarTracker record browsers now read "No suitable
 match". Label-only: no status enum, RPC or constraint change. **Part A
 complete.**
 
+Queue-bucket revision (1 Sep 2026, spec §3.5) — migration
+`20260901120000_wine_match_queue_buckets.sql` redefines `wine_match_queue_summary`
+so the queue is three disjoint tiles (`with-suggestions` / `no-suggestions` /
+`errors`) that partition the unresolved backlog, instead of `needs-review` and
+its own subset shown as siblings. `needs-review` stays a URL-only umbrella;
+default landing is now `with-suggestions`. Adds a `queue` / `match` sort toggle
+on `/matches`. pgTAP updated (56 assertions); bucket logic + exact partition
+verified against production read-only. Migration needs `supabase db push
+--linked` after merge.
+
 **Revised twice after external review:**
 [`MATCHING-FUNCTIONAL-SPEC-REVIEW.md`](MATCHING-FUNCTIONAL-SPEC-REVIEW.md)
 (30 Aug 2026) and
@@ -150,13 +160,15 @@ A single page at `/matches`, in the top navigation as **"Matching"**. Both
 existing routes become permanent redirects (§3.7). Header links from "Release
 prices" and "My CellarTracker" stay, now deep-linking into `/matches?source=…`.
 
-Two filters:
+Two filters plus a sort:
 
 - **source**: `all` / `release_offer` / `cellartracker`
-- **state**: `needs-review` / `with-suggestions` / `linked` / `no-suitable-match`
-  / `all` (§3.5)
+- **state**: `with-suggestions` / `no-suggestions` / `errors` / `linked` /
+  `no-suitable-match` / `all` as tiles, plus `needs-review` as a URL-only
+  umbrella (§3.5)
+- **sort**: `queue` (default) / `match` (§3.5)
 
-Default: `all` / `needs-review`.
+Default: `all` / `with-suggestions`.
 
 ### 3.2 Union read views and counts
 
@@ -250,34 +262,55 @@ The **expanded group panel is source-specific** and has a defined data source:
 A lowest-common-denominator card is explicitly rejected: the two sources support
 different owner decisions and need different evidence.
 
-### 3.5 The default queue
+### 3.5 The queue buckets
 
-`needs-review` is the predicate:
+> **Revised 1 Sep 2026.** The original model had `needs-review` (the whole
+> unresolved backlog) and `with-suggestions` (a *subset* of it) as sibling
+> tiles, which read as a false distinction — a group with candidates shows
+> under both. The queue is now three **disjoint** buckets that partition the
+> backlog, matching how the owner triages: confirm a candidate, search
+> manually, or clear a stuck run.
 
-```
-unresolved_row_count > 0 OR last_run_status = 'failed'
-```
-
-It excludes fully-linked groups, fully-suppressed groups, and excluded
-evidence. **Mixed groups** (some rows linked, some unresolved) satisfy the
-predicate through `unresolved_row_count > 0` and are a *presentation* concern,
+`needs-review` stays as an umbrella predicate — `unresolved_row_count > 0` —
+and a valid `?state=` URL (so old `unresolved` bookmarks keep their meaning),
+but it is **not a tile**. It excludes fully-linked and fully-suppressed groups
+and excluded evidence. **Mixed groups** (some rows linked, some unresolved)
+satisfy it through `unresolved_row_count > 0` and are a *presentation* concern,
 not a separate set: the panel shows per-row status, and confirm / suppress act
-only on the still-unresolved rows, matching current per-source RPC behaviour.
+only on the still-unresolved rows.
 
-Other states:
+A fully-resolved group whose last run failed is **not** in `needs-review` — it
+is `linked` (or `no-suitable-match`), and the stale failure is still shown on
+the card. (The original predicate's `OR last_run_status = 'failed'` is dropped:
+a resolved group is resolved.)
 
-- `with-suggestions`: `needs-review` groups with `suggestion_count > 0`. This is
-  the new home for the old `candidates` filter.
+The three queue tiles, disjoint, summing to `needs-review`:
+
+- `with-suggestions`: `unresolved_row_count > 0 AND last_run_status IS DISTINCT
+  FROM 'failed' AND suggestion_count > 0`. The old `candidates` filter.
+- `no-suggestions`: same, but `suggestion_count = 0` — the matcher found
+  nothing, so the owner searches the catalogue.
+- `errors`: `unresolved_row_count > 0 AND last_run_status = 'failed'` — the
+  group is stuck on a failed run; "Retry failed groups" clears it.
+
+Outcome states, unchanged:
+
 - `linked`: `linked_row_count > 0 AND unresolved_row_count = 0`.
 - `no-suitable-match`: `suppressed_row_count > 0 AND unresolved_row_count = 0`
   (the old `suppressed`).
 - `all`.
 
-**Ordering** within `needs-review`, stable:
+Default landing state: **`with-suggestions`** (was `needs-review`).
 
-1. `last_run_status = 'failed'` first (these are stuck, not just unreviewed);
-2. then `suggestion_count DESC`, `top_match_score DESC NULLS LAST`;
-3. then `source`, then `match_group_key`.
+**Ordering**, stable, two options the owner picks between:
+
+- *Queue order* (default): `last_run_status = 'failed'` first, then
+  `suggestion_count DESC`, `top_match_score DESC NULLS LAST`, then `source`,
+  `match_group_key`.
+- *Best name match*: `top_match_score DESC NULLS LAST` first, then
+  `suggestion_count DESC`, then `source`, `match_group_key`. Offered only in
+  `with-suggestions` / `all` / `needs-review`; when `source = all` the page
+  notes the two backends score on different scales.
 
 There is no "exact candidate awaiting confirmation" tier: the exact tiers in
 both backends auto-link, so a group that still has suggestions has, by
@@ -602,6 +635,21 @@ The formal p50/p95 comparison and the 1.25× gate remain open. Given the
 push-down works and the dataset is small, the risk of shipping the route is
 low; if the landing render is slow in practice, the fallback is the maintained
 summary table in §3.2, measured then.
+
+### Queue-bucket revision verification, 1 Sep 2026
+
+`wine_match_queue_summary` redefined (migration `20260901120000`): three
+disjoint queue buckets (§3.5). pgTAP `wine_match_unified_surface.test.sql`
+grown to 56 assertions — new `no_suggestions` / `errors` parity checks, an
+explicit "the three buckets partition `needs_review`" check, and a fixture
+group (`2023|eta`, unresolved + failed run) that exercises the `errors`
+bucket. Not run locally (Docker was unavailable); the bucket predicates were
+instead run directly against `wine_match_review_view` on production
+(read-only): `needs_review` 2196 = `with_suggestions` 548 + `no_suggestions`
+1648 + `errors` 0, an exact partition; `linked` 1105, `no_suitable_match` 3,
+`all_groups` 3304. `database.types.ts` hand-edited for the new return shape.
+`redirectContract` unchanged (old `unresolved` still → `needs-review`, which
+survives as a URL).
 
 ---
 
