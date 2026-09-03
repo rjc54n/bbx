@@ -34,6 +34,24 @@ against the current migrations/code for anything load-bearing.
 - [IMPORT-SOURCE-PROFILES.md](IMPORT-SOURCE-PROFILES.md) — observed CSV
   contracts for the BBR and CellarTracker import sources (source files
   themselves are private and stay outside git).
+- [BBR-HOLDINGS-HISTORY-EPIC.md](BBR-HOLDINGS-HISTORY-EPIC.md) — draft epic
+  and user stories for turning dated complete BBR snapshots into current and
+  former holding history.
+- [BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md](BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md)
+  — agreed product behaviour for effective dates, current authority,
+  consolidated positions and reported purchase-price history.
+- [BBR-HOLDINGS-HISTORY-ENGINEERING-VIEW.md](BBR-HOLDINGS-HISTORY-ENGINEERING-VIEW.md)
+  — initial engineering constraints and technical-design questions; not a
+  schema or implementation plan.
+- [BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md)
+  — storage shape, answers to the engineering view's technical questions, and
+  twelve independently deployable slices. Revision 2, rewritten in response to
+  the review below; no code written. One open product question (spec §4.5 on
+  duplicate files) blocks the acceptance RPCs.
+- [BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-REVIEW.md](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-REVIEW.md)
+  is an external review of the implementation plan (3 September 2026), identifying
+  four correctness and deployment blockers before implementation. Answered
+  point by point in §8 of the plan.
 - [CELLARTRACKER-IMPLEMENTATION.md](CELLARTRACKER-IMPLEMENTATION.md) —
   CellarTracker import, matching and comparison. Explicitly says its
   deployment statements are dated observations to be checked against the
