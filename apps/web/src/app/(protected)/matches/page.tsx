@@ -34,9 +34,22 @@ const TILE_STATES: StateFilter[] = [
   "with-suggestions", "no-suggestions", "errors", "linked", "no-suitable-match", "all",
 ];
 
-type SortKey = "queue" | "match";
-// The score-first sort only makes sense where groups carry scores.
+type SortKey = "queue" | "match" | "coverage";
+// The score-first and coverage sorts only make sense where groups carry
+// candidates. The tier filter is scoped to the same three states.
 const SORTABLE_STATES: StateFilter[] = ["with-suggestions", "all", "needs-review"];
+
+// Token coverage of the rank-1 candidate (triage spec §4.2). `workable`
+// excludes only the `low` tier, never the `none` tier, so a group with no
+// suggestions still shows under "All groups" instead of being filtered away.
+const TIER_FILTERS = ["workable", "low", "all"] as const;
+type TierFilter = (typeof TIER_FILTERS)[number];
+const DEFAULT_TIER: TierFilter = "workable";
+const TIER_LABEL: Record<TierFilter, string> = {
+  workable: "Worth reviewing",
+  low: "Low coverage",
+  all: "All tiers",
+};
 
 const SOURCE_FILTERS = ["all", ...MATCH_SOURCES] as const;
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
@@ -77,6 +90,9 @@ type ReviewRow = {
   suggestions_observed_at: string | null;
   last_run_status: string | null;
   last_error_at: string | null;
+  second_wine_conflict: boolean;
+  token_coverage: number | null;
+  coverage_tier: string;
 };
 
 type SuggestionRow = {
@@ -140,6 +156,18 @@ function applyStateFilter<T extends {
   return query;
 }
 
+// A plain neq, which is why the view spells the empty tier 'none' rather than
+// leaving it NULL: `not.eq` would drop NULL rows and hide every no-suggestions
+// group from the "all" state.
+function applyTierFilter<T extends {
+  eq(column: string, value: string): T;
+  neq(column: string, value: string): T;
+}>(query: T, tier: TierFilter): T {
+  if (tier === "workable") return query.neq("coverage_tier", "low");
+  if (tier === "low") return query.eq("coverage_tier", "low");
+  return query;
+}
+
 function runProgress(row: Record<string, unknown> | null): (MatchRunProgress & CellarTrackerMatchProgress) | null {
   if (!row || typeof row.id !== "string") return null;
   return {
@@ -198,7 +226,14 @@ export default async function MatchesPage({
   const stateParam = firstParam(params.state);
   const state: StateFilter = STATES.includes(stateParam as StateFilter) ? (stateParam as StateFilter) : DEFAULT_STATE;
   const sortParam = firstParam(params.sort);
-  const sort: SortKey = sortParam === "match" && SORTABLE_STATES.includes(state) ? "match" : "queue";
+  const sort: SortKey = (sortParam === "match" || sortParam === "coverage") && SORTABLE_STATES.includes(state)
+    ? sortParam
+    : "queue";
+  const tierParam = firstParam(params.tier);
+  const tierApplies = SORTABLE_STATES.includes(state);
+  const tier: TierFilter = tierApplies && TIER_FILTERS.includes(tierParam as TierFilter)
+    ? (tierParam as TierFilter)
+    : DEFAULT_TIER;
   const search = firstParam(params.q)?.trim().slice(0, 200) ?? "";
   const page = Math.max(1, Number(firstParam(params.page) ?? "1") || 1);
 
@@ -208,7 +243,16 @@ export default async function MatchesPage({
   // --- Wave 1: the union list, the exact-count summary, and the run banners ---
 
   let rowsQuery = supabase.from("wine_match_review_view").select("*", { count: "exact" });
-  if (sort === "match") {
+  if (sort === "coverage") {
+    // Highest token coverage of the rank-1 candidate first. `full` and
+    // `full_with_typos` interleave at the top (both are >= 1.0); the tier badge
+    // on the row is what separates them.
+    rowsQuery = rowsQuery
+      .order("token_coverage", { ascending: false, nullsFirst: false })
+      .order("suggestion_count", { ascending: false })
+      .order("source", { ascending: true })
+      .order("match_group_key", { ascending: true });
+  } else if (sort === "match") {
     // "Best name match": the group's best suggestion score first. Only offered
     // for single-source views (the two backends score on different scales).
     rowsQuery = rowsQuery
@@ -228,6 +272,7 @@ export default async function MatchesPage({
   }
   if (sourceFilter !== "all") rowsQuery = rowsQuery.eq("source", sourceFilter);
   rowsQuery = applyStateFilter(rowsQuery, state);
+  if (tierApplies) rowsQuery = applyTierFilter(rowsQuery, tier);
   if (search) rowsQuery = rowsQuery.ilike("source_wine", `%${escapeLike(search)}%`);
   const from = (page - 1) * PAGE_SIZE;
 
@@ -251,6 +296,7 @@ export default async function MatchesPage({
   const summary = summaryResult.data?.[0] ?? {
     needs_review: 0, with_suggestions: 0, no_suggestions: 0, errors: 0,
     linked: 0, no_suitable_match: 0, all_groups: 0,
+    workable: 0, low_coverage: 0, second_wine_conflicts: 0,
   };
 
   const releaseGroups = groups.filter((group) => group.source === "release_offer");
@@ -408,6 +454,9 @@ export default async function MatchesPage({
       parent_sku: group.parent_sku,
       match_method: group.match_method,
       is_bbx_eligible: group.is_bbx_eligible,
+      second_wine_conflict: group.second_wine_conflict,
+      coverage_tier: group.coverage_tier,
+      token_coverage: group.token_coverage,
       candidates,
       catalogueSearchQuery,
       panel,
@@ -423,6 +472,7 @@ export default async function MatchesPage({
   returnParams.set("source", sourceFilter);
   returnParams.set("state", state);
   if (sort !== "queue") returnParams.set("sort", sort);
+  if (tierApplies && tier !== DEFAULT_TIER) returnParams.set("tier", tier);
   if (search) returnParams.set("q", search);
   returnParams.set("page", String(page));
   const returnPath = `${MATCH_PATH}?${returnParams.toString()}`;
@@ -437,23 +487,46 @@ export default async function MatchesPage({
     "needs-review": Number(summary.needs_review),
   };
 
+  // The tier filter, like the sort, only travels into states where it applies.
+  function carryTier(query: URLSearchParams, nextState: StateFilter): URLSearchParams {
+    if (tier !== DEFAULT_TIER && SORTABLE_STATES.includes(nextState)) query.set("tier", tier);
+    return query;
+  }
   function sourceHref(next: SourceFilter): string {
     const query = new URLSearchParams({ source: next, state });
     if (sort !== "queue") query.set("sort", sort);
-    return `${MATCH_PATH}?${query.toString()}`;
+    return `${MATCH_PATH}?${carryTier(query, state).toString()}`;
   }
   function stateHref(next: StateFilter): string {
     const query = new URLSearchParams({ source: sourceFilter, state: next });
     // Carry the score sort only into states where it still applies.
     if (sort !== "queue" && SORTABLE_STATES.includes(next)) query.set("sort", sort);
-    return `${MATCH_PATH}?${query.toString()}`;
+    return `${MATCH_PATH}?${carryTier(query, next).toString()}`;
   }
   function sortHref(next: SortKey): string {
     const query = new URLSearchParams({ source: sourceFilter, state });
     if (next !== "queue") query.set("sort", next);
     if (search) query.set("q", search);
+    return `${MATCH_PATH}?${carryTier(query, state).toString()}`;
+  }
+  function tierHref(next: TierFilter): string {
+    const query = new URLSearchParams({ source: sourceFilter, state });
+    if (sort !== "queue") query.set("sort", sort);
+    if (next !== DEFAULT_TIER) query.set("tier", next);
+    if (search) query.set("q", search);
     return `${MATCH_PATH}?${query.toString()}`;
   }
+
+  // Scoped to the with-suggestions bucket, so the numbers only describe that
+  // tile. Shown as counts there and as bare labels elsewhere.
+  const workableCount = Number(summary.workable);
+  const lowCount = Number(summary.low_coverage);
+  const conflictCount = Number(summary.second_wine_conflicts);
+  const tierCount: Record<TierFilter, number> = {
+    workable: workableCount,
+    low: lowCount,
+    all: workableCount + lowCount,
+  };
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
     <div className="mx-auto max-w-7xl space-y-5 p-5">
@@ -481,6 +554,18 @@ export default async function MatchesPage({
       <section className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {TILE_STATES.map((value) => <Link key={value} href={stateHref(value)} aria-current={state === value ? "true" : undefined} className={`rounded-lg border p-4 ${state === value ? "border-accent bg-background" : "border-border bg-background"}`}><p className="text-xs uppercase text-ink-muted">{STATE_LABEL[value]}</p><p className="mt-1 text-xl font-semibold">{tileCount[value].toLocaleString()}</p></Link>)}
       </section>
+      {tierApplies && <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-ink-muted">Token coverage:</span>
+          {TIER_FILTERS.map((value) => <Link key={value} href={tierHref(value)} aria-current={tier === value ? "true" : undefined} className={`rounded-full border px-3 py-1 text-xs ${tier === value ? "border-accent bg-accent text-accent-ink" : "border-border bg-background text-ink-muted hover:text-ink"}`}>{TIER_LABEL[value]}{state === "with-suggestions" ? ` (${tierCount[value].toLocaleString()})` : ""}</Link>)}
+        </div>
+        <p className="text-xs text-ink-muted">
+          {tier === "low"
+            ? "Groups whose top candidate accounts for under 75% of the source name's tokens. Sampling found none of these correct: they are mostly wines BBR does not stock, with the search returning its nearest miss. Expect to record most as no suitable match."
+            : "Hiding the groups whose top candidate covers under 75% of the source name's tokens. Coverage is a triage aid, not a confidence score — the top tier sampled roughly one error in eight, so confirm by name."}
+          {conflictCount > 0 && ` ${conflictCount.toLocaleString()} unresolved group${conflictCount === 1 ? " carries" : "s carry"} a second-wine mismatch and are flagged in the list.`}
+        </p>
+      </div>}
       {state === "needs-review" && <p className="text-xs text-ink-muted">Showing the whole unresolved backlog. The tiles above split it into confirmable candidates, groups needing a manual search, and failed runs.</p>}
 
       <section className="rounded-lg border border-border bg-background">
@@ -488,6 +573,7 @@ export default async function MatchesPage({
           <input type="hidden" name="source" value={sourceFilter} />
           <input type="hidden" name="state" value={state} />
           {sort !== "queue" && <input type="hidden" name="sort" value={sort} />}
+          {tierApplies && tier !== DEFAULT_TIER && <input type="hidden" name="tier" value={tier} />}
           <input type="search" name="q" defaultValue={search} placeholder="Search source wine" className="min-w-64 flex-1 rounded border border-border px-3 py-2 text-sm" />
           <button className="rounded border border-accent px-3 py-2 text-sm text-accent">Search</button>
           {search && <Link href={stateHref(state)} className="rounded border border-border px-3 py-2 text-sm">Clear</Link>}
@@ -495,6 +581,7 @@ export default async function MatchesPage({
             <span>Sort:</span>
             <Link href={sortHref("queue")} aria-current={sort === "queue" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "queue" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Queue order</Link>
             <Link href={sortHref("match")} aria-current={sort === "match" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "match" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Best name match</Link>
+            <Link href={sortHref("coverage")} aria-current={sort === "coverage" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "coverage" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Token coverage</Link>
           </span>}
         </form>
         {sort === "match" && sourceFilter === "all" && <p className="border-b border-border px-4 py-2 text-xs text-ink-muted">Ranked by best name-match score within each source; the two sources score on different scales, so cross-source order is approximate.</p>}
@@ -509,6 +596,7 @@ export default async function MatchesPage({
             source: sourceFilter,
             state,
             ...(sort !== "queue" ? { sort } : {}),
+            ...(tierApplies && tier !== DEFAULT_TIER ? { tier } : {}),
             ...(search ? { q: search } : {}),
           }}
         />

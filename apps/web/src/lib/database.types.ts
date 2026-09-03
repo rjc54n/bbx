@@ -1545,6 +1545,7 @@ export type Database = {
       }
       cellartracker_match_review_view: {
         Row: {
+          coverage_tier: string | null
           is_biddable: boolean | null
           last_error_at: string | null
           last_run_status: string | null
@@ -1552,6 +1553,7 @@ export type Database = {
           match_group_key: string | null
           match_method: string | null
           parent_sku: string | null
+          second_wine_conflict: boolean | null
           source_producer: string | null
           source_region: string | null
           source_row_count: number | null
@@ -1560,6 +1562,7 @@ export type Database = {
           suggestion_count: number | null
           suggestions_observed_at: string | null
           suppressed_row_count: number | null
+          token_coverage: number | null
           top_match_score: number | null
           unresolved_row_count: number | null
         }
@@ -2012,6 +2015,7 @@ export type Database = {
       }
       release_offer_match_review_view: {
         Row: {
+          coverage_tier: string | null
           earliest_offer_date: string | null
           is_biddable: boolean | null
           last_error_at: string | null
@@ -2021,12 +2025,14 @@ export type Database = {
           match_group_key: string | null
           match_method: string | null
           parent_sku: string | null
+          second_wine_conflict: boolean | null
           source_row_count: number | null
           source_vintage: number | null
           source_wine: string | null
           suggestion_count: number | null
           suggestions_observed_at: string | null
           suppressed_row_count: number | null
+          token_coverage: number | null
           top_match_score: number | null
           unresolved_row_count: number | null
         }
@@ -2309,6 +2315,7 @@ export type Database = {
       }
       wine_match_review_view: {
         Row: {
+          coverage_tier: string | null
           is_bbx_eligible: boolean | null
           last_error_at: string | null
           last_run_status: string | null
@@ -2316,6 +2323,7 @@ export type Database = {
           match_group_key: string | null
           match_method: string | null
           parent_sku: string | null
+          second_wine_conflict: boolean | null
           source: string | null
           source_row_count: number | null
           source_vintage: number | null
@@ -2323,6 +2331,7 @@ export type Database = {
           suggestion_count: number | null
           suggestions_observed_at: string | null
           suppressed_row_count: number | null
+          token_coverage: number | null
           top_match_score: number | null
           unresolved_row_count: number | null
           wine_ref: string | null
@@ -2656,10 +2665,13 @@ export type Database = {
           all_groups: number
           errors: number
           linked: number
+          low_coverage: number
           needs_review: number
           no_suggestions: number
           no_suitable_match: number
+          second_wine_conflicts: number
           with_suggestions: number
+          workable: number
         }[]
       }
     }

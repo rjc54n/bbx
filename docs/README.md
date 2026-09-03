@@ -51,6 +51,12 @@ against the current migrations/code for anything load-bearing.
 - [MATCHING-SPECS-SECOND-REVIEW.md](MATCHING-SPECS-SECOND-REVIEW.md) —
   second review, of the split docs (31 Aug 2026): Part A needs a contract
   cleanup, Part B needs its two decisions closed.
+- [MATCHING-QUEUE-TRIAGE-SPEC.md](MATCHING-QUEUE-TRIAGE-SPEC.md) —
+  cutting the `/matches` queue down to the work that is real
+  (3 Sep 2026): coverage tiering and a symmetric second-wine conflict
+  flag. Measured against live data; it reverses two decisions the original
+  proposal made. Both slices implemented and applied to production on
+  3 Sep 2026 — but confirm against the ledger, not against this line.
 
 ## Roadmap
 

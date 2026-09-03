@@ -62,6 +62,11 @@ export type MatchGroupView = {
   parent_sku: string | null;
   match_method: string | null;
   is_bbx_eligible: boolean;
+  /** The source name and the rank-1 candidate disagree on a second-wine marker. */
+  second_wine_conflict: boolean;
+  /** 'full' | 'full_with_typos' | 'partial' | 'low' | 'none' (triage spec §4.2). */
+  coverage_tier: string;
+  token_coverage: number | null;
   candidates: MatchCandidate[];
   /** Default text for the "search the wider catalogue" box. */
   catalogueSearchQuery: string;
@@ -69,6 +74,21 @@ export type MatchGroupView = {
   favouriteTarget: FavouriteTarget | null;
   isFavourite: boolean;
 };
+
+const TIER_LABEL: Record<string, string> = {
+  full: "Full token cover",
+  full_with_typos: "Full token cover, with typos",
+  partial: "Partial token cover",
+  low: "Low token cover",
+};
+
+function coverageNote(group: MatchGroupView): string | null {
+  const label = TIER_LABEL[group.coverage_tier];
+  if (!label) return null;
+  return typeof group.token_coverage === "number"
+    ? `${label} · ${Math.round(group.token_coverage * 100)}%`
+    : label;
+}
 
 function displayMethod(value: string | null) {
   const labels: Record<string, string> = {
@@ -151,8 +171,16 @@ export function MatchGroupList({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1"><h2 className="font-semibold">{group.source_wine}</h2><p className="mt-1 text-xs text-ink-muted">{group.subtitle}</p></div>
           {group.favouriteTarget && <FavouriteStar target={group.favouriteTarget} favourite={group.isFavourite} label={group.source_wine} />}
-          <div className="text-right text-xs"><p>{group.unresolved_row_count} unresolved · {group.linked_row_count} linked · {group.suppressed_row_count} suppressed</p>{group.parent_sku && <p className="mt-1 font-medium">Parent {group.parent_sku} · {displayMethod(group.match_method)}</p>}{group.parent_sku && <p className="text-ink-muted">{group.is_bbx_eligible ? "Currently in the BBX-eligible catalogue" : "Found in BBR catalogue, not currently BBX-eligible"}</p>}</div>
+          <div className="text-right text-xs"><p>{group.unresolved_row_count} unresolved · {group.linked_row_count} linked · {group.suppressed_row_count} suppressed</p>{group.parent_sku && <p className="mt-1 font-medium">Parent {group.parent_sku} · {displayMethod(group.match_method)}</p>}{group.parent_sku && <p className="text-ink-muted">{group.is_bbx_eligible ? "Currently in the BBX-eligible catalogue" : "Found in BBR catalogue, not currently BBX-eligible"}</p>}{group.unresolved_row_count > 0 && coverageNote(group) && <p className="mt-1 text-ink-muted">{coverageNote(group)}</p>}</div>
         </div>
+        {/* The one hazard that survives into the high-coverage tiers: the source
+            and the top candidate disagree about a second wine. Confirming links
+            a second wine to a grand vin's Parent ID or the reverse, and
+            release_price_anchor_view anchors on the earliest offer, so a single
+            wrong confirm poisons that wine's anchor from then on. */}
+        {group.second_wine_conflict && group.unresolved_row_count > 0 && <p role="alert" className="mt-3 rounded border border-accent bg-accent-soft/50 p-3 text-xs">
+          <strong className="font-medium">Second-wine mismatch.</strong> The source name and the top candidate disagree on a second-wine marker — Les Forts, Pavillon, Carruades, Clos du Marquis and the like. One of them is the grand vin and the other is not. Check the candidate by name before confirming; a wrong link here corrupts that wine&rsquo;s release-price anchor. If nothing in the list is the right wine, record it as no suitable match.
+        </p>}
         {group.panel.kind === "release_offer"
           ? <ReleaseOfferPanelView panel={group.panel} />
           : <CellarTrackerPanelView panel={group.panel} />}
