@@ -9,11 +9,17 @@ Capture **release prices** from BBR offer emails, incrementally, into the
 existing `source_type = 'gmail'` ingestion path.
 
 Release prices are the point. Back-vintage parcels, mature-drinking offers and
-library releases are **not the target**, but the owner is neutral about whether
-they slip through. So they are **labelled, not excluded** (§4.1): the skill
-records what kind of offer it thinks each row came from, and the release-price
-series filters on that downstream. Losing a real release to an over-eager skip
-is the expensive error; carrying a labelled back-vintage row is the cheap one.
+library releases are **not the target** — but they are **labelled, not
+excluded**, and the reason is structural rather than a matter of taste
+(§4.3): `release_price_anchor_view` already anchors on the *earliest* offer per
+`(parent_sku, format_code)`, so a late back-vintage offer for a wine that
+already has a price is ignored on its own, and one for a wine that has none
+becomes an anchor that beats having no anchor at all.
+
+So the skill captures everything that passes the sender and price gates, and
+records what kind of offer it thinks each row came from. Losing a real release
+to an over-eager skip is the expensive error; carrying a labelled back-vintage
+row costs nothing the anchor rule does not already handle.
 
 Also out of scope: spirits (whisky, Cognac, Armagnac and so on — not
 collected), BBX spotlight mail, and anything transactional.
@@ -169,6 +175,47 @@ exact lookup rather than the fuzzy name match used above, and it can relabel
 rows already in the corpus. So this is post-match enrichment of `offer_kind`,
 not a gate: the row is captured either way, and the label improves once the
 match lands.
+
+### 4.3 The anchor rule already does most of this
+
+`release_price_anchor_view` (20260726162524) selects, per `(parent_sku,
+format_code)`:
+
+```sql
+SELECT DISTINCT ON (parent_sku, format_code) …
+ORDER BY parent_sku, format_code, offer_date, release_offer_price_id
+```
+
+**Earliest offer date wins.** That is already the owner's stated rule — the
+first price seen is the anchor; a later offer for a wine that already has one
+is of no interest; and where the only price available is a back-vintage parcel,
+that price is better than no anchor at all.
+
+This settles the classification question far more cleanly than keyword tiers
+can. Capture everything that passes the sender and price gates, and the anchor
+view sorts it out:
+
+- A back-vintage offer for a wine that already has an earlier offer is
+  **automatically ignored** by the anchor and simply sits as extra evidence.
+- A back-vintage offer for a wine with no prior **automatically becomes** the
+  anchor, which is the outcome the owner wants.
+- Displacement is not a risk: a back-vintage offer for a given wine is by
+  definition later than that wine's release, so it can never outrank a release
+  price that was itself captured.
+
+So `offer_kind` is **not a filter**. It is provenance on the anchor — the
+caveat that says "this anchor came from an ex-domaine parcel, not a release" —
+and the existing `release_price_anchor_overrides` and `owner_release_anchors`
+machinery is how the owner acts on that caveat. The tiers in §4 stay useful for
+labelling and for reporting, and stop being load-bearing.
+
+**One consequence worth carrying into extraction.** Under earliest-wins, a
+first-sighting wine's price becomes the anchor with nothing to check it
+against. That makes silent unit errors — the £1,020 per bottle versus per
+3-bottle case contradiction in §5 of the test-run report — considerably more
+dangerous than a misclassification. The prior-offer check should therefore run
+as a **price** sanity check as well as a provenance one, and a first-sighting
+row with no corroboration is the case that most deserves a human look.
 
 ## 5. Body anatomy and extraction hazards
 
