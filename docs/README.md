@@ -73,8 +73,10 @@ against the current migrations/code for anything load-bearing.
   cutting the `/matches` queue down to the work that is real
   (3 Sep 2026): coverage tiering and a symmetric second-wine conflict
   flag. Measured against live data; it reverses two decisions the original
-  proposal made. Both slices implemented and applied to production on
-  3 Sep 2026 — but confirm against the ledger, not against this line.
+  proposal made. Three slices: the first two applied to production on
+  3 Sep 2026, the third corrects the coverage metric itself against a
+  1,248-pair ground-truth evaluation. Confirm state against the ledger,
+  not against this line.
 
 ## Roadmap
 

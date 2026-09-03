@@ -269,9 +269,11 @@ confirmed live before Slice 2 is written.
 
 ## 7. Follow-up, not in scope
 
-- **Token normalisation** (`ch` → `chateau`, stopwords). Would let the coverage
-  metric be corrected honestly and would raise the top tier's precision. Needs
-  its own before/after sample against linked rows.
+- ~~**Token normalisation**~~ — **done, Slice 3**
+  (`20260903190000_match_token_normalisation.sql`). The before/after sample
+  against linked rows is §8. Note the outcome contradicted the assumption
+  recorded here: normalisation barely moved *recall*, and earned its place on
+  *precision* instead.
 - **The vintage-prefix invariant.** BBR prefixes every parent SKU with the
   wine's vintage; zero disagreements across 1,138 linked rows. A cheap
   assertion on any future auto-link path.
@@ -279,7 +281,66 @@ confirmed live before Slice 2 is written.
   queue, not an exhaustive one. It will need extending as new estates appear;
   worth revisiting if it ever grows past a few dozen entries.
 
-## 8. Open questions for the owner
+## 8. Slice 3 — the coverage metric, corrected
+
+§3.1 kept a metric that was wrong twice over on the grounds that the two
+defects cancelled. Slice 3 removes both and drops the Algolia dependency:
+
+```
+coverage = |core(source_wine) ∩ core(candidate_name)| / |core(source_wine)|
+```
+
+with both sides normalised identically — accents folded, stopwords and
+vintage-shaped tokens dropped, and `ch`/`dom`/`st` expanded. `ch` alone occurs
+551 times in the corpus. Producer words (`chateau`, `domaine`) are kept, per
+the reasoning already in `coreKey.ts`: dropping them collapses "Chateau
+Margaux" to the Margaux appellation.
+
+### The evaluation §7 asked for
+
+Ground truth is the 1,248 (source, candidate) pairs inside groups the owner has
+already linked by hand: the linked `parent_sku` is correct, the group's other
+candidates are wrong. Same name source on both sides, threshold 0.75.
+
+| | correct pairs kept (want high) | wrong pairs kept (want low) |
+| --- | --- | --- |
+| Old metric | 792 / 817 — 96.9% | 169 / 431 — 39.2% |
+| **New metric** | **797 / 817 — 97.6%** | **150 / 431 — 34.8%** |
+
+Better on both axes, so it is not a precision/recall trade. **But the size of
+the win is not where §7 predicted.** Recall barely moved — 20 false negatives
+against 21 — so the claim that normalisation would stop burying correct matches
+was essentially wrong. What it actually does is reject wrong candidates, 11%
+more of them in relative terms. Worth having, and worth recording that the
+stated rationale did not survive measurement.
+
+On the live queue this moves 1,513 groups from 708 workable / 805 low to
+**597 workable / 916 low** — about 111 fewer to review, retaining slightly more
+of the correct matches. No re-matching: both inputs are already stored.
+
+### What Slice 3 does not touch
+
+- `private.release_wine_match_key`, which feeds `source_match_key` and the
+  **generated** `match_group_key`. Renormalising identity would regenerate
+  every group key and orphan the suggestion rows under them.
+- The second-wine marker test, which stays on `source_match_key`. Markers like
+  `les forts` and `la croix` contain stopwords that core tokens drop by design.
+- `coreKey.ts`. Its `wineCoreTokens` already handles vintages and stopwords but
+  has no abbreviation expansion. Adding it would improve future *ranking*, but
+  only takes effect on a fresh Algolia run — a separate decision, in §9.
+
+### A latent defect found and deliberately left alone
+
+`private.release_wine_match_key` folds accents with a `translate` whose
+argument pair is 29 characters against 30. Postgres silently ignores the
+surplus rather than erroring, so from `ù` onward the map is off by one:
+`release_wine_match_key('… ù ý …')` returns `e u`. `ø` is not mapped at all.
+Impact is small — few wine names carry those characters — and it is **not
+fixed**, because that function feeds the generated `match_group_key`. Slice 3's
+new function uses a corrected 30/30 map; the two normalisers therefore differ
+on those characters by design.
+
+## 9. Open questions for the owner
 
 1. **Default filter.** §4.2 defaults the queue to the top three tiers (761
    groups) and hides `low` (817). Is hiding by default right, or should `low`
@@ -290,3 +351,8 @@ confirmed live before Slice 2 is written.
 3. **The 19 flagged groups.** Slice 1 ships a per-group warning and no bulk
    action, on the grounds that 19 is a morning's work and a bulk suppress is a
    mutation you cannot eyeball. Say if you would rather have the bulk action.
+4. **Abbreviation expansion in the matcher itself** (`coreKey.ts`). Slice 3
+   normalises the queue's *presentation*; the same expansion in
+   `wineCoreTokens` would improve which candidate is ranked first. It changes
+   `match_score` and only takes effect on a fresh Algolia run over the queue,
+   so it is a cost-and-timing decision rather than a technical one.
