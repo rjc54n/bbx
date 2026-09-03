@@ -243,6 +243,45 @@ legal boilerplate. Four hazards, all observed:
    into the following wine's name and note. Each note must be bounded by the
    next wine's start.
 
+## 5.1 The producer can be in the subject too
+
+The vintage is not the only field that lives in the subject line. Some offers
+are single-producer: the subject names the producer once, and the body lists
+bare appellations underneath.
+
+The specimen is the offer of 29 March 2012, subject **"2010 Olivier Bernstein -
+World class Burgundy"**. All thirteen rows it produced are appellations with no
+producer at all:
+
+```
+2010 Chambolle-Musigny 1er cru      £396 per six bottles in bond
+2010 Bonnes Mares                   £930 per six bottles in bond
+2010 Chambertin, Clos de Bèze     £1,440 per six bottles in bond
+```
+
+`2010 Chambolle-Musigny 1er cru` cannot resolve — dozens of producers make one.
+The same shape appears in the Domaine Guyon offer of 7 August 2015.
+
+**Extent, measured conservatively:** 29 rows across 5 offers, 2011–2018, of
+which only 3 ever linked. That is a floor, not a total: it counts only
+comma-free Burgundy names, so it misses shapes like `2013 Savigny-lès-Beaune,
+Les Peuillets 1er Cru`, which is equally producerless. Two looser detectors
+were tried first and both over-counted badly — producers such as Benjamin
+Leroux, David Moreau and Jean-Philippe Fichet carry no "Domaine" marker, so
+name-shape heuristics mistake them for bare appellations. **A reliable count
+needs a per-row judgement, which is the skill's job rather than SQL's.**
+
+**Rule for the skill.** Where the subject names a producer and a body line does
+not, append the producer to the wine name, exactly as the vintage is prefixed:
+`2010 Chambolle-Musigny 1er cru, Olivier Bernstein`. Detect the single-producer
+shape from the subject plus the absence of any producer segment on the line,
+and record what was appended in `JSON_Data` so the inference is auditable.
+
+**This is fixable retrospectively**, contrary to first impressions: it is the
+same method that fixed the missing vintages. Five offers means five Gmail
+subject lookups to repair the 29 measured rows, and the producer is stated once
+per email rather than needing per-line inference.
+
 ## 6. Extraction contract
 
 Emit the row shape the existing parser already accepts, so that neither the
