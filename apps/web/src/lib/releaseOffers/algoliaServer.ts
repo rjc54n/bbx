@@ -63,8 +63,16 @@ function searchParams(group: HistoricOfferMatchGroup, hitsPerPage: number, page 
   }).toString();
 }
 
-async function executeQueries(requests: SearchRequest[]): Promise<AlgoliaResult[]> {
-  if (requests.length === 0) return [];
+/**
+ * Algolia rejects a multi-query request carrying more than 50 queries outright,
+ * with HTTP 400 "Too many queries in multi query request" — the whole request,
+ * not the queries past the cap. The exact-validation phase below fans out to one
+ * query per result page per group, so a batch of broad queries passes 50 without
+ * anything being wrong with the queries themselves.
+ */
+const MAX_QUERIES_PER_REQUEST = 50;
+
+async function postQueries(requests: SearchRequest[]): Promise<AlgoliaResult[]> {
   const { appId, apiKey } = credentials();
   const response = await fetch(`https://${appId}-dsn.algolia.net/1/indexes/*/queries`, {
     method: "POST",
@@ -83,6 +91,14 @@ async function executeQueries(requests: SearchRequest[]): Promise<AlgoliaResult[
     throw new Error("Algolia returned an incomplete multi-search response.");
   }
   return payload.results;
+}
+
+async function executeQueries(requests: SearchRequest[]): Promise<AlgoliaResult[]> {
+  const results: AlgoliaResult[] = [];
+  for (let start = 0; start < requests.length; start += MAX_QUERIES_PER_REQUEST) {
+    results.push(...await postQueries(requests.slice(start, start + MAX_QUERIES_PER_REQUEST)));
+  }
+  return results;
 }
 
 function request(group: HistoricOfferMatchGroup, hitsPerPage: number, page = 0): SearchRequest {
