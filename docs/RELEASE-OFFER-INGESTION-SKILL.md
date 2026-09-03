@@ -9,10 +9,11 @@ Capture **release prices** from BBR offer emails, incrementally, into the
 existing `source_type = 'gmail'` ingestion path.
 
 Release prices are the point. Back-vintage parcels, mature-drinking offers and
-library releases are explicitly **out of scope** — the owner would rather miss
-an offer than carry one that muddies the release-price series. That makes this
-a **precision-over-recall** design: when the skill cannot tell, it skips and
-says so, rather than guessing.
+library releases are **not the target**, but the owner is neutral about whether
+they slip through. So they are **labelled, not excluded** (§4.1): the skill
+records what kind of offer it thinks each row came from, and the release-price
+series filters on that downstream. Losing a real release to an over-eager skip
+is the expensive error; carrying a labelled back-vintage row is the cheap one.
 
 Also out of scope: spirits (whisky, Cognac, Armagnac and so on — not
 collected), BBX spotlight mail, and anything transactional.
@@ -40,6 +41,16 @@ collected), BBX spotlight mail, and anything transactional.
 
 Role addresses are rejected by shape, with `finewine@` allowlisted as the one
 role address that carries genuine offers.
+
+The shape rule matters more than the names: the account-manager roster rotates.
+`christopher.hanssen@bbr.com` and Mike Jordan covered Chris Parker's paternity
+leave in December 2025, announced only in the body — "Mike Jordan and Chris
+Hanssen will be sending offers for Christopher Parker". A hardcoded allowlist
+would have silently dropped a month of offers.
+
+A Gmail filter tagged some of this mail `Wine/Chris` between October 2025 and
+March 2026, but the tag is absent from the August–September 2026 offers, so
+labels are not a dependable signal.
 
 ### 3.2 Content gate
 
@@ -69,30 +80,60 @@ five years after the vintage, Barolo four, Rioja Gran Reserva and Vega Sicilia
 Primeur lands at a gap of one or two, inside the release window rather than
 before it.
 
-**Release language is the strong signal.** Classify on the subject and the
-opening paragraph:
+**"Release" on its own is not the signal either.** BBR calls an ex-château
+parcel of a 1991 Hermitage a release too:
 
-- Release: "new release", "latest release", "the 2024 vintage release", "just
-  released", "En Primeur", "first release", "new vintage".
-- Back vintage: "mature", "to enjoy now", "back vintage", "library release",
-  "small parcel" of an older wine, "drinking now".
+- `1991 Paul Jaboulet Aîné: Hermitage La Chapelle | Ex-Domaine Release`
+- `Ex-Château 2016 Pichon Lalande` — body: "an exciting ex-Château release"
+- `Large Format Lynch | Ex-Chateau & sharpest prices in Europe` — body: "our
+  Library Release"
+- `Don't miss! | Back vintage release of Tom Cullity` — both phrases at once
 
-Real subjects from the corpus, either side of the line:
+So the tells need **precedence, not presence**. Two tiers, with tier 1 winning
+whenever both appear:
+
+**Tier 1 — back vintage (overrides everything):** "back vintage", "ex-château",
+"ex-chateau", "ex-domaine", "ex cellars", "library release", "mature vintage",
+"to enjoy now", "drinking now", "perfectly matured", "assortment case",
+"trilogy case", and "we have secured a parcel of" attached to an older vintage.
+
+**Tier 2 — release:** "new release", "latest release", "the 2024 vintage
+release", "just released", "En Primeur", "first release", "the wait is over".
+
+Corpus examples either side of the line:
 
 - Release — `New Release | 2025 Olivier Leflaive - The Whites`,
   `2023 Ch. de Beaucastel – Latest Releases`, `2015 Rhone En Primeur`,
-  `New 2023 Releases from Mount Mary`.
+  `New Release | 2023 Tignanello, Antinori`, `South Africa's First Growth -
+  2022 Paul Sauer`.
 - Back vintage — `Mature Claret to enjoy now | 2004 Cos d'Estournel`,
-  `1988-1990 Champagne Lanson`, `Selection of Well Priced Back Vintage
-  Bordeaux`, `2010 Ch. Canon | Small parcel direct from Bordeaux`.
+  `Castell di Monsanto Il Poggio - Back Vintage Parcel`, `Viña Seña – Mature
+  Vintage Offer`, `Selection of Well Priced Back Vintage Bordeaux`,
+  `Ch. Mouton Rothschild; Magnum Trilogy Case (2009, 2010 & 2016)`.
 
 Both kinds arrive from the same senders, so this cannot be decided by sender.
-Vintage age is used only as a **corroborating** signal: a wine more than about
-five years older than the offer with no release language is skipped; a large
-gap *with* release language (Vega Sicilia, Brunello) is kept.
+Vintage age corroborates only: a large gap *with* release language (Vega
+Sicilia, Brunello) is still a release.
 
-Anything the skill cannot classify confidently is **skipped and reported**, not
-guessed at.
+### 4.1 Classify, do not gate
+
+The owner is **neutral about back-vintage offers leaking through** — they are
+simply not the target. That makes a hard skip the wrong instrument: a
+misclassified skip silently loses a real release, while a misclassified capture
+costs one filterable row.
+
+So the skill **records** its judgement rather than acting on it. Every extracted
+row carries, inside `JSON_Data`:
+
+- `offer_kind` — `release` | `back_vintage` | `unclear`
+- `offer_kind_evidence` — the phrase that decided it
+
+Nothing is dropped for being back vintage. The release-price series filters on
+`offer_kind = 'release'` downstream, misclassifications are correctable without
+re-reading the mailbox, and the growing labelled set is what tunes the rules.
+
+This costs no DDL: `JSON_Data` is preserved verbatim in `raw_row`. Promote
+`offer_kind` to a column only once the labels are trusted enough to query.
 
 ## 5. Body anatomy and extraction hazards
 
@@ -177,9 +218,14 @@ for.
 
 ## 10. Open risks
 
-- **Release classification accuracy** is the main one. The supervised runs
-  should record, per skipped email, the reason for skipping, so precision and
-  recall can be judged before the schedule is trusted.
+- **Release classification accuracy** is the main one, though §4.1 defuses it:
+  labels are correctable, skips are not. The supervised runs should surface
+  every `offer_kind` decision with its evidence phrase, so the tiers can be
+  tuned against real mail rather than guessed at.
+- **"Small parcel" is genuinely ambiguous** and deliberately left out of both
+  tiers. It attaches to back vintages (`Small Parcel | 2018 Cheval des Andes`,
+  offered 2026) and to recent wines alike, so it should decide nothing on its
+  own — `unclear` is the honest answer.
 - **Multi-wine list emails** (`Selection of Well Priced Back Vintage Burgundy`
   at 261 KB) are both the largest and the most error-prone. Most are back
   vintage and therefore out of scope, which conveniently removes most of the
