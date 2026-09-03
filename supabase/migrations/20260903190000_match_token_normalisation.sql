@@ -23,11 +23,11 @@
 --
 --   metric      correct pairs kept (want high)   wrong pairs kept (want low)
 --   old            792 / 817   96.9%                169 / 431   39.2%
---   new            797 / 817   97.6%                150 / 431   34.8%
+--   new            801 / 817   98.0%                150 / 431   34.8%
 --
 -- Better on both axes, so this is not a precision/recall trade. On the live
 -- unresolved queue it moves 1,513 groups from 708 workable / 805 low to
--- 597 workable / 916 low: ~111 fewer groups to review, while retaining
+-- 600 workable / 913 low: ~108 fewer groups to review, while retaining
 -- slightly MORE of the correct matches.
 --
 -- No re-matching. Both inputs (source_wine, suggestion name) are already
@@ -45,66 +45,60 @@
 --     vintages and stopwords but has no abbreviation expansion. Adding it there
 --     would improve future candidate ranking, but only takes effect on a fresh
 --     Algolia run, so it is a separate decision.
+--   * private.wine_core_tokens, which has existed since 20260729160000 and
+--     feeds private.ct_wine_core_key and private.bbr_wine_core_key — the
+--     CellarTracker identity keys. Adding expansion there would re-key that
+--     corpus. This slice WRAPS it instead.
 
--- 1. Core identity tokens ----------------------------------------------------
+-- 1. Coverage tokens ---------------------------------------------------------
 --
--- Mirrors wineCoreTokens in apps/web/src/lib/wine/coreKey.ts: fold accents,
--- lowercase, split on non-alphanumerics, drop articles/conjunctions and
--- vintage-shaped tokens, dedupe. Producer words ('chateau', 'domaine') are
--- deliberately KEPT — dropping them collapses "Chateau Margaux" to the Margaux
--- appellation, which matches every Margaux property.
+-- private.wine_core_tokens already folds accents, lowercases, splits on
+-- non-alphanumerics, drops articles/conjunctions and vintage-shaped tokens, and
+-- dedupes — everything this needs except abbreviation expansion. It is also
+-- load-bearing for CellarTracker identity, so it is wrapped rather than
+-- altered, and this function adds the single missing step.
 --
--- Two differences from the TS original, both deliberate:
+-- Producer words ('chateau', 'domaine') stay: dropping them collapses "Chateau
+-- Margaux" to the Margaux appellation, which matches every Margaux property.
+-- Numeric tokens stay too — "Bin 95" and "Bin 707" are identity, not noise.
+-- `ch` alone appears 551 times across the corpus, which is the whole reason
+-- this slice exists.
 --
---   * Abbreviation expansion (ch/dom/st), which is the whole point of the
---     slice. `ch` alone appears 551 times across the corpus.
---   * A corrected accent map. The map in private.release_wine_match_key pairs
---     29 source characters against 30 replacements, so from 'ù' onward it is
---     off by one and folds 'ù'->'e' and 'ý'->'u'. Postgres silently ignores the
---     surplus replacement rather than erroring. That defect is left alone where
---     it is — it feeds the generated match_group_key — but it is not carried
---     forward into a new function.
---
--- Numeric tokens are kept: "Bin 95" and "Bin 707" are identity, not noise.
+-- SECURITY DEFINER because wine_core_tokens is REVOKEd from authenticated and
+-- the review views run as the invoker; same pattern as second_wine_conflict in
+-- 20260903170000. It reads no tables and takes no identifiers — pure text.
 
-CREATE FUNCTION private.wine_core_tokens(p_text TEXT)
+CREATE FUNCTION private.wine_coverage_tokens(p_text TEXT)
 RETURNS TEXT[]
 LANGUAGE sql
 IMMUTABLE
 PARALLEL SAFE
+SECURITY DEFINER
 SET search_path = ''
 AS $$
-    SELECT coalesce(array_agg(DISTINCT token), ARRAY[]::TEXT[])
-    FROM (
-        SELECT CASE word
-                   WHEN 'ch'        THEN 'chateau'
-                   WHEN 'chateaux'  THEN 'chateau'
-                   WHEN 'dom'       THEN 'domaine'
-                   WHEN 'domaines'  THEN 'domaine'
-                   WHEN 'st'        THEN 'saint'
-                   WHEN 'ste'       THEN 'saint'
-                   ELSE word
-               END AS token
-        FROM unnest(string_to_array(
-            regexp_replace(
-                lower(translate(coalesce(p_text, ''),
-                    'àáâãäåæçèéêëìíîïñòóôõöøœùúûüýÿ',
-                    'aaaaaaaceeeeiiiinooooooouuuuyy')),
-                '[^a-z0-9]+', ' ', 'g'),
-            ' ')) AS word
-        WHERE word <> ''
-          AND word !~ '^(18|19|20)[0-9]{2}$'
-          AND word <> ALL (ARRAY[
-              'de','du','des','da','di','do','dos','del','della','delle',
-              'la','le','les','el','il','al','lo','the','a','an','and',
-              'et','e','y','und','von','van','der','den','ter'])
-    ) normalised;
+    SELECT coalesce(
+        array_agg(DISTINCT CASE token
+            WHEN 'ch'       THEN 'chateau'
+            WHEN 'chateaux' THEN 'chateau'
+            WHEN 'dom'      THEN 'domaine'
+            WHEN 'domaines' THEN 'domaine'
+            WHEN 'st'       THEN 'saint'
+            WHEN 'ste'      THEN 'saint'
+            ELSE token
+        END),
+        ARRAY[]::TEXT[])
+    FROM unnest(private.wine_core_tokens(p_text)) AS token;
 $$;
 
-REVOKE ALL ON FUNCTION private.wine_core_tokens(TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.wine_core_tokens(TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION private.wine_coverage_tokens(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.wine_coverage_tokens(TEXT) TO authenticated;
 
 -- 2. Coverage ----------------------------------------------------------------
+--
+-- Takes token ARRAYS, not text, so the view tokenises each side exactly once
+-- per row. Taking text here would re-tokenise inside the function and roughly
+-- double the regex work over a full scan of the view, which matters on an
+-- instance with no I/O headroom.
 --
 -- Asymmetric on purpose: the denominator is the SOURCE's token count, so the
 -- question is "how much of what the offer says did we account for", not "do the
@@ -112,7 +106,10 @@ GRANT EXECUTE ON FUNCTION private.wine_core_tokens(TEXT) TO authenticated;
 -- penalised, which matters because BBR appends region and country at varying
 -- depth. Coverage can therefore reach 1.0 without the names being equal.
 
-CREATE FUNCTION private.wine_token_coverage(p_source TEXT, p_candidate TEXT)
+CREATE FUNCTION private.wine_token_coverage(
+    p_source_tokens TEXT[],
+    p_candidate_tokens TEXT[]
+)
 RETURNS DOUBLE PRECISION
 LANGUAGE sql
 IMMUTABLE
@@ -120,19 +117,18 @@ PARALLEL SAFE
 SET search_path = ''
 AS $$
     SELECT CASE
-        WHEN p_source IS NULL OR p_candidate IS NULL THEN NULL
-        WHEN cardinality(source_tokens.tokens) = 0 THEN NULL
+        WHEN p_source_tokens IS NULL OR p_candidate_tokens IS NULL THEN NULL
+        WHEN cardinality(p_source_tokens) = 0 THEN NULL
         ELSE (
-            SELECT count(*) FROM unnest(source_tokens.tokens) AS token
-            WHERE token = ANY (candidate_tokens.tokens)
-        )::DOUBLE PRECISION / cardinality(source_tokens.tokens)
-    END
-    FROM (SELECT private.wine_core_tokens(p_source) AS tokens) AS source_tokens,
-         (SELECT private.wine_core_tokens(p_candidate) AS tokens) AS candidate_tokens;
+            SELECT count(*)::DOUBLE PRECISION
+            FROM unnest(p_source_tokens) AS token
+            WHERE token = ANY (p_candidate_tokens)
+        ) / cardinality(p_source_tokens)
+    END;
 $$;
 
-REVOKE ALL ON FUNCTION private.wine_token_coverage(TEXT, TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.wine_token_coverage(TEXT, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION private.wine_token_coverage(TEXT[], TEXT[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.wine_token_coverage(TEXT[], TEXT[]) TO authenticated;
 
 -- 3. release_offer_match_review_view: coverage from names, not matched_words --
 --
@@ -198,7 +194,9 @@ WITH grouped AS (
         grouped.*,
         top_candidate.name AS top_candidate_name,
         top_candidate.typo_count,
-        private.wine_token_coverage(grouped.source_wine, top_candidate.name) AS token_coverage
+        private.wine_token_coverage(
+            private.wine_coverage_tokens(grouped.source_wine),
+            private.wine_coverage_tokens(top_candidate.name)) AS token_coverage
     FROM grouped
     LEFT JOIN top_candidate USING (match_group_key)
 )
@@ -300,7 +298,9 @@ WITH latest AS (
         grouped.*,
         top_candidate.name AS top_candidate_name,
         top_candidate.typo_count,
-        private.wine_token_coverage(grouped.source_wine, top_candidate.name) AS token_coverage
+        private.wine_token_coverage(
+            private.wine_coverage_tokens(grouped.source_wine),
+            private.wine_coverage_tokens(top_candidate.name)) AS token_coverage
     FROM grouped
     LEFT JOIN top_candidate USING (match_group_key)
 )

@@ -305,18 +305,46 @@ candidates are wrong. Same name source on both sides, threshold 0.75.
 | | correct pairs kept (want high) | wrong pairs kept (want low) |
 | --- | --- | --- |
 | Old metric | 792 / 817 — 96.9% | 169 / 431 — 39.2% |
-| **New metric** | **797 / 817 — 97.6%** | **150 / 431 — 34.8%** |
+| **New metric** | **801 / 817 — 98.0%** | **150 / 431 — 34.8%** |
 
 Better on both axes, so it is not a precision/recall trade. **But the size of
-the win is not where §7 predicted.** Recall barely moved — 20 false negatives
-against 21 — so the claim that normalisation would stop burying correct matches
-was essentially wrong. What it actually does is reject wrong candidates, 11%
-more of them in relative terms. Worth having, and worth recording that the
-stated rationale did not survive measurement.
+the win is not where §7 predicted.** Recall moved by a single percentage point
+— 16 false negatives against 25 — whereas the gain in rejecting wrong
+candidates is 11% in relative terms. The claim that normalisation would mainly
+stop correct matches being buried was largely wrong; it earns its place on
+precision. Worth recording that the stated rationale did not survive
+measurement.
 
 On the live queue this moves 1,513 groups from 708 workable / 805 low to
-**597 workable / 916 low** — about 111 fewer to review, retaining slightly more
+**600 workable / 913 low** — about 108 fewer to review, retaining slightly more
 of the correct matches. No re-matching: both inputs are already stored.
+
+### Slice 3 was reverted on performance
+
+Applied and then reverted the same day (`20260903210000`). The metric is more
+accurate, but it costs too much to compute per page load. Like-for-like
+`EXPLAIN ANALYZE` on the `/matches` page query:
+
+| coverage metric | page query |
+| --- | --- |
+| stored integers (Slice 2) | ~1,589 ms |
+| token overlap (Slice 3) | ~4,318 ms |
+
+The tier `CASE` is used as a filter and Postgres inlines the `scored` CTE, so
+the coverage expression is evaluated four times per row — roughly 15,000
+tokeniser calls per page load. `MATERIALIZED` removes the 4× but tokenising
+stays the floor. A one-point recall gain does not justify tripling the main
+page on an instance with no I/O headroom.
+
+The ~1.6 s baseline is the existing five-level view stack, a separate problem
+that predates this work.
+
+**If it is ever worth revisiting**, the fix is to stop computing tokens per
+page load: store them as `GENERATED` columns on the suggestion and source-row
+tables, or precompute coverage into a materialised view refreshed by the match
+run, as `catalogue_mv` already does. The evaluation above stands; only the
+delivery mechanism was wrong. The owner's call at the time was that this is not
+an important feature, so it is parked rather than scheduled.
 
 ### What Slice 3 does not touch
 
@@ -329,16 +357,28 @@ of the correct matches. No re-matching: both inputs are already stored.
   has no abbreviation expansion. Adding it would improve future *ranking*, but
   only takes effect on a fresh Algolia run — a separate decision, in §9.
 
+### Implementation note: wrap, do not duplicate
+
+`private.wine_core_tokens` has existed since `20260729160000` and already does
+the accent folding, stopword and vintage removal this needs. It is also
+load-bearing: `ct_wine_core_key` and `bbr_wine_core_key` build CellarTracker's
+identity keys from it. So Slice 3 **wraps** it in
+`private.wine_coverage_tokens`, which adds only the abbreviation expansion.
+Altering the shared function would have re-keyed the CellarTracker corpus —
+the same hazard §8 avoids on the release-offer side, reached from the other
+direction. This was caught only when the first push failed with "function
+already exists".
+
 ### A latent defect found and deliberately left alone
 
-`private.release_wine_match_key` folds accents with a `translate` whose
-argument pair is 29 characters against 30. Postgres silently ignores the
-surplus rather than erroring, so from `ù` onward the map is off by one:
-`release_wine_match_key('… ù ý …')` returns `e u`. `ø` is not mapped at all.
-Impact is small — few wine names carry those characters — and it is **not
-fixed**, because that function feeds the generated `match_group_key`. Slice 3's
-new function uses a corrected 30/30 map; the two normalisers therefore differ
-on those characters by design.
+`private.release_wine_match_key` — the *identity* normaliser, not the one above
+— folds accents with a `translate` whose argument pair is 29 characters against
+30. Postgres silently ignores the surplus rather than erroring, so from `ù`
+onward the map is off by one: `release_wine_match_key('… ù ý …')` returns
+`e u`, verified against the live function. `ø` is not mapped at all. Impact is
+small and it is **not fixed**, because that function feeds the generated
+`match_group_key`. `wine_core_tokens`, which Slice 3 actually uses, pairs 29
+against 29 and is unaffected.
 
 ## 9. Open questions for the owner
 
