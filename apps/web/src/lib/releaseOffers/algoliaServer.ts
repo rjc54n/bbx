@@ -31,6 +31,12 @@ export type AlgoliaGroupResult = {
   exhaustive: boolean;
   observedAt: string;
   error?: string;
+  /**
+   * Set when the exact-validation pass could not be completed for this group.
+   * Distinct from `error`: the suggestions above are good, they just carry no
+   * auto-link evidence. The caller records the group as processed.
+   */
+  validationError?: string;
 };
 
 export type CellarTrackerGroupResult = {
@@ -101,6 +107,30 @@ async function executeQueries(requests: SearchRequest[]): Promise<AlgoliaResult[
   return results;
 }
 
+/**
+ * The exact-validation pass only ever upgrades a group's suggestions to
+ * auto-link evidence, so a failure fetching one of its pages must cost that
+ * group its `exhaustive` flag — not the suggestions the first pass already
+ * found, and not the other groups in the batch. Returns a null per unanswered
+ * request rather than throwing, and fails only the chunk that actually failed.
+ */
+async function executePageQueries(
+  requests: SearchRequest[],
+): Promise<{ results: Array<AlgoliaResult | null>; failure?: string }> {
+  const results: Array<AlgoliaResult | null> = [];
+  let failure: string | undefined;
+  for (let start = 0; start < requests.length; start += MAX_QUERIES_PER_REQUEST) {
+    const chunk = requests.slice(start, start + MAX_QUERIES_PER_REQUEST);
+    try {
+      results.push(...await postQueries(chunk));
+    } catch (caught) {
+      failure ??= caught instanceof Error ? caught.message : "The validation search failed.";
+      results.push(...chunk.map(() => null));
+    }
+  }
+  return { results, failure };
+}
+
 function request(group: HistoricOfferMatchGroup, hitsPerPage: number, page = 0): SearchRequest {
   return { indexName: ALGOLIA_INDEX, params: searchParams(group, hitsPerPage, page) };
 }
@@ -153,11 +183,17 @@ export async function searchHistoricOfferGroups(
     for (let page = 1; page < pageCount; page += 1) remainingRequests.push({ group, page });
   });
 
-  const remainingPages = await executeQueries(
+  const { results: remainingPages, failure: validationFailure } = await executePageQueries(
     remainingRequests.map(({ group, page }) => request(group, VALIDATION_HITS_PER_PAGE, page)),
   );
+  const validationFailed = new Set<string>();
   remainingRequests.forEach(({ group }, index) => {
     const result = remainingPages[index];
+    if (!result) {
+      validationEligible.delete(group.match_group_key);
+      validationFailed.add(group.match_group_key);
+      return;
+    }
     if (result.message || !Array.isArray(result.hits)) {
       validationEligible.delete(group.match_group_key);
       return;
@@ -174,6 +210,12 @@ export async function searchHistoricOfferGroups(
       validationHits.get(group.match_group_key) ?? [],
     );
     result.exhaustive = true;
+  }
+  if (validationFailure) {
+    for (const key of validationFailed) {
+      const result = output.get(key);
+      if (result) result.validationError = validationFailure;
+    }
   }
   return groups.map((group) => output.get(group.match_group_key)!);
 }

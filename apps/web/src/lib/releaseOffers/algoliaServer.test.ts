@@ -117,6 +117,51 @@ describe("historic-offer Algolia server search", () => {
     );
   });
 
+  // A failure in the exact-validation pass costs a group its auto-link evidence,
+  // nothing more. Discarding the first pass with it threw away suggestions that
+  // had already been found and paid for.
+  it("keeps first-pass suggestions when the validation pass fails", async () => {
+    const batch = Array.from({ length: 25 }, (_, index) => ({
+      match_group_key: `2018|off catalogue wine ${index}`,
+      source_match_key: `off catalogue wine ${index}`,
+      source_vintage: 2018,
+      source_wine: `Off catalogue wine ${index} 2018`,
+    }));
+
+    let call = 0;
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => {
+      const { requests } = JSON.parse(String(init.body)) as { requests: Array<{ params: string }> };
+      call += 1;
+      // The first request is the initial pass; every validation page 500s.
+      if (call > 1) return Promise.resolve(new Response("upstream failure", { status: 500 }));
+      return response(requests.map(({ params }) => {
+        const index = batch.findIndex(
+          (group) => group.source_wine === new URLSearchParams(params).get("query"),
+        );
+        return {
+          hits: [{ parent_sku: `7777777${String(index).padStart(4, "0")}`, name: `Other wine ${index} 2018`, vintage: 2018 }],
+          nbPages: 4,
+          exhaustiveNbHits: true,
+        };
+      }));
+    }));
+
+    const results = await searchHistoricOfferGroups(batch);
+
+    expect(results).toHaveLength(25);
+    expect(results.every((result) => result.candidates.length === 1)).toBe(true);
+    expect(results.every((result) => result.error === undefined)).toBe(true);
+    // Provisional, not exhaustive: no auto-link evidence without validation.
+    expect(results.every((result) => result.exhaustive === false)).toBe(true);
+    expect(results.every((result) => result.exactParentSkus.length === 0)).toBe(true);
+    expect(results.every((result) => result.validationError === "Algolia returned HTTP 500.")).toBe(true);
+  });
+
+  it("still fails the batch when the first pass itself fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("nope", { status: 400 }))));
+    await expect(searchHistoricOfferGroups([group])).rejects.toThrow("Algolia returned HTTP 400.");
+  });
+
   it("finds an exact result below the five retained candidates", async () => {
     const hits = Array.from({ length: 20 }, (_, index) => ({
       parent_sku: `777777777${String(index).padStart(2, "0")}`,

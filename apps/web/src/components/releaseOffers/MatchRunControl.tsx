@@ -18,17 +18,25 @@ export function MatchRunControl({ latest }: { latest: MatchRunProgress | null })
       try {
         let current = await beginHistoricOfferMatchRun();
         setProgress(current);
+        let skipped = 0;
         while (current.remaining > 0) {
           current = await processHistoricOfferMatchBatch(current.runId);
+          skipped += current.validationSkipped ?? 0;
           setProgress(current);
           if (current.message) {
             setMessage(current.message);
             return;
           }
         }
-        setMessage(current.errors > 0
+        // Groups that lost their validation pass are processed, not failed, so
+        // "Retry unmatched" will not pick them up — say so rather than let the
+        // missing auto-links look like a matching decision.
+        const provisional = skipped > 0
+          ? ` Exact-match validation was skipped for ${skipped.toLocaleString()} group${skipped === 1 ? "" : "s"}, so their suggestions are provisional and were not auto-linked.`
+          : "";
+        setMessage((current.errors > 0
           ? `${current.errors.toLocaleString()} groups failed. Retry unmatched to resume them.`
-          : "The unmatched catalogue search is complete.");
+          : "The unmatched catalogue search is complete.") + provisional);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Matching stopped unexpectedly.");
       }

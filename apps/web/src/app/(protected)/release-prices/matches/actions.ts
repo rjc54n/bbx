@@ -28,6 +28,13 @@ export type MatchRunProgress = {
   localExactLinks: number;
   algoliaExactLinks: number;
   message?: string;
+  /**
+   * Groups this batch processed without an exact-validation pass, because
+   * Algolia failed to answer their validation pages. Their suggestions were
+   * saved; only the auto-link evidence is missing. A soft count, not an error:
+   * the run keeps going.
+   */
+  validationSkipped?: number;
 };
 
 type MatchRunRow = {
@@ -88,8 +95,13 @@ export async function processHistoricOfferMatchBatch(runId: string): Promise<Mat
   const groups = (data ?? []) as HistoricOfferMatchGroup[];
   if (groups.length === 0) return loadProgress(context, runId);
 
+  let validationSkipped = 0;
   try {
+    // Only a first-pass failure loses this batch: searchHistoricOfferGroups
+    // degrades a failed validation pass to provisional suggestions rather than
+    // throwing, so the candidates it did find are still worth recording.
     const results = await searchHistoricOfferGroups(groups);
+    validationSkipped = results.filter((result) => result.validationError).length;
     await Promise.all(results.map(async (result) => {
       if (result.error) {
         const { error: recordError } = await context.supabase.rpc("record_release_offer_algolia_error", {
@@ -122,7 +134,7 @@ export async function processHistoricOfferMatchBatch(runId: string): Promise<Mat
   }
 
   revalidatePath(MATCH_PATH);
-  return loadProgress(context, runId);
+  return { ...await loadProgress(context, runId), validationSkipped };
 }
 
 export async function excludeHistoricOfferRecord(importId: string, sourceRowNumber: number): Promise<never> {
