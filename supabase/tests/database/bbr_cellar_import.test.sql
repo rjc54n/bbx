@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(26);
+SELECT plan(32);
 
 INSERT INTO auth.users (id)
 VALUES
@@ -244,8 +244,39 @@ SELECT is(
         FROM public.bbr_holding_evidence
         WHERE import_id = '30000000-0000-0000-0000-000000000001'
     ),
-    1,
-    'only exact catalogue matches become normalised holding evidence'
+    2,
+    'ownership evidence records the position the catalogue could not resolve too'
+);
+
+SELECT ok(
+    (
+        SELECT catalogue_matched
+        FROM public.bbr_holding_evidence
+        WHERE import_id = '30000000-0000-0000-0000-000000000001'
+          AND source_row_number = 2
+    ),
+    'evidence from a resolved position records that the catalogue matched'
+);
+
+SELECT ok(
+    (
+        SELECT NOT catalogue_matched
+        FROM public.bbr_holding_evidence
+        WHERE import_id = '30000000-0000-0000-0000-000000000001'
+          AND source_row_number = 3
+    ),
+    'evidence from an unresolved position records that it did not'
+);
+
+SELECT is(
+    (
+        SELECT parent_sku
+        FROM public.bbr_holding_evidence
+        WHERE import_id = '30000000-0000-0000-0000-000000000001'
+          AND source_row_number = 3
+    ),
+    '20000000002',
+    'unresolved evidence keeps the Parent ID BBR asserted, absent from the catalogue'
 );
 
 SELECT ok(
@@ -255,7 +286,59 @@ SELECT ok(
         WHERE import_id = '30000000-0000-0000-0000-000000000001'
           AND source_row_number = 3
     ),
-    'an unmatched candidate does not violate the catalogue foreign key'
+    'the shared import row still means resolved catalogue identity, so stays null'
+);
+
+-- Slice 0 found no repeated (Parent ID, format) rows in the recovered exports,
+-- which selects the D10 branch where one position per product and format is a
+-- constraint. The parser marks a repeat invalid before it ever gets here; this
+-- asserts the backstop under it.
+SELECT throws_ok(
+    $$
+    SELECT public.stage_bbr_import(
+        '30000000-0000-0000-0000-000000000002',
+        repeat('b', 64),
+        'my-cellar-view-2026-07-26.csv',
+        1000,
+        '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000002/source.csv',
+        'bbr-v2',
+        '[
+          {
+            "source_row_number": 2,
+            "raw_row": {"Parent ID": "20000000003"},
+            "match_status": "unmatched",
+            "validation_errors": [],
+            "validation_warnings": [],
+            "parent_sku": "20000000003",
+            "format_code": "06-00750",
+            "product_code": "test-3",
+            "description": "Repeated wine",
+            "bottle_volume_ml": 750,
+            "quantity_bottles": 6,
+            "eligible_for_bbx": true,
+            "case_size": 6
+          },
+          {
+            "source_row_number": 3,
+            "raw_row": {"Parent ID": "20000000003"},
+            "match_status": "unmatched",
+            "validation_errors": [],
+            "validation_warnings": [],
+            "parent_sku": "20000000003",
+            "format_code": "06-00750",
+            "product_code": "test-3",
+            "description": "Repeated wine",
+            "bottle_volume_ml": 750,
+            "quantity_bottles": 12,
+            "eligible_for_bbx": true,
+            "case_size": 6
+          }
+        ]'::JSONB
+    )
+    $$,
+    '23505',
+    'duplicate key value violates unique constraint "bbr_holding_evidence_position_key"',
+    'one position per product and format within an import'
 );
 
 SELECT is(
@@ -296,20 +379,46 @@ SET LOCAL ROLE authenticated;
 
 SELECT is(
     (SELECT count(*)::INT FROM public.current_bbr_holdings),
-    1,
+    2,
     'the accepted snapshot supplies the current BBR holdings view'
 );
 
 SELECT is(
     (SELECT count(*)::INT FROM public.bbr_cellar_market_view),
-    1,
+    2,
     'the owner can read the current cellar market view'
+);
+
+-- D3's widened wine-record contract, at the level the route depends on: a
+-- position the catalogue has never seen still reaches the page with its BBR
+-- identity, and arrives with no market figures rather than 404ing or throwing.
+SELECT is(
+    (
+        SELECT description
+        FROM public.bbr_cellar_market_view
+        WHERE parent_sku = '20000000002'
+    ),
+    'Unmatched wine',
+    'a wine only BBR knows about still names itself from its holding'
+);
+
+SELECT ok(
+    (
+        SELECT catalogue_name IS NULL
+            AND lowest_ask_p IS NULL
+            AND highest_bid_p IS NULL
+            AND market_price_p IS NULL
+        FROM public.bbr_cellar_market_view
+        WHERE parent_sku = '20000000002'
+    ),
+    'that holding carries no catalogue decoration and no market figures'
 );
 
 SELECT is(
     (
         SELECT highest_bid_p
         FROM public.bbr_cellar_market_view
+        WHERE parent_sku = '20000000001'
     ),
     31000,
     'the cellar view uses the current scanner bid instead of the imported bid'
@@ -319,6 +428,7 @@ SELECT is(
     (
         SELECT lowest_ask_p
         FROM public.bbr_cellar_market_view
+        WHERE parent_sku = '20000000001'
     ),
     42000,
     'the cellar view uses the current scanner ask instead of the imported ask'
@@ -339,6 +449,7 @@ SELECT is(
     (
         SELECT highest_bid_p
         FROM public.bbr_cellar_market_view
+        WHERE parent_sku = '20000000001'
     ),
     33000,
     'scanner price changes appear without another cellar import'

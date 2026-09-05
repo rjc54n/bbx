@@ -234,6 +234,33 @@ hence the recommendation to start lazy.
 - A generic EAV fact store. Preferred only if typed override tables proliferate
   beyond what's comfortable.
 
+## 8a. Amendment, 5 September 2026 — the route reaches a wine only BBR knows
+
+The `notFound()` "known?" guard at
+`app/(protected)/wine/parent/[parentSku]/page.tsx` already renders whenever any
+source has something to say, BBR holdings included. Until now that could not
+happen for a wine absent from the catalogue: `bbr_holding_evidence` was
+foreign-keyed to `private.skus`, so an unresolvable Parent ID never became a
+holding in the first place.
+
+The BBR holdings history work removes that foreign key
+([`BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md`](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md),
+D3), because BBR is the ownership authority and a wine the owner demonstrably
+held should have a record whether or not the local catalogue has ever seen it.
+**The route contract is deliberately widened to match**: `/wine/parent/{sku}`
+now resolves for a Parent ID that exists only in BBR ownership evidence.
+
+Such a page takes its name from the holding's `description`, shows the holding
+and its purchase price, and shows no catalogue formats, no market figures and
+no release history — every one of those is already null-guarded, so nothing
+throws and nothing 404s. `bbr_cellar_market_view` left-joins the catalogue, so
+the market columns arrive null rather than dropping the row.
+
+Covered in `bbr_cellar_import.test.sql` at the level the route depends on: an
+unresolved holding reaches `bbr_cellar_market_view` with its BBR identity and
+with `catalogue_name`, `lowest_ask_p`, `highest_bid_p` and `market_price_p` all
+null.
+
 ## 9. Decisions (locked 2026-08-16)
 
 1. **Typed override tables**, one per fact domain, mirroring
