@@ -66,11 +66,20 @@ async function stageBbrFile(
     return { error: "The uploaded file could not be read from storage." };
   }
 
+  // The bytes are already in the private bucket by the time any of the checks
+  // below can run, so a rejection has to take them back out again. An object
+  // left behind has no import row to reach it from and no owner-facing way to
+  // remove it. The duplicate path is the one deliberate exception.
+  const discardUpload = () =>
+    context.supabase.storage.from("cellar-imports").remove([input.objectPath]);
+
   const bytes = new Uint8Array(await fileBlob.arrayBuffer());
   if (bytes.byteLength === 0) {
+    await discardUpload();
     return { error: "Choose a non-empty BBR CSV file." };
   }
   if (bytes.byteLength > BBR_MAX_FILE_BYTES) {
+    await discardUpload();
     return { error: "The file exceeds the 4 MB import limit." };
   }
 
@@ -78,6 +87,7 @@ async function stageBbrFile(
   try {
     csvText = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
+    await discardUpload();
     return { error: "The BBR file is not valid UTF-8 text." };
   }
 
@@ -87,6 +97,7 @@ async function stageBbrFile(
   try {
     parsedRows = parseBbrCsv(csvText);
   } catch (error) {
+    await discardUpload();
     if (error instanceof BbrFileError) return { error: error.message };
     return { error: "The BBR CSV could not be parsed." };
   }
@@ -126,12 +137,14 @@ async function stageBbrFile(
   );
 
   if (stageError) {
+    await discardUpload();
     return { error: "The parsed import could not be recorded atomically." };
   }
 
   const result = staged as { import_id?: string; duplicate?: boolean } | null;
   const resultId = result?.import_id;
   if (!resultId) {
+    await discardUpload();
     return { error: "The import backend returned an incomplete result." };
   }
 
@@ -358,6 +371,17 @@ export async function acceptBbrSnapshot(
     redirect(
       `/cellar/imports/bbr/${importId}?accept_error=${encodeURIComponent(
         "Choose the snapshot's role before accepting it -- there is deliberately no default, so an old recovered file cannot replace current holdings by accident.",
+      )}`,
+    );
+  }
+  // Capability parity: the database accepts "historical" already, but the
+  // preview that makes a historical acceptance meaningful arrives with the
+  // history projections. Until then the boundary is enforced here, not only by
+  // which radio the page renders.
+  if (role !== "current") {
+    redirect(
+      `/cellar/imports/bbr/${importId}?accept_error=${encodeURIComponent(
+        "Only a current-holdings acceptance is available yet. Dated historical snapshots arrive with the position history.",
       )}`,
     );
   }
