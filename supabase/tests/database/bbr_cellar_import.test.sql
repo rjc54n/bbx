@@ -269,15 +269,30 @@ SELECT is(
     'an unmatched candidate keeps its raw source identity'
 );
 
-SELECT is(
-    (
-        public.accept_bbr_import(
-            '30000000-0000-0000-0000-000000000001'
-        )->>'status'
-    ),
-    'accepted',
-    'the owner can accept the validated snapshot'
+SELECT throws_ok(
+    $$
+    SELECT public.accept_bbr_import('30000000-0000-0000-0000-000000000001')
+    $$,
+    '0A000',
+    'accept_bbr_import is withdrawn: a BBR snapshot is now accepted with an explicit effective date and role',
+    'the undated acceptance path refuses the owner during the freeze'
 );
+
+-- Acceptance returns as accept_bbr_snapshot in slice 4. Until it does, the
+-- views below are exercised from a snapshot accepted directly, carrying the
+-- effective date and role the chronology requires of an accepted BBR import.
+-- The owner holds no UPDATE grant on cellar_imports -- every write goes
+-- through a definer function -- so this stands in for the missing one.
+RESET ROLE;
+UPDATE public.cellar_imports
+SET
+    status = 'accepted',
+    accepted_at = now(),
+    accepted_by = '10000000-0000-0000-0000-000000000001',
+    effective_date = DATE '2026-07-25',
+    accepted_role = 'current'
+WHERE id = '30000000-0000-0000-0000-000000000001';
+SET LOCAL ROLE authenticated;
 
 SELECT is(
     (SELECT count(*)::INT FROM public.current_bbr_holdings),
