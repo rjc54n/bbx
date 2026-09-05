@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(32);
+SELECT plan(36);
 
 INSERT INTO auth.users (id)
 VALUES
@@ -118,7 +118,7 @@ SELECT is(
 SELECT is(
     has_function_privilege(
         'anon',
-        'public.stage_bbr_import(uuid,text,text,bigint,text,text,jsonb)',
+        'public.stage_bbr_import(uuid,text,text,bigint,text,text,jsonb,boolean)',
         'EXECUTE'
     ),
     FALSE,
@@ -128,7 +128,7 @@ SELECT is(
 SELECT is(
     has_function_privilege(
         'authenticated',
-        'public.stage_bbr_import(uuid,text,text,bigint,text,text,jsonb)',
+        'public.stage_bbr_import(uuid,text,text,bigint,text,text,jsonb,boolean)',
         'EXECUTE'
     ),
     TRUE,
@@ -473,6 +473,87 @@ SELECT is(
     ),
     1,
     'a holding remains visible when its active catalogue row is absent'
+);
+
+-- D9: file identity is advisory. Two exports with identical bytes and
+-- different dates must not collapse into one import, and an unchanged export
+-- must still be able to refresh the current snapshot's date. Detection stays,
+-- as a choice rather than a refusal.
+
+SELECT is(
+    (
+        SELECT (public.stage_bbr_import(
+            '30000000-0000-0000-0000-000000000003',
+            repeat('a', 64),
+            'my-cellar-view-2026-07-25.csv',
+            1000,
+            '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000003/source.csv',
+            'bbr-v1',
+            '[{"source_row_number": 2, "raw_row": {}, "match_status": "unmatched",
+               "validation_errors": [], "validation_warnings": [],
+               "parent_sku": "20000000004", "format_code": "06-00750",
+               "product_code": "test-4", "description": "Same bytes",
+               "bottle_volume_ml": 750, "quantity_bottles": 6,
+               "eligible_for_bbx": true, "case_size": 6}]'::JSONB
+        ))->>'duplicate'
+    ),
+    'true',
+    'staging the same bytes again reports the import they already belong to'
+);
+
+SELECT is(
+    (
+        SELECT (public.stage_bbr_import(
+            '30000000-0000-0000-0000-000000000004',
+            repeat('a', 64),
+            'my-cellar-view-2026-07-25.csv',
+            1000,
+            '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000004/source.csv',
+            'bbr-v1',
+            '[{"source_row_number": 2, "raw_row": {}, "match_status": "unmatched",
+               "validation_errors": [], "validation_warnings": [],
+               "parent_sku": "20000000004", "format_code": "06-00750",
+               "product_code": "test-4", "description": "Same bytes",
+               "bottle_volume_ml": 750, "quantity_bottles": 6,
+               "eligible_for_bbx": true, "case_size": 6}]'::JSONB
+        ))->>'existing_effective_date'
+    ),
+    '2026-07-25',
+    'the report names the snapshot those bytes were accepted as'
+);
+
+SELECT is(
+    (
+        SELECT (public.stage_bbr_import(
+            '30000000-0000-0000-0000-000000000005',
+            repeat('a', 64),
+            'my-cellar-view-2026-07-25.csv',
+            1000,
+            '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000005/source.csv',
+            'bbr-v1',
+            '[{"source_row_number": 2, "raw_row": {}, "match_status": "unmatched",
+               "validation_errors": [], "validation_warnings": [],
+               "parent_sku": "20000000004", "format_code": "06-00750",
+               "product_code": "test-4", "description": "Same bytes",
+               "bottle_volume_ml": 750, "quantity_bottles": 6,
+               "eligible_for_bbx": true, "case_size": 6}]'::JSONB,
+            TRUE
+        ))->>'status'
+    ),
+    'validated',
+    'the owner can stage the same bytes as a separate snapshot instead'
+);
+
+SELECT is(
+    (
+        SELECT count(*)::INT
+        FROM public.cellar_imports
+        WHERE source_type = 'bbr_holdings'
+          AND content_checksum = repeat('a', 64)
+          AND parser_version = 'bbr-v1'
+    ),
+    2,
+    'file identity no longer forces two exports of the same bytes into one import'
 );
 
 RESET ROLE;
