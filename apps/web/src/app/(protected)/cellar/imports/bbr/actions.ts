@@ -345,9 +345,11 @@ function describeAcceptanceError(error: { code?: string; message: string }): str
  * resupplied rather than assumed, so accept_bbr_snapshot re-checks the full
  * chronology against the exact declaration the owner is making right now.
  *
- * Capability parity (D6): only role "current" is offered by the UI this
- * slice. "historical" arrives in Slice 8; the RPC accepts it today, but no
- * control here selects it.
+ * Both roles ("current" and "historical") are offered by the UI as of Slice 8.
+ * The mixed-role acceptance race is closed in the database by
+ * 20260905170000_bbr_acceptance_serialisation.sql -- one advisory lock shared
+ * by both roles, taken before any chronology is read -- so enabling
+ * "historical" here does not reopen it.
  */
 export async function acceptBbrSnapshot(
   importId: string,
@@ -374,14 +376,13 @@ export async function acceptBbrSnapshot(
       )}`,
     );
   }
-  // Capability parity: the database accepts "historical" already, but the
-  // preview that makes a historical acceptance meaningful arrives with the
-  // history projections. Until then the boundary is enforced here, not only by
-  // which radio the page renders.
-  if (role !== "current") {
+  // Allowed-value check before the role reaches the RPC. The Slice 6 review
+  // added this because the submitted role was passed straight through; it stays
+  // as validation now that both roles are offered, rather than being removed.
+  if (role !== "current" && role !== "historical") {
     redirect(
       `/cellar/imports/bbr/${importId}?accept_error=${encodeURIComponent(
-        "Only a current-holdings acceptance is available yet. Dated historical snapshots arrive with the position history.",
+        "Choose a valid snapshot role before accepting it.",
       )}`,
     );
   }

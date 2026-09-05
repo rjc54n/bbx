@@ -23,6 +23,18 @@ whose §4.5 was amended on 5 September 2026 as this review required.
 Slice 0's measurements, which decide the position grain (D10) and the parser
 header contract.
 
+**Close-out amendment, 5 September 2026.** Slices 0–7 shipped. On owner
+direction Slice 8 became the **close-out slice for the initial feature**: it
+delivers the all-owned cellar, the current/former presentation, first- and
+last-seen dates, the reported-price range and the selectable `historical`
+role, and keeps historical acceptance simple (no `historicalPreview`). Slice 9
+(position timeline, episode grouping, import-history redesign) and Slice 10
+(audited date amendment) are **deferred, not scheduled** — real deferred
+decisions, not unfinished requirements. Slice 11 is **removed as a slice**; its
+pre-production checks are folded into Slice 8's release sequence. Section 3's
+Slice 8–11 text and the section 4 table are annotated below; the rest of this
+plan is left as the historical record of revision 3.
+
 ---
 
 ## 1. Verified baseline
@@ -787,11 +799,23 @@ appear in no fixture and no view (spec §10).
 
 ### Stage C — the owner-facing history
 
-#### Slice 8 — historical acceptance and the all-owned cellar (app)
+#### Slice 8 — historical acceptance and the all-owned cellar (app) — **close-out slice**
 
-- The `historical` role becomes selectable, with `historicalPreview(...)` in
-  `bbrSnapshots.ts`: positions first seen by this import, and positions whose
-  last-seen date or price range will change (spec §4.3).
+> **As shipped (5 September 2026).** `historicalPreview(...)` was *not* built —
+> historical acceptance instead shows a plain statement that the import adds
+> dated evidence for its effective date and changes no current position or
+> quantity, alongside the file's parsed rows and unresolved-position list that
+> the import page already renders. The `historical` role guard in `actions.ts`
+> became an allowed-value check (`current` | `historical`). The three-figure
+> summary is computed over the **filtered** rows (owner decision): facet and
+> search filters narrow all three; the `Current holdings only` box does not move
+> the current figures. Everything else in the bullets below shipped as written.
+> Verification was focused app tests + lint + `next build`; no full
+> `supabase test db`. Release verification is the sequence in this section, not
+> a synthetic import.
+
+- The `historical` role becomes selectable. ~~`historicalPreview(...)` in
+  `bbrSnapshots.ts`~~ — dropped; see the note above.
 - `cellar/bbr/page.tsx` reads `bbr_cellar_positions_market_view`.
 - `lib/cellar/bbrBrowser.ts` gains the `holdings` parameter of D7, the new
   sort fields (`membership`, `first_seen`, `last_seen`, reported price), and
@@ -807,11 +831,41 @@ appear in no fixture and no view (spec §10).
   every format row under one Parent ID shows the same star (BBRH-09).
 
 **Verification.** `bbrBrowser.test.ts`: the current-only filter returns exactly
-the nominated snapshot's positions; current bottle totals are invariant under
-every other filter; sorting is stable across former rows with null market
+the nominated snapshot's positions; the current figures count only
+current-membership rows (former/unknown contribute zero) and are unchanged by
+the current-only filter; sorting is stable across former rows with null market
 data; the unknown state renders without asserting former.
 
-#### Slice 9 — position history and import history (app)
+**Release sequence (folds in the former Slice 11).** Former rows, dates and
+price ranges cannot be verified until a real historical snapshot exists, so
+verification is interleaved with the accepts:
+
+1. Deploy Slice 8 (`git push`).
+2. Verify the current-only baseline: `/cellar/bbr` with the nominated snapshot
+   only — 116 positions / 837 bottles, heading "Holdings as at 2026-07-23",
+   every row `Current`, the three figures agree, facet filters narrow all three.
+3. Verify the historical-role controls on `/cellar/imports/bbr/[id]`: both role
+   radios with the correct statements; the `actions.ts` guard rejects any other
+   value. `supabase migration list --linked` shows every BBR migration through
+   `20260905170000` with `remote` populated. The mixed-role acceptance race is
+   fixed and deployed (`20260905170000`), regression-tested by
+   `tests/test_bbr_acceptance_concurrency.py`.
+4. Accept the oldest real recovered historical file.
+5. Verify former rows (`Former` badge, `0` current bottles), first/last-seen
+   dates, the single-value-or-range reported price, and that the current
+   figures are unchanged from step 2; `absent_by` is never phrased as a sale.
+6. Accept the remaining recovered files one at a time, oldest to newest,
+   re-checking the consolidated view and the unchanged current totals each time.
+
+The still-outstanding Slice 6 owner browser pass folds into steps 2–3.
+
+#### Slice 9 — position history and import history (app) — **DEFERRED, not scheduled (5 Sep 2026)**
+
+Deferred on owner direction. Position timelines, episode grouping and the
+import-history redesign are a deferred capability, not a gap in the shipped
+feature. `absent_by` episodes and the reported-price-range → observations link
+(spec §6.8, §7.3) come with it. The three Slice 7 views already support it
+whenever it is picked up.
 
 - New route `app/(protected)/cellar/bbr/[parentSku]/[formatCode]/page.tsx`
   reading `bbr_position_observations` **and** `bbr_snapshot_view`, listing
@@ -834,7 +888,11 @@ are independent.
 
 ### Stage D — correction, and switching history on
 
-#### Slice 10 — correction path (migration + app)
+#### Slice 10 — correction path (migration + app) — **DEFERRED until a correction is needed (5 Sep 2026)**
+
+Deferred on owner direction. Post-acceptance date amendment is an exceptional
+path (spec §4.6); it is built when a real correction is actually required, not
+pre-emptively. Pre-acceptance date correction already ships (Slice 6).
 
 `2026xxxxxxxxxx_bbr_effective_date_amendment.sql`: the
 `bbr_import_date_amendments` audit table and `amend_bbr_effective_date` RPC
@@ -847,23 +905,14 @@ pre-dating another accepted snapshot is refused; an amendment onto an occupied
 date is refused; the role cannot be changed; a non-owner is refused; one audit
 row per successful amendment; source rows byte-identical afterwards.
 
-#### Slice 11 — enable historical acceptance in production
+#### Slice 11 — enable historical acceptance in production — **REMOVED as a slice (5 Sep 2026)**
 
-Nothing new is built. Per engineering view §8, historical imports are not
-accepted in production until the new current authority and rollback behaviour
-have been verified. The checklist:
-
-- `supabase migration list --linked` shows every migration above applied;
-- the nominated current import ID is the expected one and
-  `current_bbr_holdings` returns the expected row count;
-- one synthetic historical snapshot has been accepted and the derived views
-  inspected **on an isolated copy**, not on production;
-- one owner browser pass over the affected pages;
-- `docs/README.md` indexes this plan, `IMPORT-SOURCE-PROFILES.md` carries the
-  Slice 0 findings, and `WINE-RECORD-SPEC.md` carries the D3 route contract.
-
-Only then are the recovered files accepted, oldest first, checking the
-consolidated view after each.
+Folded into Slice 8's release sequence above. Historical acceptance is enabled
+by the Slice 8 deploy; the recovered files are then accepted oldest-first with
+verification interleaved, on production, without a synthetic import. The
+engineering-view §8 concern (verify current authority and rollback before
+admitting historical snapshots) is met by steps 2–3 of that sequence and by the
+deployed serialisation fix (`20260905170000`).
 
 ---
 
@@ -879,10 +928,10 @@ consolidated view after each.
 | 5 current authority | yes | no | paused |
 | 6 dates and roles | no | yes | **restored, current role** |
 | 7 history projections | yes | no | yes |
-| 8 historical + cellar | no | yes | **historical role added** |
-| 9 position history | no | yes | yes |
-| 10 correction path | yes | yes | yes |
-| 11 production enable | no | no | yes |
+| 8 historical + cellar (close-out) | no | yes | **historical role added** |
+| ~~9 position history~~ | — | — | deferred, not scheduled |
+| ~~10 correction path~~ | — | — | deferred until needed |
+| ~~11 production enable~~ | — | — | removed; folded into Slice 8 |
 
 Slices 2–5 are four migrations with no app deployment between them and can be
 pushed in one session, which is the whole of the freeze. No snapshot can be

@@ -6,9 +6,9 @@ import { loadFavourites } from "@/lib/favourites/server";
 
 export const dynamic = "force-dynamic";
 
-type AcceptedImport = {
+type NominatedImport = {
   id: string;
-  accepted_at: string | null;
+  effective_date: string | null;
   unmatched_row_count: number;
 };
 
@@ -21,16 +21,16 @@ export default async function BbrCellarPage() {
     { parentSkus },
   ] = await Promise.all([
     supabase
-      .from("bbr_cellar_market_view")
+      .from("bbr_cellar_positions_market_view")
       .select("*")
       .order("description", { ascending: true }),
     supabase
       .from("cellar_imports")
-      .select("id, accepted_at, unmatched_row_count")
+      .select("id, effective_date, unmatched_row_count")
       .eq("source_type", "bbr_holdings")
       .eq("status", "accepted")
-      .order("accepted_at", { ascending: false })
-      .limit(1)
+      .eq("accepted_role", "current")
+      .is("superseded_at", null)
       .maybeSingle(),
     loadFavourites(owner),
   ]);
@@ -40,15 +40,15 @@ export default async function BbrCellarPage() {
   }
 
   const rows = (holdingData ?? []) as BbrCellarRow[];
-  const acceptedImport = importData as AcceptedImport | null;
+  const nominatedImport = importData as NominatedImport | null;
 
   return (
     <Suspense fallback={<p className="p-5 text-sm text-ink-muted">Loading cellar…</p>}>
       <BbrCellarBrowser
         rows={rows}
-        acceptedImportId={acceptedImport?.id ?? null}
-        confirmedAt={acceptedImport?.accepted_at ?? rows[0]?.confirmed_at ?? null}
-        unmatchedCount={acceptedImport?.unmatched_row_count ?? 0}
+        acceptedImportId={nominatedImport?.id ?? null}
+        effectiveDate={nominatedImport?.effective_date ?? null}
+        unmatchedCount={nominatedImport?.unmatched_row_count ?? 0}
         favouriteParentSkus={parentSkus}
       />
     </Suspense>

@@ -283,16 +283,28 @@ export default async function BbrImportPage({
             {importRecord.effective_date ? (
               <form action={acceptBbrSnapshot.bind(null, importRecord.id)} className="space-y-3 border-t border-border pt-4">
                 <input type="hidden" name="effective_date" value={importRecord.effective_date} />
-                <fieldset>
+                <fieldset className="space-y-2">
                   <legend className="text-sm font-medium">Snapshot role</legend>
                   <p className="mt-1 text-xs text-ink-muted">
-                    Historical acceptance is not available yet. Accepting as current makes every
-                    currently held position not present in this file formerly held, with an unknown
-                    exit reason -- nothing changes until you accept.
+                    There is deliberately no default, so an old recovered file cannot replace
+                    current holdings by accident. Nothing changes until you accept.
                   </p>
-                  <label className="mt-2 flex items-center gap-2 text-sm">
-                    <input type="radio" name="role" value="current" required />
-                    Current holdings -- this file becomes the complete current truth
+                  <label className="mt-2 flex items-start gap-2 text-sm">
+                    <input type="radio" name="role" value="current" required className="mt-1" />
+                    <span>
+                      <strong>Current holdings</strong> -- this file becomes the complete current
+                      truth. Every currently held position not present in it becomes formerly held,
+                      with an unknown exit reason.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input type="radio" name="role" value="historical" required className="mt-1" />
+                    <span>
+                      <strong>Historical snapshot</strong> -- adds dated evidence for{" "}
+                      {importRecord.effective_date}. It can change first-seen and last-seen dates
+                      and the reported purchase-price range for existing positions. It does not
+                      change which positions or quantities are current.
+                    </span>
                   </label>
                 </fieldset>
                 <button
@@ -329,10 +341,13 @@ export default async function BbrImportPage({
         {diff && (
           <section className="space-y-4 rounded-lg border border-border bg-background p-5">
             <div>
-              <h2 className="font-semibold">Change from the nominated current snapshot</h2>
+              <h2 className="font-semibold">
+                If accepted as current holdings: change from the nominated snapshot
+              </h2>
               <p className="text-sm text-ink-muted">
                 Every position that will change is named below, not just counted -- counts alone
-                cannot show which position stops being current (spec 4.4).
+                cannot show which position stops being current (spec 4.4). Accepting as a
+                historical snapshot instead changes none of this; it only adds dated evidence.
               </p>
             </div>
 

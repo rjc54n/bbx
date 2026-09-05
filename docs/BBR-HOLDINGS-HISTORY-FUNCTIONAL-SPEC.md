@@ -1,7 +1,11 @@
 # BBR holdings history: functional specification
 
 **Status:** draft for review, 31 August 2026; §4.5 amended 5 September 2026.
-Product behaviour agreed; no technical design or implementation started.
+Slices 0–8 implemented and deployed 5 September 2026 (see the implementation
+plan's close-out amendment). §4.6 (post-acceptance date correction) and §7.3
+(position history / episode grouping) are **deferred capabilities**, not gaps
+in the shipped feature — notes inline below. §7.1's summary-figure behaviour
+was clarified by the owner on 5 September 2026, also noted inline.
 **Scope:** BBR holdings imports and the owner-only My BBR Cellar experience.
 **Companion documents:**
 [`BBR-HOLDINGS-HISTORY-EPIC.md`](BBR-HOLDINGS-HISTORY-EPIC.md) and
@@ -169,7 +173,12 @@ observation date."
 
 ### 4.6 Date correction
 
-The owner can correct the effective date before acceptance.
+The owner can correct the effective date before acceptance. **This
+pre-acceptance correction shipped in Slice 6.**
+
+**Post-acceptance correction deferred 5 September 2026.** It is built when a
+real correction is actually needed, not pre-emptively; until then a
+post-acceptance date error is handled by controlled deletion and resubmission.
 
 Post-acceptance correction is an exceptional, owner-only path. The functional
 requirement is that correction is possible without editing the source file or
@@ -274,6 +283,16 @@ The page summary separates:
 
 Former positions never contribute to current bottle totals.
 
+**Clarified 5 September 2026 (owner).** All three figures are computed over the
+currently displayed (filtered) rows. The fixed *definition* is the membership
+rule — current positions and current bottles count only rows whose membership
+is `current` — not the row population. Search, region, vintage, colour,
+maturity, eligibility, listing and bid filters therefore narrow all three
+figures; the `Current holdings only` checkbox does not change the current
+figures, because it only removes rows that already contribute zero. With no
+nominated current snapshot the current figures read "not nominated" /
+"unavailable", never zero.
+
 ### 7.2 Table
 
 The table retains the existing wine, region, vintage, format, market and
@@ -306,6 +325,13 @@ observation. Each entry shows:
 
 The history may group observations into episodes for readability. The language
 must remain observational.
+
+**Deferred 5 September 2026.** The dedicated position-history route, the
+calendar-walk episode grouping and the reported-price-range → observations link
+(§6.8) are a deferred capability. The shipped all-owned cellar (§7.1–7.2)
+carries first-seen, last-seen and the reported-price range per position; the
+`bbr_position_observations` / `bbr_positions_view` projections already hold the
+per-observation detail for this work whenever it is scheduled.
 
 ### 7.4 Empty and degraded states
 

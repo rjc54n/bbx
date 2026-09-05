@@ -1,15 +1,19 @@
 import type { Database } from "@/lib/database.types";
+import { formatPence } from "@/lib/format";
 
 export type BbrCellarRow =
-  Database["public"]["Views"]["bbr_cellar_market_view"]["Row"];
+  Database["public"]["Views"]["bbr_cellar_positions_market_view"]["Row"];
 
 export type CellarSortField =
   | "wine"
+  | "membership"
   | "region"
   | "vintage"
   | "quantity_bottles"
   | "maturity"
-  | "purchase_price_per_case_p"
+  | "first_seen"
+  | "last_seen"
+  | "reported_price"
   | "highest_bid_p"
   | "lowest_ask_p"
   | "ask_premium_p"
@@ -25,6 +29,9 @@ export type CellarQuery = {
   eligibility: "any" | "eligible" | "not-eligible";
   listing: "any" | "listed" | "unlisted";
   bid: "any" | "has-bid" | "no-bid";
+  /** D7: `current` when the `Current holdings only` box is ticked; `all`
+   * otherwise, and `all` is never written to the URL. */
+  holdings: "all" | "current";
   sort: {
     field: CellarSortField;
     dir: "asc" | "desc";
@@ -33,11 +40,14 @@ export type CellarQuery = {
 
 const SORT_FIELDS = new Set<CellarSortField>([
   "wine",
+  "membership",
   "region",
   "vintage",
   "quantity_bottles",
   "maturity",
-  "purchase_price_per_case_p",
+  "first_seen",
+  "last_seen",
+  "reported_price",
   "highest_bid_p",
   "lowest_ask_p",
   "ask_premium_p",
@@ -86,6 +96,7 @@ export function parseCellarQuery(params: URLSearchParams): CellarQuery {
       bidParam === "has-bid" || bidParam === "no-bid"
         ? bidParam
         : "any",
+    holdings: params.get("holdings") === "current" ? "current" : "all",
     sort: {
       field: SORT_FIELDS.has(sortField as CellarSortField)
         ? sortField as CellarSortField
@@ -97,6 +108,23 @@ export function parseCellarQuery(params: URLSearchParams): CellarQuery {
 
 function wineName(row: BbrCellarRow): string {
   return row.catalogue_name ?? row.description ?? row.parent_sku ?? "";
+}
+
+/** Ordering rank for the tri-state membership: current holdings first, former
+ * next, an un-nominated database last. Keeps a `membership` sort grouped rather
+ * than alphabetical (`current` < `former` < `unknown` alphabetically anyway,
+ * but this stays correct if the labels ever change). */
+function membershipRank(membership: string | null): number {
+  switch (membership) {
+    case "current":
+      return 0;
+    case "former":
+      return 1;
+    case "unknown":
+      return 2;
+    default:
+      return 3;
+  }
 }
 
 function includesSearch(row: BbrCellarRow, search: string): boolean {
@@ -133,16 +161,22 @@ function sortValue(
   switch (field) {
     case "wine":
       return wineName(row);
+    case "membership":
+      return membershipRank(row.membership);
     case "region":
       return row.region;
     case "vintage":
       return row.vintage;
     case "quantity_bottles":
-      return row.quantity_bottles;
+      return row.current_quantity_bottles;
     case "maturity":
       return row.maturity;
-    case "purchase_price_per_case_p":
-      return row.purchase_price_per_case_p;
+    case "first_seen":
+      return row.first_seen;
+    case "last_seen":
+      return row.last_seen;
+    case "reported_price":
+      return row.reported_price_min_p;
     case "highest_bid_p":
       return row.highest_bid_p;
     case "lowest_ask_p":
@@ -159,6 +193,9 @@ export function filterAndSortCellarRows(
   query: CellarQuery,
 ): BbrCellarRow[] {
   const filtered = rows.filter((row) => {
+    if (query.holdings === "current" && row.membership !== "current") {
+      return false;
+    }
     if (!includesSearch(row, query.search)) return false;
     if (query.region && row.region !== query.region) return false;
     if (query.colour && row.colour !== query.colour) return false;
@@ -213,11 +250,58 @@ export function lowestAskLabel(row: BbrCellarRow): string | null {
   return null;
 }
 
-/** Lowest ask minus original purchase case price; negative means a discount
- * to the owner's own purchase price. */
+/** Lowest ask minus the most recently reported purchase case price; negative
+ * means a discount to the owner's own reported price. A position with a
+ * reported-price range is measured against its latest observation. */
 export function askPremiumP(row: BbrCellarRow): number | null {
-  if (row.lowest_ask_p === null || row.purchase_price_per_case_p === null) {
+  if (
+    row.lowest_ask_p === null
+    || row.latest_purchase_price_per_case_p === null
+  ) {
     return null;
   }
-  return row.lowest_ask_p - row.purchase_price_per_case_p;
+  return row.lowest_ask_p - row.latest_purchase_price_per_case_p;
+}
+
+/** One reported purchase price when the observed range holds a single value, a
+ * range otherwise (spec §6.7–6.8). `–` when nothing was ever reported. */
+export function reportedPriceLabel(row: BbrCellarRow): string {
+  const min = row.reported_price_min_p;
+  const max = row.reported_price_max_p;
+  if (min === null && max === null) return "–";
+  if (min === max) return formatPence(min);
+  return `${formatPence(min)}–${formatPence(max)}`;
+}
+
+/** Current bottle count for the position: the nominated quantity, `0` for a
+ * former position, and `Not nominated` when no current snapshot exists (D8 --
+ * the view carries NULL, not zero, in that state). */
+export function currentBottlesLabel(row: BbrCellarRow): string {
+  if (row.current_quantity_bottles === null) return "Not nominated";
+  return String(row.current_quantity_bottles);
+}
+
+/** Whether any current snapshot is nominated. False for an empty set and for a
+ * set in which every position is `unknown`. */
+export function hasNomination(rows: BbrCellarRow[]): boolean {
+  return rows.some((row) => row.membership !== "unknown");
+}
+
+/** Current positions and current bottles over whatever rows are passed. Only
+ * `membership === 'current'` rows count, and only their
+ * `current_quantity_bottles` are summed, so former and unknown rows contribute
+ * nothing. The caller passes the filtered rows (owner decision, 5 Sep 2026):
+ * facet and search filters narrow these figures; the `Current holdings only`
+ * filter does not, since it only removes rows that already contribute zero. */
+export function currentTotals(
+  rows: BbrCellarRow[],
+): { positions: number; bottles: number } {
+  let positions = 0;
+  let bottles = 0;
+  for (const row of rows) {
+    if (row.membership !== "current") continue;
+    positions += 1;
+    bottles += row.current_quantity_bottles ?? 0;
+  }
+  return { positions, bottles };
 }

@@ -1491,6 +1491,110 @@ export type Database = {
           },
         ]
       }
+      bbr_cellar_positions_market_view: {
+        Row: {
+          absent_by: string | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          catalogue_name: string | null
+          colour: string | null
+          country: string | null
+          current_quantity_bottles: number | null
+          current_status: string | null
+          description: string | null
+          drinking_window_from: number | null
+          drinking_window_to: number | null
+          eligible_for_bbx: boolean | null
+          first_seen: string | null
+          format_code: string | null
+          highest_bid_p: number | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          last_seen: string | null
+          latest_catalogue_matched: boolean | null
+          latest_import_id: string | null
+          latest_observation_date: string | null
+          latest_purchase_price_per_case_p: number | null
+          latest_quantity_bottles: number | null
+          latest_source_row_number: number | null
+          lowest_ask_p: number | null
+          market_price_p: number | null
+          maturity: string | null
+          membership: string | null
+          observation_count: number | null
+          parent_sku: string | null
+          producer: string | null
+          product_code: string | null
+          product_url: string | null
+          region: string | null
+          reported_price_max_p: number | null
+          reported_price_min_p: number | null
+          vintage: number | null
+        }
+        Relationships: []
+      }
+      bbr_position_observations: {
+        Row: {
+          accepted_role: string | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          catalogue_matched: boolean | null
+          colour: string | null
+          country: string | null
+          current_status: string | null
+          description: string | null
+          drinking_window_from: number | null
+          drinking_window_to: number | null
+          effective_date: string | null
+          eligible_for_bbx: boolean | null
+          format_code: string | null
+          import_id: string | null
+          maturity: string | null
+          parent_sku: string | null
+          product_code: string | null
+          purchase_price_per_case_p: number | null
+          quantity_bottles: number | null
+          region: string | null
+          source_row_number: number | null
+          superseded_at: string | null
+          vintage: number | null
+        }
+        Relationships: []
+      }
+      bbr_positions_view: {
+        Row: {
+          absent_by: string | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          current_quantity_bottles: number | null
+          current_status: string | null
+          description: string | null
+          drinking_window_from: number | null
+          drinking_window_to: number | null
+          eligible_for_bbx: boolean | null
+          first_seen: string | null
+          format_code: string | null
+          last_seen: string | null
+          latest_catalogue_matched: boolean | null
+          latest_import_id: string | null
+          latest_observation_date: string | null
+          latest_purchase_price_per_case_p: number | null
+          latest_quantity_bottles: number | null
+          latest_source_row_number: number | null
+          maturity: string | null
+          membership: string | null
+          observation_count: number | null
+          parent_sku: string | null
+          product_code: string | null
+          region: string | null
+          reported_price_max_p: number | null
+          reported_price_min_p: number | null
+          vintage: number | null
+        }
+        Relationships: []
+      }
       bbr_snapshot_view: {
         Row: {
           accepted_at: string | null
