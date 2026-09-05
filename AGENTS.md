@@ -98,6 +98,36 @@ headroom. Learned from the 28 August 2026 outage
   book, with its own per-record change stamp — do not assume it shares
   cadence or completeness with the general catalogue search index.
 
+## Lean product and technical design
+
+- Start with the actual operating context: one owner, manual workflows, small
+  datasets and low write frequency unless evidence says otherwise. Do not
+  design a multi-user or high-throughput system by default.
+- Use the smallest data model that preserves the facts the product needs.
+  Prefer one authoritative pointer or relation over copying state and then
+  maintaining supersession fields, status combinations or synchronisation
+  rules across many rows.
+- Separate present requirements from possible future capabilities. Do not add
+  workflows, audit machinery, correction paths, duplicate-handling branches,
+  background processing or concurrency coordination for cases that are merely
+  conceivable. Record the extension point and wait for a real use case.
+- Scale safeguards to probability and harm. Keep cheap database constraints
+  that prevent plausible data loss or exposure. Do not build elaborate
+  protection for improbable races in a single-owner manual action unless the
+  owner confirms that the risk justifies the cost.
+- Prefer a simple recoverable correction, such as deleting an unaccepted
+  import and uploading it again, when the exceptional case is rare. Add a
+  dedicated amendment workflow only after the need occurs.
+- Keep delivery slices independently deployable where database safety requires
+  it, but do not turn every internal step into a separate feature slice. A
+  slice should reduce deployment risk or deliver an observable capability.
+- Testing must be proportionate to the change and the likely failure. Use
+  focused fixtures and local checks. The production database restrictions in
+  this file remain absolute and are not relaxed by this principle.
+- If a plan introduces more states, tables, functions or deployment stages
+  than the user-facing behaviour appears to require, stop and present a leaner
+  option with its trade-offs before implementation.
+
 ## Working with the project owner
 
 - Confirm architecture, UX, and default-behaviour decisions **before**

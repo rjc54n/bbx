@@ -56,6 +56,18 @@ against the current migrations/code for anything load-bearing.
   is the second release-gate review (5 September 2026). It records the remaining
   data-integrity blockers, recommended product decisions and strict limits on
   production verification workloads. Answered in §9 of the plan.
+- [RELEASE-OFFER-INGESTION-SKILL.md](RELEASE-OFFER-INGESTION-SKILL.md) —
+  draft spec for the skill that screens incoming BBR offer emails and stages
+  release prices into the existing Gmail ingestion path. Scoped to releases,
+  not back vintages; no code yet.
+- [RELEASE-OFFER-INGESTION-TEST-RUN-2026-09-03.md](RELEASE-OFFER-INGESTION-TEST-RUN-2026-09-03.md) —
+  first supervised run: triage and classification over 3 months of mail, no
+  extraction or writes.
+- [RELEASE-OFFER-INGESTION-TEST-RUN-2-2026-09-03.md](RELEASE-OFFER-INGESTION-TEST-RUN-2-2026-09-03.md) —
+  second supervised run: a month's batch extracted to the full row contract
+  and reviewed, still no writes. Surfaces a volume question (two bulk
+  back-vintage list emails are 113 of the batch's 150 rows) and one
+  self-contradictory price that needs a human call before staging.
 - [CELLARTRACKER-IMPLEMENTATION.md](CELLARTRACKER-IMPLEMENTATION.md) —
   CellarTracker import, matching and comparison. Explicitly says its
   deployment statements are dated observations to be checked against the
