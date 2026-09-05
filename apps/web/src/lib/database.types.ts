@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       app_owners: {
@@ -40,6 +65,7 @@ export type Database = {
           bbx_lowest_price_p: number | null
           bottle_volume_ml: number
           case_size: number
+          catalogue_matched: boolean
           colour: string | null
           country: string | null
           current_status: string | null
@@ -67,6 +93,7 @@ export type Database = {
           bbx_lowest_price_p?: number | null
           bottle_volume_ml: number
           case_size: number
+          catalogue_matched: boolean
           colour?: string | null
           country?: string | null
           current_status?: string | null
@@ -94,6 +121,7 @@ export type Database = {
           bbx_lowest_price_p?: number | null
           bottle_volume_ml?: number
           case_size?: number
+          catalogue_matched?: boolean
           colour?: string | null
           country?: string | null
           current_status?: string | null
@@ -121,34 +149,6 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "cellar_import_rows"
             referencedColumns: ["import_id", "source_row_number"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "candidate_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "catalogue_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "wine_card_format_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "wine_scenario_view"
-            referencedColumns: ["parent_sku", "format_code"]
           },
         ]
       }
@@ -209,6 +209,13 @@ export type Database = {
             foreignKeyName: "cellar_import_rows_import_id_fkey"
             columns: ["import_id"]
             isOneToOne: false
+            referencedRelation: "bbr_snapshot_view"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
             referencedRelation: "cellar_imports"
             referencedColumns: ["id"]
           },
@@ -217,6 +224,13 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
             referencedRelation: "candidate_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "catalogue_mv"
             referencedColumns: ["parent_sku", "format_code"]
           },
           {
@@ -246,8 +260,10 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
+          accepted_role: string | null
           byte_size: number
           content_checksum: string
+          effective_date: string | null
           error_row_count: number
           failure_summary: string | null
           id: string
@@ -259,6 +275,8 @@ export type Database = {
           source_type: string
           status: string
           storage_object_path: string
+          superseded_at: string | null
+          superseded_by: string | null
           unmatched_row_count: number
           uploaded_at: string
           uploaded_by: string
@@ -267,8 +285,10 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
+          accepted_role?: string | null
           byte_size: number
           content_checksum: string
+          effective_date?: string | null
           error_row_count?: number
           failure_summary?: string | null
           id: string
@@ -280,6 +300,8 @@ export type Database = {
           source_type: string
           status: string
           storage_object_path: string
+          superseded_at?: string | null
+          superseded_by?: string | null
           unmatched_row_count?: number
           uploaded_at?: string
           uploaded_by: string
@@ -288,8 +310,10 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
+          accepted_role?: string | null
           byte_size?: number
           content_checksum?: string
+          effective_date?: string | null
           error_row_count?: number
           failure_summary?: string | null
           id?: string
@@ -301,12 +325,29 @@ export type Database = {
           source_type?: string
           status?: string
           storage_object_path?: string
+          superseded_at?: string | null
+          superseded_by?: string | null
           unmatched_row_count?: number
           uploaded_at?: string
           uploaded_by?: string
           warning_row_count?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "bbr_snapshot_view"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "cellar_imports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cellartracker_evidence: {
         Row: {
@@ -379,6 +420,13 @@ export type Database = {
           vintage?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_snapshot_view"
+            referencedColumns: ["import_id"]
+          },
           {
             foreignKeyName: "cellartracker_evidence_import_id_fkey"
             columns: ["import_id"]
@@ -501,6 +549,13 @@ export type Database = {
           total_group_count?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "cellartracker_match_runs_snapshot_import_id_fkey"
+            columns: ["snapshot_import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_snapshot_view"
+            referencedColumns: ["import_id"]
+          },
           {
             foreignKeyName: "cellartracker_match_runs_snapshot_import_id_fkey"
             columns: ["snapshot_import_id"]
@@ -1308,6 +1363,13 @@ export type Database = {
             foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
             columns: ["parent_sku", "format_code"]
             isOneToOne: true
+            referencedRelation: "catalogue_mv"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
             referencedRelation: "catalogue_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
@@ -1338,13 +1400,6 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "release_offer_prices"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "release_price_anchor_overrides_release_offer_price_id_fkey"
-            columns: ["release_offer_price_id"]
-            isOneToOne: true
-            referencedRelation: "release_price_anchor_view"
-            referencedColumns: ["release_offer_price_id"]
           },
         ]
       }
@@ -1434,33 +1489,83 @@ export type Database = {
             referencedRelation: "cellar_import_rows"
             referencedColumns: ["import_id", "source_row_number"]
           },
+        ]
+      }
+      bbr_snapshot_view: {
+        Row: {
+          accepted_at: string | null
+          accepted_role: string | null
+          effective_date: string | null
+          error_row_count: number | null
+          import_id: string | null
+          is_nominated_current: boolean | null
+          matched_row_count: number | null
+          original_filename: string | null
+          parsed_row_count: number | null
+          parser_version: string | null
+          snapshot_state: string | null
+          source_row_count: number | null
+          status: string | null
+          superseded_at: string | null
+          superseded_by: string | null
+          unmatched_row_count: number | null
+          uploaded_at: string | null
+          warning_row_count: number | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_role?: string | null
+          effective_date?: string | null
+          error_row_count?: number | null
+          import_id?: string | null
+          is_nominated_current?: never
+          matched_row_count?: number | null
+          original_filename?: string | null
+          parsed_row_count?: number | null
+          parser_version?: string | null
+          snapshot_state?: never
+          source_row_count?: number | null
+          status?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          unmatched_row_count?: number | null
+          uploaded_at?: string | null
+          warning_row_count?: number | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_role?: string | null
+          effective_date?: string | null
+          error_row_count?: number | null
+          import_id?: string | null
+          is_nominated_current?: never
+          matched_row_count?: number | null
+          original_filename?: string | null
+          parsed_row_count?: number | null
+          parser_version?: string | null
+          snapshot_state?: never
+          source_row_count?: number | null
+          status?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          unmatched_row_count?: number | null
+          uploaded_at?: string | null
+          warning_row_count?: number | null
+        }
+        Relationships: [
           {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
             isOneToOne: false
-            referencedRelation: "candidate_view"
-            referencedColumns: ["parent_sku", "format_code"]
+            referencedRelation: "bbr_snapshot_view"
+            referencedColumns: ["import_id"]
           },
           {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
             isOneToOne: false
-            referencedRelation: "catalogue_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "wine_card_format_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "wine_scenario_view"
-            referencedColumns: ["parent_sku", "format_code"]
+            referencedRelation: "cellar_imports"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1484,6 +1589,42 @@ export type Database = {
           pct_last: number | null
           pct_market: number | null
           pct_next: number | null
+          producer: string | null
+          product_url: string | null
+          qty_available: number | null
+          region: string | null
+          signal_type: string | null
+          source_agreement: string | null
+          subregion: string | null
+          vintage: number | null
+        }
+        Relationships: []
+      }
+      catalogue_mv: {
+        Row: {
+          adjusted_guide_p: number | null
+          ask: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          first_seen_at: string | null
+          format_code: string | null
+          highest_bid_p: number | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          last_seen_at: string | null
+          last_transaction_p: number | null
+          market_price_p: number | null
+          name: string | null
+          next_lowest_price_p: number | null
+          parent_sku: string | null
+          price_per_bottle_p: number | null
+          price_per_litre_p: number | null
+          price_vs_adjusted_guide_pct: number | null
+          price_vs_last_pct: number | null
+          price_vs_market_pct: number | null
+          price_vs_next_pct: number | null
           producer: string | null
           product_url: string | null
           qty_available: number | null
@@ -1656,6 +1797,7 @@ export type Database = {
           description: string | null
           drinking_window_from: number | null
           drinking_window_to: number | null
+          effective_date: string | null
           eligible_for_bbx: boolean | null
           format_code: string | null
           import_id: string | null
@@ -1677,34 +1819,6 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "cellar_import_rows"
             referencedColumns: ["import_id", "source_row_number"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "candidate_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "catalogue_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "wine_card_format_view"
-            referencedColumns: ["parent_sku", "format_code"]
-          },
-          {
-            foreignKeyName: "bbr_holding_evidence_parent_sku_format_code_fkey"
-            columns: ["parent_sku", "format_code"]
-            isOneToOne: false
-            referencedRelation: "wine_scenario_view"
-            referencedColumns: ["parent_sku", "format_code"]
           },
         ]
       }
@@ -1744,6 +1858,13 @@ export type Database = {
             foreignKeyName: "cellartracker_evidence_import_id_fkey"
             columns: ["import_id"]
             isOneToOne: false
+            referencedRelation: "bbr_snapshot_view"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
             referencedRelation: "cellar_imports"
             referencedColumns: ["id"]
           },
@@ -1755,6 +1876,24 @@ export type Database = {
             referencedColumns: ["import_id", "source_row_number"]
           },
         ]
+      }
+      facet_ranges_mv: {
+        Row: {
+          ask_max: number | null
+          ask_min: number | null
+          bottle_volume_ml_max: number | null
+          bottle_volume_ml_min: number | null
+          case_size_max: number | null
+          case_size_min: number | null
+          first_seen_at_max: string | null
+          first_seen_at_min: string | null
+          last_seen_at_max: string | null
+          last_seen_at_min: string | null
+          singleton: number | null
+          vintage_max: number | null
+          vintage_min: number | null
+        }
+        Relationships: []
       }
       facet_ranges_view: {
         Row: {
@@ -1770,6 +1909,14 @@ export type Database = {
           last_seen_at_min: string | null
           vintage_max: number | null
           vintage_min: number | null
+        }
+        Relationships: []
+      }
+      facet_values_mv: {
+        Row: {
+          facet: string | null
+          n: number | null
+          value: string | null
         }
         Relationships: []
       }
@@ -1813,6 +1960,15 @@ export type Database = {
           user_id: string | null
           vintage: number | null
           wine_name: string | null
+        }
+        Relationships: []
+      }
+      format_options_mv: {
+        Row: {
+          bottle_volume_ml: number | null
+          case_size: number | null
+          format_code: string | null
+          n: number | null
         }
         Relationships: []
       }
@@ -2313,6 +2469,31 @@ export type Database = {
         }
         Relationships: []
       }
+      wine_market_summary_mv: {
+        Row: {
+          adjusted_guide_per_bottle_p: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          format_count: number | null
+          guide_per_bottle_p: number | null
+          highest_bid_per_bottle_p: number | null
+          in_tracked_catalogue: boolean | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          listed_format_count: number | null
+          lowest_ask_per_bottle_p: number | null
+          name: string | null
+          parent_sku: string | null
+          producer: string | null
+          product_url: string | null
+          region: string | null
+          subregion: string | null
+          vintage: number | null
+        }
+        Relationships: []
+      }
       wine_match_review_view: {
         Row: {
           coverage_tier: string | null
@@ -2395,6 +2576,10 @@ export type Database = {
     }
     Functions: {
       accept_bbr_import: { Args: { p_import_id: string }; Returns: Json }
+      accept_bbr_snapshot: {
+        Args: { p_effective_date: string; p_import_id: string; p_role: string }
+        Returns: Json
+      }
       accept_cellartracker_import: {
         Args: { p_import_id: string }
         Returns: Json
@@ -2573,6 +2758,10 @@ export type Database = {
           producer: string
         }[]
       }
+      set_bbr_import_effective_date: {
+        Args: { p_effective_date: string; p_import_id: string }
+        Returns: Json
+      }
       set_cellartracker_product_resolution: {
         Args: {
           p_import_id: string
@@ -2605,6 +2794,7 @@ export type Database = {
       show_trgm: { Args: { "": string }; Returns: string[] }
       stage_bbr_import: {
         Args: {
+          p_allow_duplicate?: boolean
           p_byte_size: number
           p_content_checksum: string
           p_import_id: string
@@ -2692,12 +2882,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2721,11 +2911,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2746,11 +2936,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2771,11 +2961,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2788,11 +2978,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2802,6 +2992,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
