@@ -49,6 +49,21 @@ jobs:
       - name: Test database permissions and import behaviour
         run: supabase test db
 
+      # pgTAP runs in one session, so the rules that only bind across
+      # transactions -- one nomination, no historical snapshot dated after it --
+      # are asserted by a two-session harness against this local database.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install the concurrency harness dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Test concurrent BBR snapshot acceptance
+        run: python -m pytest tests/test_bbr_acceptance_concurrency.py -q
+
       - name: Remove the local database
         if: always()
         run: supabase stop --no-backup

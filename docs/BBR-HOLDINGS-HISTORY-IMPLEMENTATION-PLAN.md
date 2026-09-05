@@ -676,12 +676,23 @@ are required. pgTAP asserts `has_function_privilege` for `anon` (false) and
 **Verification.** Extend the Slice 2 pgTAP file with every refusal path,
 matching and conflicting re-acceptance, and the completeness invariant against
 an import staged before Slice 3. **Concurrency is verified separately**: pgTAP
-runs in one session and cannot prove that two simultaneous current acceptances
-cannot both win. A two-session harness — two `psql` connections against the
-local database, one holding a transaction open while the other attempts the
-same acceptance — asserts that exactly one commits and the other fails on the
-partial unique index. It runs locally or on an isolated copy, never against
-production (§6).
+runs in one session and cannot prove that two simultaneous acceptances cannot
+both win. A two-session harness — `tests/test_bbr_acceptance_concurrency.py`,
+two connections against the local database, one holding a transaction open
+while the other attempts an acceptance — asserts that the second waits, then
+sees the chronology the first committed. It covers current against current,
+current against a later-dated historical, and historical against current with
+no nomination in place, and ends every case on the two invariants: at most one
+nomination, and no historical snapshot dated after it. It runs locally or on an
+isolated copy, never against production (§6).
+
+The lock that does this is not the nomination row. `20260905140000` serialised
+acceptance by taking `FOR UPDATE` on the nominated current snapshot, which
+locks nothing when there is no nomination, and which the waiter finds no longer
+matching once the winner supersedes it — both paths let a historical snapshot
+commit dated after the current one. `20260905170000` replaces it with a single
+transaction-scoped advisory lock, taken by both roles before any chronology is
+read.
 
 **Rollback.** Drop the functions.
 
