@@ -5,6 +5,12 @@ import { acceptBbrImport } from "../actions";
 
 export const dynamic = "force-dynamic";
 
+// Slice 1 of the BBR holdings history plan: acceptance is paused before
+// Slice 2's migration adds effective-date and current/historical role to
+// acceptance, so no release ships a button the database will refuse.
+// Revert this one line once that migration is live.
+const BBR_ACCEPTANCE_FROZEN = true;
+
 type ImportRecord = {
   id: string;
   original_filename: string;
@@ -192,14 +198,32 @@ export default async function BbrImportPage({
               </p>
             </div>
             {importRecord.status === "validated" && (
-              <form action={acceptBbrImport.bind(null, importRecord.id)}>
-                <button
-                  type="submit"
-                  className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink"
-                >
-                  Accept this snapshot
-                </button>
-              </form>
+              BBR_ACCEPTANCE_FROZEN ? (
+                <div className="max-w-xs text-right">
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Accept this snapshot
+                  </button>
+                  <p className="mt-2 text-xs text-ink-muted">
+                    Acceptance is paused while snapshot dating is added.
+                    Soon you&apos;ll set an effective date and mark each
+                    snapshot as the current holding or a historical one
+                    before accepting.
+                  </p>
+                </div>
+              ) : (
+                <form action={acceptBbrImport.bind(null, importRecord.id)}>
+                  <button
+                    type="submit"
+                    className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink"
+                  >
+                    Accept this snapshot
+                  </button>
+                </form>
+              )
             )}
           </div>
         </section>
