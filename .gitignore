@@ -19,3 +19,6 @@ __pycache__/
 
 # Node (root-hoisted deps + tool caches; apps/web has its own .gitignore too)
 node_modules/
+
+# Private source exports — contain personal ownership data, never commit
+/BBR Holdings Imports/

@@ -1,10 +1,11 @@
 import { parse } from "csv-parse/sync";
 
-export const BBR_PARSER_VERSION = "bbr-v1";
+export const BBR_PARSER_VERSION = "bbr-v2";
 export const BBR_MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const BBR_MAX_ROWS = 10_000;
 
-export const BBR_HEADERS = [
+// Present on every recovered export, from the 2025-05-21 file onward.
+export const BBR_REQUIRED_HEADERS = [
   "Parent ID",
   "Product Code(s)",
   "Country",
@@ -13,8 +14,6 @@ export const BBR_HEADERS = [
   "Description",
   "Colour",
   "Maturity",
-  "Drinking Window (From)",
-  "Drinking Window (To)",
   "Bottle Format",
   "Bottle Volume",
   "Quantity in Bottles",
@@ -31,8 +30,22 @@ export const BBR_HEADERS = [
   "Account Payer",
   "Beneficial Owner",
   "Current Status",
+] as const;
+
+// Added by BBR after 2025-05-21, or never populated. Parsed into typed
+// columns and stored when present; left null on a file that omits them, so a
+// file's absence of one of these columns no longer fails the whole import.
+// See docs/IMPORT-SOURCE-PROFILES.md, "BBR recovered historical exports".
+export const BBR_OPTIONAL_HEADERS = [
+  "Drinking Window (From)",
+  "Drinking Window (To)",
   "Alcohol Content",
   "Purchase date / warehouse goods in date",
+] as const;
+
+export const BBR_HEADERS = [
+  ...BBR_REQUIRED_HEADERS,
+  ...BBR_OPTIONAL_HEADERS,
 ] as const;
 
 export type BbrRawRow = Record<string, string>;
@@ -146,8 +159,11 @@ function parseMoneyPence(
     return null;
   }
   const cleaned = text.replace(/^£/, "").replaceAll(",", "");
-  if (!/^\d+(?:\.\d{1,2})?$/.test(cleaned)) {
-    errors.push(`${field} must be a non-negative GBP amount with at most two decimals.`);
+  // Excess decimal places (a floating-point artifact seen in older exports,
+  // e.g. "109.97999999999999") are rounded rather than rejected, matching
+  // cellartrackerParser.ts's price().
+  if (!/^\d+(?:\.\d+)?$/.test(cleaned)) {
+    errors.push(`${field} must be a non-negative GBP amount.`);
     return null;
   }
   const pence = Math.round(Number(cleaned) * 100);
@@ -184,9 +200,10 @@ function parseBottleVolumeMl(
 
 function parseEligibility(value: unknown, errors: string[]): boolean | null {
   const text = trimmed(value).toUpperCase();
-  if (text === "YES") return true;
-  if (text === "NO") return false;
-  errors.push("Eligible for Sale on BBX must be YES or NO.");
+  // Older BBR exports used Y/N; the current export spells it out as YES/NO.
+  if (text === "YES" || text === "Y") return true;
+  if (text === "NO" || text === "N") return false;
+  errors.push("Eligible for Sale on BBX must be YES, NO, Y or N.");
   return null;
 }
 
@@ -328,14 +345,24 @@ function parseSourceRow(raw: BbrRawRow, sourceRowNumber: number): ParsedBbrRow {
   };
 }
 
-export function parseBbrCsv(csvText: string): ParsedBbrRow[] {
+export type BbrParsedRows = ParsedBbrRow[] & {
+  /**
+   * Trailing rows dropped because their column count didn't match the
+   * header (e.g. BBR's end-of-file terms disclaimer on older exports). A
+   * short/ragged row anywhere else in the file is left in place and fails
+   * its own required-field validation as before.
+   */
+  droppedTrailingRowCount: number;
+};
+
+export function parseBbrCsv(csvText: string): BbrParsedRows {
   let records: string[][];
   try {
     records = parse(csvText, {
       bom: true,
       columns: false,
       skip_empty_lines: true,
-      relax_column_count: false,
+      relax_column_count: true,
     }) as string[][];
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown CSV error";
@@ -358,14 +385,27 @@ export function parseBbrCsv(csvText: string): ParsedBbrRow[] {
     );
   }
 
-  const missingHeaders = BBR_HEADERS.filter((header) => !headers.includes(header));
+  const missingHeaders = BBR_REQUIRED_HEADERS.filter((header) => !headers.includes(header));
   if (missingHeaders.length > 0) {
     throw new BbrFileError(
       `The BBR CSV is missing required header(s): ${missingHeaders.join(", ")}.`,
     );
   }
 
-  const dataRows = records.slice(1);
+  let dataRows = records.slice(1);
+  let droppedTrailingRowCount = 0;
+  while (
+    dataRows.length > 0
+    && dataRows[dataRows.length - 1].length !== headers.length
+  ) {
+    dataRows = dataRows.slice(0, -1);
+    droppedTrailingRowCount += 1;
+  }
+
+  if (dataRows.length === 0) {
+    throw new BbrFileError("The BBR CSV must contain a header and at least one data row.");
+  }
+
   if (dataRows.length > BBR_MAX_ROWS) {
     throw new BbrFileError(`The BBR CSV exceeds the ${BBR_MAX_ROWS.toLocaleString()} row limit.`);
   }
@@ -396,7 +436,7 @@ export function parseBbrCsv(csvText: string): ParsedBbrRow[] {
   for (const row of result) {
     if (row.validation_errors.length > 0) row.match_status = "invalid";
   }
-  return result;
+  return Object.assign(result, { droppedTrailingRowCount });
 }
 
 export function matchBbrRows(

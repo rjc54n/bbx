@@ -37,6 +37,109 @@ not replace the catalogue scan or create holding movements. `Account Payer`
 and `Beneficial Owner` are personal fields and must never enter logs, public
 views or synthetic fixtures.
 
+## BBR recovered historical exports (Slice 0)
+
+**Profile date:** 2026-09-05. Inputs: two recovered `my-cellar-view-*.csv`
+exports, dated in the filename, supplied by the owner and never searched for.
+Neither file was added to Git; both are covered by a new `.gitignore` entry.
+No `Account Payer` or `Beneficial Owner` value appears anywhere below.
+
+| File | SHA-256 | Data rows | Header count |
+|---|---|---:|---:|
+| `my-cellar-view-2025-05-21.csv` (historic) | `6b1c9a878a992159bf795c7523c731ae871df954f86c0bba1700f546d1c23e80` | 130 | 30 |
+| `my-cellar-view-2026-09-05.csv` (current) | `a44d39d578570ab50b9a4d27eb5406509a7109ef84737327a43dfda654121596` | 121 | 28 |
+
+**1. Header sets.** The current file's 28 headers match `BBR_HEADERS` exactly,
+so `parseBbrCsv` accepts it as-is. The historic file does not: it is missing
+four headers the parser requires —
+`Drinking Window (From)`, `Drinking Window (To)`, `Alcohol Content`,
+`Purchase date / warehouse goods in date` — and carries six the parser does
+not know about — `Pending Sale Case Quantity on BBX`, `Provenance`,
+`Bottle Condition`, `Packaging Condition`, `Wine Condition`, `Own Goods?`.
+`parseBbrCsv` rejects it outright with a missing-headers `BbrFileError`
+before any row is parsed. **The header contract does differ, so Slice 0b is
+required**: split `BBR_HEADERS` into required and optional names, accept the
+historic file's narrower set, and bump `BBR_PARSER_VERSION` to `bbr-v2`.
+
+Two different fates apply to the four headers missing from the historic file.
+`Drinking Window (From)`, `Drinking Window (To)` and `Alcohol Content` are
+columns BBR has added since 2025-05-21, and the current parser already parses
+them into typed columns (`drinking_window_from`, `drinking_window_to`,
+`alcohol_percent`). Slice 0b should make these **optional-but-typed**: parsed
+and stored exactly as today when the column is present, left `null` when it
+is not — not demoted to `raw_row`-only, since they are the kind of BBR-added
+field worth capturing going forward as coverage improves. `Purchase date /
+warehouse goods in date` stays untyped per finding 5 and the second review.
+The six columns present only in the historic file (`Pending Sale Case
+Quantity on BBX`, `Provenance`, `Bottle Condition`, `Packaging Condition`,
+`Wine Condition`, `Own Goods?`) are the reverse case — BBR has since dropped
+them — and Slice 0b should decide whether any is worth an optional typed
+field or all stay in `raw_row` only.
+
+**2. Repeated `(Parent ID, derived format)` rows.** Replicating the parser's
+own `Case Size` + `Bottle Volume` derivation, **zero repeats** were found in
+either file. Every row is unique at that grain. This is a two-file sample —
+one current, one seven-quarters-old — so it is thin evidence for a
+never-changing invariant, but it is what was recoverable, and the plan does
+not set a minimum sample size for this decision. **D10 branch selected: no
+repeats.** Keep the existing parser rejection of a repeated position, add
+`UNIQUE (import_id, parent_sku, format_code)` in Slice 3, and treat
+observation grain as equal to evidence grain. Slices 3, 7 and 9 should be
+written against this branch. If a wider set of historic exports later turns
+up a repeat, that is a design change to re-open, not a bug in these two
+files.
+
+**3. Same-day exports.** None. The two files are almost 16 months apart; no
+pair in this sample shares an effective date, so D2's one-snapshot-per-date
+rule is not exercised here and remains untested against a real same-day
+pair.
+
+**4. Byte-identical pairs.** None — the files differ in size (30,889 vs
+33,759 bytes), row count and header set, and their SHA-256 digests differ.
+The D9 duplicate-file case remains unobserved in this sample.
+
+**5. `Purchase date / warehouse goods in date`.** Absent from the historic
+file (not one of its 30 headers). Present in the current file but blank on
+all 121 rows. Confirms the second review's basis for keeping this column out
+of typed evidence in this version.
+
+**6. Row counts and end-to-end outcome.** Historic file: 130 data rows,
+rejected at the header-check stage — no row reaches duplicate detection or
+catalogue matching. Current file: 121 data rows, passes the header check,
+zero rows are marked `invalid` by the repeat check (finding 2), so all 121
+proceed to catalogue matching (not exercised here, since Slice 0 touches no
+database).
+
+**Conclusion.** The parser needs a changed header contract (Slice 0b, exact
+scope above) before Slice 2 can proceed. D10 is decided: no-repeats branch.
+Findings 3 and 4 are inconclusive on this two-file sample and are not gating.
+
+**Slice 0b implementation, 2026-09-05.** Running the parser against both real
+files (not just fixtures) surfaced two more differences the header/row-count
+scan above did not, both now fixed in `bbrParser.ts` (`BBR_PARSER_VERSION`
+bumped to `bbr-v2`):
+
+- The historic file ends with one physical line that is not a data row — a
+  BBR terms-of-service disclaimer with 2 fields instead of 30 — which made
+  `csv-parse` throw before header validation even ran. The parser now allows
+  a ragged column count and drops trailing rows whose length doesn't match
+  the header, recording the count on the parser's return value
+  (`droppedTrailingRowCount`); a short/ragged row anywhere other than the
+  end of the file still fails that row's validation as before, unchanged.
+- 127 of the historic file's 129 real rows use `Y`/`N` for
+  **Eligible for Sale on BBX** rather than `YES`/`NO`. Owner-confirmed this
+  field distinguishes in-bond BBR-warehouse stock (listable) from stock held
+  elsewhere, and `Y`/`N` is the same two-state fact as BBR's older export
+  spelling — `parseEligibility` now accepts both forms.
+- One row's `Purchase Price per Case` carried excess floating-point
+  precision (`109.97999999999999`). `parseMoneyPence` now accepts any
+  decimal precision and rounds to the nearest penny, matching the existing
+  convention in `cellartrackerParser.ts`'s `price()`, rather than rejecting
+  anything past two decimals.
+
+Both recovered files now parse end to end with zero row-level validation
+errors.
+
 ## CellarTracker My Cellar summary
 
 Source: `My Cellar.csv`

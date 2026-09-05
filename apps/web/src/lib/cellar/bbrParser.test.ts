@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BBR_HEADERS,
+  BBR_OPTIONAL_HEADERS,
   BbrFileError,
   matchBbrRows,
   parseBbrCsv,
@@ -114,12 +115,26 @@ describe("parseBbrCsv", () => {
 
     expect(row.match_status).toBe("invalid");
     expect(row.validation_errors).toContain(
-      "Purchase Price per Case must be a non-negative GBP amount with at most two decimals.",
+      "Purchase Price per Case must be a non-negative GBP amount.",
     );
     expect(row.validation_errors).toContain(
       "Drinking Window (From) cannot be later than Drinking Window (To).",
     );
     expect(row.raw_row["Purchase Price per Case"]).toBe("not money");
+  });
+
+  it("accepts a file missing optional headers, leaving those fields null", () => {
+    const headers = BBR_HEADERS.filter(
+      (header) => !(BBR_OPTIONAL_HEADERS as readonly string[]).includes(header),
+    );
+
+    const [row] = parseBbrCsv(makeCsv([validRow()], headers));
+
+    expect(row.validation_errors).toEqual([]);
+    expect(row.drinking_window_from).toBeNull();
+    expect(row.drinking_window_to).toBeNull();
+    expect(row.alcohol_percent).toBeNull();
+    expect(row.raw_row["Drinking Window (From)"]).toBeUndefined();
   });
 
   it("marks a repeated product and format as invalid", () => {

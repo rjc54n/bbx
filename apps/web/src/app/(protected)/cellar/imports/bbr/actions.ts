@@ -132,6 +132,12 @@ export async function processBbrUpload(input: {
     if (error instanceof BbrFileError) return { error: error.message };
     return { error: "The BBR CSV could not be parsed." };
   }
+  if (parsedRows.droppedTrailingRowCount > 0) {
+    // Not yet surfaced to the owner in the UI — see the parseBbrCsv doc comment.
+    console.warn(
+      `BBR import ${input.importId}: dropped ${parsedRows.droppedTrailingRowCount} trailing row(s) with a mismatched column count.`,
+    );
+  }
 
   const parentIds = [...new Set(
     parsedRows
