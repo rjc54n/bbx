@@ -6,7 +6,9 @@
 --     source;
 --   * the recreated release_offer_match_review_view drops excluded rows from
 --     its counts, the way cellartracker_match_review_view already does (§2.4);
---   * last_run_status / last_error_at / top_match_score reach both branches;
+--   * last_run_status / last_error_at / top_match_score reach both branches,
+--     as do the triage columns second_wine_conflict / token_coverage /
+--     coverage_tier;
 --   * wine_match_queue_summary(p_source) returns exact bucket counts equal to a
 --     direct count over the view, and is scoped by source;
 --   * anon cannot read the views or execute the function; a non-owner
@@ -25,7 +27,7 @@
 --                  2022|ct gamma excluded -> group disappears
 
 BEGIN;
-SELECT plan(56);
+SELECT plan(62);
 
 INSERT INTO auth.users (id) VALUES
     ('11111111-1111-1111-1111-111111111111'),
@@ -160,7 +162,13 @@ SELECT columns_are(
         'source', 'match_group_key', 'wine_ref', 'parent_sku', 'match_method',
         'source_wine', 'source_vintage', 'source_row_count', 'unresolved_row_count',
         'linked_row_count', 'suppressed_row_count', 'is_bbx_eligible', 'suggestion_count',
-        'top_match_score', 'suggestions_observed_at', 'last_run_status', 'last_error_at'
+        'top_match_score', 'suggestions_observed_at', 'last_run_status', 'last_error_at',
+        -- Triage columns, appended to both branches by 20260903170000 (the
+        -- second-wine flag) and 20260903180000 (the coverage metric and its
+        -- tier). Part of the common projection: each is computed the same way
+        -- on both per-source review views and carried through both arms of the
+        -- union, so the /matches list reads them without knowing the source.
+        'second_wine_conflict', 'token_coverage', 'coverage_tier'
     ],
     'wine_match_review_view exposes exactly the common review projection'
 );
@@ -180,6 +188,18 @@ SELECT col_type_is('public', 'release_offer_match_review_view', 'top_match_score
 SELECT col_type_is('public', 'cellartracker_match_review_view', 'last_run_status', 'text', 'cellartracker branch: last_run_status is text');
 SELECT col_type_is('public', 'cellartracker_match_review_view', 'last_error_at', 'timestamp with time zone', 'cellartracker branch: last_error_at is timestamptz');
 SELECT col_type_is('public', 'cellartracker_match_review_view', 'top_match_score', 'numeric', 'cellartracker branch: top_match_score is numeric');
+
+-- The triage columns likewise. token_coverage is double precision, not numeric:
+-- it is a ratio built with an explicit ::DOUBLE PRECISION cast (20260903210000),
+-- unlike top_match_score, which is a stored numeric score. Both branches must
+-- agree or the UNION ALL would coerce one arm and the tier filters would read a
+-- different type per source.
+SELECT col_type_is('public', 'release_offer_match_review_view', 'second_wine_conflict', 'boolean', 'release-offer branch: second_wine_conflict is boolean');
+SELECT col_type_is('public', 'release_offer_match_review_view', 'token_coverage', 'double precision', 'release-offer branch: token_coverage is double precision');
+SELECT col_type_is('public', 'release_offer_match_review_view', 'coverage_tier', 'text', 'release-offer branch: coverage_tier is text');
+SELECT col_type_is('public', 'cellartracker_match_review_view', 'second_wine_conflict', 'boolean', 'cellartracker branch: second_wine_conflict is boolean');
+SELECT col_type_is('public', 'cellartracker_match_review_view', 'token_coverage', 'double precision', 'cellartracker branch: token_coverage is double precision');
+SELECT col_type_is('public', 'cellartracker_match_review_view', 'coverage_tier', 'text', 'cellartracker branch: coverage_tier is text');
 
 SELECT col_type_is('public', 'wine_match_review_view', 'source', 'text', 'union: source is text');
 SELECT col_type_is('public', 'wine_match_review_view', 'wine_ref', 'text', 'union: wine_ref is text');
