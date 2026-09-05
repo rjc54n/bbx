@@ -1,7 +1,7 @@
 # BBR holdings history: functional specification
 
-**Status:** draft for review, 31 August 2026. Product behaviour agreed; no
-technical design or implementation started.
+**Status:** draft for review, 31 August 2026; §4.5 amended 5 September 2026.
+Product behaviour agreed; no technical design or implementation started.
 **Scope:** BBR holdings imports and the owner-only My BBR Cellar experience.
 **Companion documents:**
 [`BBR-HOLDINGS-HISTORY-EPIC.md`](BBR-HOLDINGS-HISTORY-EPIC.md) and
@@ -145,9 +145,27 @@ consumption events.
 
 ### 4.5 Duplicate files
 
-An exact checksum and parser-version repeat returns the existing immutable
-import. It does not create another observation date. If the existing import's
-effective date is wrong, the correction path applies.
+**Amended 5 September 2026** on the recommendation of
+[`BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-SECOND-REVIEW.md`](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-SECOND-REVIEW.md).
+The superseded rule is preserved at the end of this section.
+
+An exact checksum and parser-version repeat is detected and reported, but the
+detection is advisory. Opening the existing immutable import remains the
+default action. The owner may instead record the same bytes as a separate
+snapshot with its own effective date.
+
+A byte-identical export downloaded on a later date is a valid observation that
+the position was still held at that later date. Correctness must not depend on
+market-price columns happening to differ between two downloads, because those
+columns are incidental to the ownership fact being recorded.
+
+Effective-date uniqueness (§4.3) remains the invariant that prevents two
+accepted observations of the same day. If the existing import's effective date
+is wrong, the correction path applies.
+
+Superseded rule, replaced by the above: "An exact checksum and parser-version
+repeat returns the existing immutable import. It does not create another
+observation date."
 
 ### 4.6 Date correction
 

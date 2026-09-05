@@ -39,19 +39,23 @@ against the current migrations/code for anything load-bearing.
   former holding history.
 - [BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md](BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md)
   — agreed product behaviour for effective dates, current authority,
-  consolidated positions and reported purchase-price history.
+  consolidated positions and reported purchase-price history. §4.5 (duplicate
+  files) was amended 5 September 2026; the superseded rule is kept in place.
 - [BBR-HOLDINGS-HISTORY-ENGINEERING-VIEW.md](BBR-HOLDINGS-HISTORY-ENGINEERING-VIEW.md)
   — initial engineering constraints and technical-design questions; not a
   schema or implementation plan.
 - [BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md)
   — storage shape, answers to the engineering view's technical questions, and
-  twelve independently deployable slices. Revision 2, rewritten in response to
-  the review below; no code written. One open product question (spec §4.5 on
-  duplicate files) blocks the acceptance RPCs.
+  twelve independently deployable slices. Revision 3, rewritten against the
+  second review below; no code written. Slice 0 (inspecting the recovered
+  exports) can start; everything after it waits on what Slice 0 measures.
 - [BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-REVIEW.md](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-REVIEW.md)
-  is an external review of the implementation plan (3 September 2026), identifying
-  four correctness and deployment blockers before implementation. Answered
-  point by point in §8 of the plan.
+  — first external review of the plan (3 September 2026): four correctness and
+  deployment blockers. Answered point by point in §8 of the plan.
+- [BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-SECOND-REVIEW.md](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-SECOND-REVIEW.md)
+  is the second release-gate review (5 September 2026). It records the remaining
+  data-integrity blockers, recommended product decisions and strict limits on
+  production verification workloads. Answered in §9 of the plan.
 - [CELLARTRACKER-IMPLEMENTATION.md](CELLARTRACKER-IMPLEMENTATION.md) —
   CellarTracker import, matching and comparison. Explicitly says its
   deployment statements are dated observations to be checked against the
