@@ -3,6 +3,10 @@
 **Status:** BBR and CellarTracker snapshot imports, owner cellar views and
 whole-dataset catalogue matching implemented; CellarTracker schema deployed on
 2026-07-29
+**Later BBR authority:** the BBR current-state model in this document was
+superseded on 5 September 2026 by
+`BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md`. The CellarTracker sections remain
+the implemented-feature record.
 **Decision authority:** `ADR-001-single-owner-application.md`
 **Sources:** BBR current holdings CSV and CellarTracker My Cellar summary
 **Source contracts:** `IMPORT-SOURCE-PROFILES.md`

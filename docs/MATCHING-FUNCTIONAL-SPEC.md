@@ -1,6 +1,7 @@
 # Wine matching, Part A: unified surface
 
-**Status:** in implementation.
+**Status:** Part A complete on `main` as of 1 September 2026. Part B remains a
+separate, deferred design in `MATCHING-RECONCILIATION-SPEC.md`.
 Slice 1 (union views, summary function, exclusion fix) shipped to production
 31 Aug 2026 — migration `20260831120000_wine_match_unified_surface.sql`, pgTAP
 `wine_match_unified_surface.test.sql` (53 assertions).

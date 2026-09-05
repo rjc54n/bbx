@@ -1,7 +1,9 @@
 # BBR holdings history: initial engineering view
 
-**Status:** initial view for technical-design planning, 31 August 2026. This is
-not a schema, migration or implementation plan.
+**Status:** historical pre-implementation view, 31 August 2026. Its questions
+were answered by the implementation plan and Slices 0–8, implemented on
+`main` by 5 September 2026 (`f2702bd`). This document remains useful for the
+constraints and reasoning; it is not the current implementation status.
 **Product authority:**
 [`BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md`](BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md).
 

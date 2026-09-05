@@ -1,7 +1,9 @@
 # BBR holdings history: epic and user stories
 
-**Status:** draft for review, 31 August 2026. Product decisions agreed; no
-technical design or implementation started.
+**Status:** initial feature implemented on `main` through Slice 8 on 5
+September 2026 (`f2702bd`). The all-owned cellar and historical snapshot
+acceptance are included. Position timelines and post-acceptance date correction
+are deferred; see the implementation plan's close-out amendment.
 **Owner:** application owner.
 **Related documents:**
 [`BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md`](BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md),

@@ -1,7 +1,8 @@
 # Phase 8 — Scenario query engine
 
-**Status:** plan, not yet started. Supersedes nothing; extends the saved
-scenarios feature shipped in
+**Status:** partly implemented. Phase 0 and Phase 1 are on `main`; Phase 2a is
+the next unbuilt phase and is not scheduled. This plan extends the saved
+scenarios feature implemented in
 `supabase/migrations/20260817150000_saved_scenarios.sql` and
 `apps/web/src/app/(protected)/scenarios/`.
 

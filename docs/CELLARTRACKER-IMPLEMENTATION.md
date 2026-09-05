@@ -8,7 +8,7 @@ and must be checked against the linked migration ledger before release.
 ## Source and snapshot model
 
 CellarTracker is the fourth private dataset. It complements the biddable
-catalogue, the canonical BBR-held snapshot and historic release-offer prices.
+catalogue, BBR holdings history and historic release-offer prices.
 
 The importer reads the documented 25-column My Cellar CSV as Windows-1252. It
 stores the private source object, immutable raw staging rows, parser version

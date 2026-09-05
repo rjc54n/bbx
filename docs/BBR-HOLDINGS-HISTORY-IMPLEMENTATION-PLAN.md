@@ -1,9 +1,10 @@
 # BBR holdings history: implementation plan
 
-**Status:** revision 3, 5 September 2026, revised against
+**Status:** initial feature implemented on `main` through Slice 8 on 5
+September 2026 (`f2702bd`). Slices 9 and 10 are deferred; Slice 11 was removed
+and its checks folded into the Slice 8 release sequence. Deployment was not
+reverified for this status update. Revision 3 was reviewed against
 [`BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-SECOND-REVIEW.md`](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-SECOND-REVIEW.md).
-Every hand-off gate condition in that review is met. No code or migration
-written; nothing applied to any database.
 
 Revision 1 (3 September) was the first plan; revision 2 answered the first
 review. Revision 3 answers the second: three blocking findings and four
@@ -19,11 +20,11 @@ whose §4.5 was amended on 5 September 2026 as this review required.
 **Stories and acceptance criteria:**
 [`BBR-HOLDINGS-HISTORY-EPIC.md`](BBR-HOLDINGS-HISTORY-EPIC.md).
 
-**Hand-off state:** Slice 0 may start now. Everything after it is blocked on
-Slice 0's measurements, which decide the position grain (D10) and the parser
-header contract.
+**Hand-off state:** close-out complete in the repository. No further slice is
+scheduled. The remaining capabilities are deferred as described below.
 
-**Close-out amendment, 5 September 2026.** Slices 0–7 shipped. On owner
+**Close-out amendment, 5 September 2026.** Slices 0–8 were implemented on
+`main`. On owner
 direction Slice 8 became the **close-out slice for the initial feature**: it
 delivers the all-owned cellar, the current/former presentation, first- and
 last-seen dates, the reported-price range and the selectable `historical`
@@ -801,7 +802,7 @@ appear in no fixture and no view (spec §10).
 
 #### Slice 8 — historical acceptance and the all-owned cellar (app) — **close-out slice**
 
-> **As shipped (5 September 2026).** `historicalPreview(...)` was *not* built —
+> **As implemented (5 September 2026).** `historicalPreview(...)` was not built.
 > historical acceptance instead shows a plain statement that the import adds
 > dated evidence for its effective date and changes no current position or
 > quantity, alongside the file's parsed rows and unresolved-position list that
@@ -1044,7 +1045,10 @@ constraints being written so they cannot affect it.
 
 ---
 
-## 8. Hand-off state
+## 8. Revision 3 hand-off gate
+
+This section records the gate before implementation began. Every condition was
+satisfied before Slices 1 to 8 were implemented.
 
 Against the second review's gate:
 
@@ -1052,14 +1056,13 @@ Against the second review's gate:
 |---|---|
 | Evidence coverage moved before acceptance restoration | Done — Slice 3 precedes Slice 6, plus the completeness invariant in Slice 4 (D6) |
 | Current withdrawal removed | Done — removed from D5 and Slice 4; `unknown` membership retained for a never-nominated database |
-| Recovered exports checked for repeated Parent ID and format rows | **Outstanding — this is Slice 0**, and D10 pre-commits both design branches |
+| Recovered exports checked for repeated Parent ID and format rows | Done in Slice 0; no-repeats branch selected |
 | Duplicate-file behaviour amended and recorded | Done — functional spec §4.5 amended 5 September 2026; D9 follows it |
 | Legacy backfill and function privileges explicit | Done — Slice 2 step 2, Slice 4 privileges, §5 |
 | Testing plan contains the production limits | Done — §6 |
 
-Slice 0 may start now. Slices 1 onward start when Slice 0 has reported, since
-its second measurement selects the D10 branch that Slices 3, 7 and 9 are
-written against.
+Slice 0 selected the no-repeats D10 branch and the changed-header contract.
+Slice 0b updated the parser before the remaining slices proceeded.
 
 ---
 

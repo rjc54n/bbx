@@ -55,9 +55,9 @@ bbx/
     payload.json           # GraphQL payload template
   tests/                   # pytest unit tests (dedup, discount maths, sharding)
   docs/
-    ROADMAP-2026-07.md               # current product roadmap
+    ROADMAP-2026-07.md               # dated product roadmap and rationale
     CELLARTRACKER-IMPLEMENTATION.md  # fourth dataset implementation
-    CODEBASE-REVIEW-2026-07-31.md    # current defects and maintenance order
+    CODEBASE-REVIEW-2026-07-31.md    # dated defects and maintenance review
   supabase/
     migrations/                      # deployed database schema history
     tests/                           # database access and behaviour tests

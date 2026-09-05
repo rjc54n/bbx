@@ -1,8 +1,11 @@
 # Canonical wine record — `wine_ref` + owner facts
 
-Status: draft for review. No code yet. This spec turns the implicit "one wine,
-known-or-not" idea that already runs through favourites into an explicit,
-buildable model, and shows how four requested features hang off it:
+Status: partly implemented. CellarTracker search, the Parent-SKU wine card,
+owner release anchors and saved scenarios are implemented on `main`. The
+source-neutral `wine_locals` identity and `/wine/local/{id}` route remain
+deferred. The BBR-only ownership route amendment was implemented through the
+BBR holdings-history work on 5 September 2026. This spec records how the four
+requested features hang off the model:
 
 1. Search the CellarTracker tab.
 2. Catalogue rows click into a consolidated wine card, not out to BBR.

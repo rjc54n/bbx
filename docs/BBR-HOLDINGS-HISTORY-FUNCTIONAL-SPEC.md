@@ -1,8 +1,9 @@
 # BBR holdings history: functional specification
 
-**Status:** draft for review, 31 August 2026; §4.5 amended 5 September 2026.
-Slices 0–8 implemented and deployed 5 September 2026 (see the implementation
-plan's close-out amendment). §4.6 (post-acceptance date correction) and §7.3
+**Status:** product behaviour agreed; Slices 0–8 implemented on `main` by 5
+September 2026 (`f2702bd`). Deployment was not reverified for this status
+update. See the implementation plan's close-out amendment. §4.6
+(post-acceptance date correction) and §7.3
 (position history / episode grouping) are **deferred capabilities**, not gaps
 in the shipped feature — notes inline below. §7.1's summary-figure behaviour
 was clarified by the owner on 5 September 2026, also noted inline.

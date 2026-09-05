@@ -1,6 +1,7 @@
 # Import source profiles
 
-**Profile date:** 2026-07-31
+**Original profile date:** 2026-07-31
+**Last verified:** 2026-09-05
 **Data handling:** source files are private and remain outside Git
 
 This document records the contracts observed in the three representative CSV

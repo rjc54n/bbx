@@ -8,6 +8,9 @@ means checking against current code, not just the doc.
 
 ## Start here
 
+- [DOCUMENTATION-AUDIT-2026-09-05.md](DOCUMENTATION-AUDIT-2026-09-05.md):
+  repository-wide audit of all tracked Markdown: current authority, stale
+  status claims, historical records and the product decisions that remain.
 - [`../README.md`](../README.md) — project overview, the scan pipeline, repo
   layout, configuration and running instructions.
 - [`../apps/web/README.md`](../apps/web/README.md) — Next.js/Supabase app:
@@ -27,16 +30,17 @@ against the current migrations/code for anything load-bearing.
   — accepted decision record: this is a single-owner application, not
   multi-tenant.
 - [WINE-RECORD-SPEC.md](WINE-RECORD-SPEC.md) — canonical wine record
-  (`wine_ref` + owner facts) design. Marked "draft for review, no code yet"
-  at last edit — confirm current status before relying on it.
+  (`wine_ref` + owner facts) design. The Parent-SKU wine card, CellarTracker
+  search, owner release anchors and saved scenarios are implemented;
+  source-neutral `wine_locals` identity remains deferred.
 - [FAVOURITES-SPEC.md](FAVOURITES-SPEC.md) — favourites functional spec.
   Marked "built and pushed" with the landing commits listed.
 - [IMPORT-SOURCE-PROFILES.md](IMPORT-SOURCE-PROFILES.md) — observed CSV
   contracts for the BBR and CellarTracker import sources (source files
   themselves are private and stay outside git).
-- [BBR-HOLDINGS-HISTORY-EPIC.md](BBR-HOLDINGS-HISTORY-EPIC.md) — draft epic
-  and user stories for turning dated complete BBR snapshots into current and
-  former holding history.
+- [BBR-HOLDINGS-HISTORY-EPIC.md](BBR-HOLDINGS-HISTORY-EPIC.md): epic and user
+  stories for the BBR history feature implemented through its Slice 8
+  close-out on 5 September 2026.
 - [BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md](BBR-HOLDINGS-HISTORY-FUNCTIONAL-SPEC.md)
   — agreed product behaviour for effective dates, current authority,
   consolidated positions and reported purchase-price history. §4.5 (duplicate
@@ -45,10 +49,9 @@ against the current migrations/code for anything load-bearing.
   — initial engineering constraints and technical-design questions; not a
   schema or implementation plan.
 - [BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN.md)
-  — storage shape, answers to the engineering view's technical questions, and
-  twelve independently deployable slices. Revision 3, rewritten against the
-  second review below; no code written. Slice 0 (inspecting the recovered
-  exports) can start; everything after it waits on what Slice 0 measures.
+  provides the storage shape, decisions and implementation record. Slices 0
+  to 8 are on `main`; Slices 9 and 10 are deferred and Slice 11 was removed at
+  close-out.
 - [BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-REVIEW.md](BBR-HOLDINGS-HISTORY-IMPLEMENTATION-PLAN-REVIEW.md)
   — first external review of the plan (3 September 2026): four correctness and
   deployment blockers. Answered point by point in §8 of the plan.
@@ -74,8 +77,8 @@ against the current migrations/code for anything load-bearing.
   live migration ledger before release.
 - [MATCHING-FUNCTIONAL-SPEC.md](MATCHING-FUNCTIONAL-SPEC.md) — Part A:
   consolidating the two matching pages into one `/matches` surface.
-  Implementation plan, pending final review; no code yet. Revised twice
-  after the reviews below.
+  Complete on `main` as of 1 September 2026, including the shared components,
+  redirects and relabel sweep.
 - [MATCHING-RECONCILIATION-SPEC.md](MATCHING-RECONCILIATION-SPEC.md) —
   Part B: reacting when a wine gets a live ask (release-offer buy-side only).
   Design paper; two decisions (scope, latency target) gate the schema.
@@ -96,8 +99,8 @@ against the current migrations/code for anything load-bearing.
 ## Roadmap
 
 - [ROADMAP-2026-07.md](ROADMAP-2026-07.md) — product roadmap revised 31 July
-  2026, framed around the project's actual purpose (running a drinking
-  cellar; trading funds the drinking).
+  2026. It retains the product rationale but is no longer the current delivery
+  sequence. A new short roadmap waits on the next product-priority decision.
 
 ## Phase implementation history
 
@@ -130,7 +133,7 @@ open or still fixed without checking.
   and maintenance order as of 31 July 2026. See
   [CODEBASE-REVIEW-2026-07-31-RESPONSE.md](CODEBASE-REVIEW-2026-07-31-RESPONSE.md)
   for the 27 August 2026 check against current code: 2 of 14 items fixed, 12
-  still open.
+  still open at that date. This is not the current backlog count.
 - [INDEPENDENT-REVIEW-2026-08-20.md](INDEPENDENT-REVIEW-2026-08-20.md),
   [PERFORMANCE-REVIEW-2026-08-20.md](PERFORMANCE-REVIEW-2026-08-20.md),
   [REPOSITORY-HEALTH-2026-08-20.md](REPOSITORY-HEALTH-2026-08-20.md) — three
@@ -138,7 +141,8 @@ open or still fixed without checking.
   correctness, response-time, and repository health respectively).
 - [REVIEW-RESPONSE-2026-08-20.md](REVIEW-RESPONSE-2026-08-20.md) — the
   project's response to the three reviews above: what was accepted, what was
-  disputed, and the resulting work plan.
+  disputed, and the resulting work plan at that date. Several actions later
+  shipped; this is not the current backlog.
 - [DEPLOYMENT-INCIDENT-2026-08-27.md](DEPLOYMENT-INCIDENT-2026-08-27.md) —
   the catalogue-read-model deployment incident: root causes and the rules
   adopted from it (also folded into [`../AGENTS.md`](../AGENTS.md)).
