@@ -147,7 +147,7 @@ export default async function ReleaseOfferDetailPage({
           <div><dt className="text-xs uppercase text-ink-muted">Imported from</dt><dd>{importData.original_filename} · accepted {formatDate(importData.accepted_at)}</dd></div>
           <div className="sm:col-span-2"><dt className="text-xs uppercase text-ink-muted">Original price text</dt><dd className="whitespace-pre-wrap">{source.source_price_text}</dd></div>
           {source.source_product_id && <div><dt className="text-xs uppercase text-ink-muted">Supplied Parent ID</dt><dd>{source.source_product_id}</dd></div>}
-          {source.source_product_url && <div><dt className="text-xs uppercase text-ink-muted">Source product page</dt><dd><a className="text-accent underline-offset-2 hover:underline" href={source.source_product_url}>Open source page</a></dd></div>}
+          {source.source_product_url && <div><dt className="text-xs uppercase text-ink-muted">Captured source URL</dt><dd className="break-all font-mono text-xs">{source.source_product_url}</dd></div>}
           {source.source_message_id && <div><dt className="text-xs uppercase text-ink-muted">Source message ID</dt><dd className="break-all">{source.source_message_id}</dd></div>}
           {source.description && <div className="sm:col-span-2"><dt className="text-xs uppercase text-ink-muted">Description</dt><dd className="whitespace-pre-wrap">{source.description}</dd></div>}
           {source.tasting_notes && <div className="sm:col-span-2"><dt className="text-xs uppercase text-ink-muted">Tasting notes</dt><dd className="whitespace-pre-wrap">{source.tasting_notes}</dd></div>}

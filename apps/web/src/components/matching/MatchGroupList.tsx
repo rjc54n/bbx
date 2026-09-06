@@ -30,7 +30,6 @@ export type ReleaseOfferPanel = {
     source_row_number: number;
     offer_date: string | null;
     source_price_text: string | null;
-    source_product_url: string | null;
     tasting_notes: string | null;
     description: string | null;
   }>;
@@ -113,7 +112,6 @@ function ReleaseOfferPanelView({ panel }: { panel: ReleaseOfferPanel }) {
         {record.tasting_notes && <p className="whitespace-pre-wrap text-ink">{record.tasting_notes}</p>}
         {record.description && <p className="whitespace-pre-wrap text-ink-muted">{record.description}</p>}
         <p className="flex flex-wrap gap-3">
-          {record.source_product_url && <a href={record.source_product_url} target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">Source page ↗</a>}
           <Link href={`/release-prices/offers/${record.import_id}/${record.source_row_number}`} className="text-accent underline-offset-2 hover:underline">Open record</Link>
         </p>
       </div>)}

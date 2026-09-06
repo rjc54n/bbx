@@ -3,6 +3,7 @@ import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { formatDate } from "@/lib/format";
 import { acceptedOfferPageCount } from "@/lib/releaseOffers/reviewBrowser";
 import { Pagination } from "@/components/nav/Pagination";
+import { currentLocation, wineHref } from "@/lib/nav/origin";
 import {
   buildFavouriteState,
   isFavourited,
@@ -49,6 +50,10 @@ export function AcceptedOfferBrowser({
   const favourites = buildFavouriteState(favouriteParentSkus, pendingFavourites);
   const pageCount = acceptedOfferPageCount(totalRows);
   const resultLabel = search ? "matching offer records" : "offer records";
+  const listParams = new URLSearchParams();
+  if (search) listParams.set("q", search);
+  if (page > 1) listParams.set("page", String(page));
+  const from = currentLocation("/release-prices", listParams);
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <header className="border-b border-border bg-accent-soft px-5 py-4">
@@ -118,9 +123,9 @@ export function AcceptedOfferBrowser({
             <tr key={`${row.import_id}-${row.source_row_number}`} className="border-t border-border hover:bg-accent-soft/50">
               <td className="whitespace-nowrap px-3 py-2 align-top tabular-nums">{formatDate(row.offer_date)}</td>
               <td className="max-w-sm px-3 py-2 align-top">
-                <Link href={`/release-prices/offers/${row.import_id}/${row.source_row_number}`} className="font-medium text-accent underline-offset-2 hover:underline">
-                  {row.source_wine}
-                </Link>
+                {row.link_status === "linked" && row.parent_sku
+                  ? <Link href={wineHref(row.parent_sku, from)} className="font-medium text-accent underline-offset-2 hover:underline">{row.source_wine}</Link>
+                  : <Link href={`/release-prices/offers/${row.import_id}/${row.source_row_number}`} className="font-medium text-accent underline-offset-2 hover:underline">{row.source_wine}</Link>}
                 <p className="text-xs text-ink-muted">
                   {row.source_vintage ?? "Vintage unavailable"}
                   {row.source_product_id ? ` · supplied ${row.source_product_id}` : ""}
@@ -133,7 +138,7 @@ export function AcceptedOfferBrowser({
               </td>
               <td className="px-3 py-2 align-top">
                 {row.link_status === "linked"
-                  ? <>{row.parent_sku}<span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span></>
+                  ? <>{row.parent_sku}<span className="block text-xs text-ink-muted">{row.match_method?.replaceAll("_", " ")}</span><Link href={`/release-prices/offers/${row.import_id}/${row.source_row_number}`} className="block text-xs text-accent underline-offset-2 hover:underline">Open record</Link></>
                   : <span className="text-ink-muted">{row.link_status === "ignored" ? "No suitable match" : "Unlinked"}</span>}
               </td>
               <td className="px-3 py-2 text-center align-top">{(() => {

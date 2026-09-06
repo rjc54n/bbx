@@ -6,7 +6,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { currentLocation, wineHref } from "@/lib/nav/origin";
 import { formatDate, formatFormat, formatPence } from "@/lib/format";
-import { bbrProductUrl, wineSearcherUrl } from "@/lib/listingLinks";
 import type { CatalogueMetricField, PriceChangeSortField } from "@/lib/query/registry";
 import type { CatalogueRow, PriceChangeRow } from "@/lib/query/rows";
 import { SignedPct } from "./SignedPct";
@@ -35,25 +34,19 @@ export function withFormatAdjustedColumns<Row, SortField extends string>(
 
 function WineCell({
   name,
-  vintage,
   producer,
-  productUrl,
   parentSku,
 }: {
   name: string | null;
-  vintage: number | null;
   producer: string | null;
-  productUrl: string | null;
   parentSku: string | null;
 }) {
-  const bbrUrl = bbrProductUrl(productUrl);
-  const wineSearcher = wineSearcherUrl(name, vintage);
   // So the wine card can offer "Back to results" that returns to this exact
   // filtered/sorted/paged view rather than a reset catalogue.
   const from = currentLocation(usePathname(), useSearchParams());
 
-  // The name now opens the consolidated wine card; BBR and Wine-Searcher become
-  // secondary out-links rather than the primary click.
+  // The name opens the consolidated wine card, which owns the external BBR and
+  // Wine-Searcher actions.
   return (
     <div className="max-w-xs">
       <div className="font-medium text-ink">
@@ -64,18 +57,6 @@ function WineCell({
         ) : name ?? "–"}
       </div>
       <div className="text-xs text-ink-muted">{producer ?? "–"}</div>
-      <div className="mt-0.5 flex gap-3">
-        {bbrUrl && (
-          <a href={bbrUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
-            BBR ↗
-          </a>
-        )}
-        {wineSearcher && (
-          <a href={wineSearcher} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
-            Wine-Searcher ↗
-          </a>
-        )}
-      </div>
     </div>
   );
 }
@@ -127,7 +108,7 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     id: "wine",
     label: "Wine",
     align: "left",
-    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} parentSku={row.parent_sku} />,
+    render: (row) => <WineCell name={row.name} producer={row.producer} parentSku={row.parent_sku} />,
   },
   {
     id: "region",
@@ -246,7 +227,7 @@ export const PRICE_CHANGE_COLUMNS: Column<PriceChangeRow, PriceChangeSortField>[
     id: "wine",
     label: "Wine",
     align: "left",
-    render: (row) => <WineCell name={row.name} vintage={row.vintage} producer={row.producer} productUrl={row.product_url} parentSku={row.parent_sku} />,
+    render: (row) => <WineCell name={row.name} producer={row.producer} parentSku={row.parent_sku} />,
   },
   {
     id: "region",

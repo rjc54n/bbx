@@ -420,7 +420,6 @@ export default async function MatchesPage({
           source_row_number: record.source_row_number,
           offer_date: record.offer_date,
           source_price_text: record.source_price_text,
-          source_product_url: record.source_product_url,
           tasting_notes: record.tasting_notes,
           description: record.description,
         })),

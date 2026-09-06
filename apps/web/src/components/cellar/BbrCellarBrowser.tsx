@@ -5,7 +5,7 @@ import { type FormEvent, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FavouriteStar } from "@/components/favourites/FavouriteStar";
 import { formatDate, formatDateTime, formatFormat, formatPence, formatSignedPence } from "@/lib/format";
-import { bbrProductUrl } from "@/lib/listingLinks";
+import { currentLocation, wineHref } from "@/lib/nav/origin";
 import {
   askPremiumP,
   currentBottlesLabel,
@@ -119,6 +119,7 @@ export function BbrCellarBrowser({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const from = currentLocation(pathname, searchParams);
   const favourites = useMemo(() => new Set(favouriteParentSkus), [favouriteParentSkus]);
   const query = useMemo(
     () => parseCellarQuery(new URLSearchParams(searchParams)),
@@ -416,7 +417,6 @@ export function BbrCellarBrowser({
                 </td>
               </tr>
             ) : filteredRows.map((row) => {
-              const productUrl = bbrProductUrl(row.product_url);
               const askLabel = lowestAskLabel(row);
               const premium = askPremiumP(row);
               const isFormer = row.membership === "former";
@@ -429,15 +429,13 @@ export function BbrCellarBrowser({
                 >
                   <td className="max-w-sm px-3 py-2 align-top">
                     <p className="font-medium">
-                      {productUrl ? (
-                        <a
-                          href={productUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                      {row.parent_sku ? (
+                        <Link
+                          href={wineHref(row.parent_sku, from)}
                           className="hover:text-accent hover:underline"
                         >
                           {row.catalogue_name ?? row.description ?? row.parent_sku}
-                        </a>
+                        </Link>
                       ) : row.catalogue_name ?? row.description ?? row.parent_sku}
                     </p>
                     <p className="text-xs text-ink-muted">

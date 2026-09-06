@@ -7,7 +7,7 @@ import { requireOwner } from "@/lib/auth/owner";
 import { isTargetFavourited } from "@/lib/favourites/server";
 import { perBottleP } from "@/lib/favourites/browser";
 import { formatDate, formatDateTime, formatFormat, formatPence, formatSignedPct } from "@/lib/format";
-import { bbrProductUrl } from "@/lib/listingLinks";
+import { bbrWineDestination, wineSearcherUrl } from "@/lib/listingLinks";
 import { timeProtectedQuery } from "@/lib/observability/routeTiming";
 
 export const dynamic = "force-dynamic";
@@ -91,7 +91,13 @@ type BbrHolding = {
   eligible_for_bbx: boolean | null;
 };
 
-type Suggestion = { name: string | null; vintage: number | null; producer: string | null; region: string | null };
+type Suggestion = {
+  name: string | null;
+  vintage: number | null;
+  producer: string | null;
+  region: string | null;
+  product_url: string | null;
+};
 
 function methodLabel(value: string | null): string {
   const labels: Record<string, string> = {
@@ -155,7 +161,7 @@ export default async function WinePage({ params }: {
     // Identity of last resort: release offers match against BBR's wider
     // prod_product catalogue, so a Parent ID need not be in the tracked book.
     supabase.from("release_offer_match_suggestion_view")
-      .select("name,vintage,producer,region").eq("parent_sku", parentSku).limit(1).maybeSingle(),
+      .select("name,vintage,producer,region,product_url").eq("parent_sku", parentSku).limit(1).maybeSingle(),
     isTargetFavourited(owner, { kind: "wine", parentSku }),
   ]));
 
@@ -185,8 +191,18 @@ export default async function WinePage({ params }: {
     place: [wine?.country, wine?.region ?? fallback?.region, wine?.subregion]
       .filter(Boolean).join(" · "),
     colour: wine?.colour ?? null,
-    productUrl: bbrProductUrl(wine?.product_url ?? releaseRecords[0]?.source_product_url ?? null),
   };
+  const bbrDestination = bbrWineDestination({
+    parentSku,
+    name: identity.name,
+    vintage: identity.vintage,
+    productUrls: [
+      wine?.product_url,
+      fallback?.product_url,
+      ...releaseRecords.map((record) => record.source_product_url),
+    ],
+  });
+  const wineSearcher = wineSearcherUrl(identity.name, identity.vintage);
   const anchorByFormat = new Map(formats.map((row) => [row.format_code, row]));
 
   // The most recent release offer that carried a tasting note. Release records
@@ -232,7 +248,10 @@ export default async function WinePage({ params }: {
         </div>
         <div className="flex items-center gap-3">
           <FavouriteStar target={{ kind: "wine", parentSku }} favourite={favourited} label={identity.name} />
-          {identity.productUrl && <a href={identity.productUrl} target="_blank" rel="noreferrer" className="rounded border border-border px-3 py-2 text-sm hover:border-accent hover:text-accent">Open at BBR ↗</a>}
+          <a href={bbrDestination.url} target="_blank" rel="noreferrer" className="rounded border border-border px-3 py-2 text-sm hover:border-accent hover:text-accent">
+            {bbrDestination.kind === "product" ? "Open at BBR ↗" : "Search BBR ↗"}
+          </a>
+          {wineSearcher && <a href={wineSearcher} target="_blank" rel="noreferrer" className="rounded border border-border px-3 py-2 text-sm hover:border-accent hover:text-accent">Wine-Searcher ↗</a>}
           <Link href="/favourites" className="rounded border border-accent px-3 py-2 text-sm text-accent">All favourites</Link>
         </div>
       </header>

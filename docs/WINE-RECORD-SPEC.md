@@ -328,12 +328,24 @@ out of scope: `wine_locals`/`local:` refs (step 4), `owner_release_anchors`
 
 7. **Catalogue `WineCell`** (`components/catalogue/columns.tsx`): the wine name
    becomes an internal `Link` to `/wine/parent/{parent_sku}` when `parent_sku`
-   is present; BBR demotes to a secondary `BBR ↗` action beside Wine-Searcher.
+   is present. The card is the only external exit to BBR or Wine-Searcher.
    Pass `parent_sku` into `WineCell`. (Price-change rows only if they carry a
    `parent_sku`.)
 8. **CellarTracker table**: linked rows (`parent_sku` present) link into
    `/wine/parent/{parent_sku}`. Unlinked rows are unchanged until `wine_locals`
    (step 4).
+
+### External wine links
+
+All linked wine names in catalogue, cellar, release-price, favourites and
+scenario lists route through `/wine/parent/{parent_sku}`. The wine card owns
+the external actions. It accepts a stored BBR product URL only when the HTTPS
+origin is `www.bbr.com` and the `/products-{parent_sku}-...` path matches the
+card's Parent ID. Otherwise it links to BBR's public `/?q=` search using the
+wine name and vintage. Wine-Searcher is also available only from the card.
+Captured BBR source URLs remain non-clickable provenance on source-record
+pages. Unlinked source rows continue to open their matching record because the
+deferred `wine_locals` model has no canonical card route for them.
 
 ### D. Verification
 

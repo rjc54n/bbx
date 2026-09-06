@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { formatDate, formatDateTime, formatFormat, formatPence, formatSignedPct } from "@/lib/format";
-import { bbrProductUrl } from "@/lib/listingLinks";
+import { currentLocation, wineHref } from "@/lib/nav/origin";
 import {
   filterAndSortReleasePrices,
   parseReleasePriceQuery,
@@ -47,6 +47,7 @@ export function ReleasePriceBrowser({ rows }: { rows: ReleasePriceRow[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const from = currentLocation(pathname, searchParams);
   const query = useMemo(() => parseReleasePriceQuery(new URLSearchParams(searchParams)), [searchParams]);
   const filtered = useMemo(() => filterAndSortReleasePrices([...rows], query), [rows, query]);
   const regions = useMemo(() => values(rows.map((row) => row.region)), [rows]);
@@ -128,9 +129,8 @@ export function ReleasePriceBrowser({ rows }: { rows: ReleasePriceRow[] }) {
         </tr></thead>
         <tbody>
           {filtered.length === 0 ? <tr><td colSpan={columns.length + 2} className="px-3 py-10 text-center text-ink-muted">No release-price rows match these filters.</td></tr> : filtered.map((row) => {
-            const url = bbrProductUrl(row.product_url);
             return <tr key={`${row.parent_sku}|${row.format_code}`} className="border-t border-border hover:bg-accent-soft/50">
-              <td className="max-w-sm px-3 py-2 align-top"><p className="font-medium">{url ? <a href={url} target="_blank" rel="noreferrer" className="hover:text-accent hover:underline">{row.name ?? row.source_wine}</a> : row.name ?? row.source_wine}</p><p className="text-xs text-ink-muted">{row.producer ?? row.parent_sku} · {row.region ?? "Region unavailable"} · {formatFormat(row.case_size, row.bottle_volume_ml)}</p></td>
+              <td className="max-w-sm px-3 py-2 align-top"><p className="font-medium"><Link href={wineHref(row.parent_sku, from)} className="hover:text-accent hover:underline">{row.name ?? row.source_wine}</Link></p><p className="text-xs text-ink-muted">{row.producer ?? row.parent_sku} · {row.region ?? "Region unavailable"} · {formatFormat(row.case_size, row.bottle_volume_ml)}</p></td>
               <td className="px-3 py-2 align-top tabular-nums">{row.vintage ?? "NV"}</td>
               <td className="px-3 py-2 align-top tabular-nums">{formatDate(row.offer_date)}</td>
               <td className="px-3 py-2 text-right align-top tabular-nums">{formatPence(row.release_price_p)}</td>
