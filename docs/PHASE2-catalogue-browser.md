@@ -145,8 +145,9 @@ active filters). Ship global counts first; note the gap in code.
 - Generic facets from `facet_values_view`, exact Format choices from
   `format_options_view`, numeric bounds from `facet_ranges_view`; producer via
   `search_producers`.
-- **Debounce** text search. Range inputs commit on change/blur — **no request
-  per keystroke**.
+- Submit text search on Enter or through an explicit Search button. Typing only
+  changes local input state, so it sends **no request per keystroke**. Range
+  inputs commit on change/blur.
 
 ## Phase D — UI / UX redesign
 

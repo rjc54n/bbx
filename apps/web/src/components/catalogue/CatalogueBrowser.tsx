@@ -220,7 +220,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
 
       {!isPriceChanges && (
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
-          <SearchBar value={searchValue} onCommit={handleSetSearch} />
+          <SearchBar key={searchValue} value={searchValue} onCommit={handleSetSearch} />
           {facetError ? <div role="alert" className="rounded border border-accent/40 bg-accent-soft px-3 py-2 text-sm text-accent">
             Filters are temporarily unavailable. <button type="button" onClick={() => setFacetRetry((current) => current + 1)} className="underline underline-offset-2">Try again</button>
           </div> : <FilterStrip
