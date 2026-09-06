@@ -1,10 +1,22 @@
 # `/matches` review-view performance: design
 
 **Written:** 6 September 2026.
-**Status:** implemented on this branch; migration replays clean and the full
-pgTAP suite passes locally (464 existing + 17 new). Not yet pushed to prod —
-`supabase db push --linked` is a separate manual step, and the before/after
-prod `EXPLAIN` still has to be run (section 5).
+**Status:** shipped. Merged in PR #11 (`80af35a`) and pushed to prod
+(`ytgzgybgwsucsqeyetmk`) on 6 Sep 2026. `20260906150000` is a follow-up that
+`ANALYZE`s the backfilled table (see §4).
+
+**Measured on prod, before → after:**
+
+| Query | Before | After |
+| --- | --- | --- |
+| `wine_match_review_view` page query (`ORDER BY … LIMIT 50`) | ~3,950 ms | **81 ms** |
+| `wine_match_queue_summary(NULL)` | ~3,950 ms | **58 ms** |
+| whole `/matches` DB work per load | ~8,000 ms | **~150 ms** |
+
+Reconciliation: the backfilled table matches a fresh computation from the base
+tables exactly — 0 mismatches on `suggestion_count` / `review_band` /
+`last_run_status` across all 2,586 release-offer groups. Security advisors: no
+new findings.
 **Trigger:** the production freeze on 6 September 2026, ~14:06–14:14 UTC. 55×
 `57014` statement-timeout errors on the matching review path, then a PostgREST
 `Thread killed by timeout manager` and an automatic restart. Recovered on its
@@ -185,30 +197,38 @@ Two supporting indexes: `release_offer_match_run_groups (match_group_key)` and
 the cellartracker twin — the existing indexes lead with `run_id`, and both the
 per-group recompute and the `last_run` lookup filter by `match_group_key` alone.
 
-## 4. Expected result
+## 4. Result and the `ANALYZE` follow-up
 
-- Review views: `grouped` + a PK lookup on a ~5k-row table. Target **< 1 s**
-  each (from ~3.95 s). If `grouped` alone is still >~500 ms, a follow-up index
-  on `release_offer_source_rows (import_id) INCLUDE (match_group_key, …)` /
-  `release_offer_product_resolutions (import_id, source_row_number)` — out of
-  scope here unless the EXPLAIN says otherwise.
-- Whole `/matches` load: two light view scans + the key-scoped wave-2 fetches ≈
-  **~2 s**, comfortably under the 8 s timeout with margin.
-- Write path: one extra single-row UPSERT per group per match run. Negligible.
+The split lands the page query at **81 ms** and the summary at **58 ms** on prod
+(§ status table) — after `ANALYZE`. Straight after the backfill, the planner
+still had the fresh-table default (~8 rows) for `wine_match_group_evidence` and
+chose a nested loop with a 3.8M-row join filter for the `wine_match_review_view`
+v2-column join: 1.2 s. `ANALYZE public.wine_match_group_evidence` fixed it
+(index/hash joins). `20260906150000_analyze_wine_match_group_evidence.sql` runs
+that `ANALYZE` and folds it into `private.rebuild_wine_match_group_evidence()`,
+so every replay / branch / reset is deterministic.
 
-## 5. Verification (owner to run — no prod DB access from the worktree)
+The live `grouped` half (the resolution counts over `release_offer_source_rows`)
+is ~35 ms of the 81 ms — a seq scan of 3.6k rows. Fine for now; if it ever
+matters, index `release_offer_source_rows (match_group_key)` covering the
+resolution join.
 
-`EXPLAIN (ANALYZE, BUFFERS)` against prod (`ytgzgybgwsucsqeyetmk`), before and
-after `supabase db push --linked`:
+Write path: one extra single-row UPSERT per group per match-run statement.
+Negligible.
 
-1. `SELECT * FROM public.wine_match_review_view ORDER BY last_error_at DESC NULLS LAST, review_priority, evidence_score DESC NULLS LAST, score_margin DESC NULLS LAST, source, match_group_key LIMIT 50;`
-2. `SELECT * FROM public.wine_match_queue_summary(NULL);`
-3. Spot-check row-for-row equality of `wine_match_review_view` and each
-   `wine_match_queue_summary` count against a saved pre-migration snapshot.
+## 5. Verification done (prod, `ytgzgybgwsucsqeyetmk`)
+
+- `EXPLAIN (ANALYZE, BUFFERS)` on the page query and `wine_match_queue_summary`
+  — numbers in the status table.
+- Reconciliation query: `wine_match_group_evidence` vs. a fresh base-table
+  computation — 0 mismatches across 2,586 release-offer groups.
+- `migration list --linked`: `20260906140000` + `20260906150000` applied.
+- Security advisors: no findings referencing the new objects.
 
 ## 6. Deliverables
 
-- `supabase/migrations/20260906140000_wine_match_group_evidence.sql`
+- `supabase/migrations/20260906140000_wine_match_group_evidence.sql` +
+  `supabase/migrations/20260906150000_analyze_wine_match_group_evidence.sql`
 - `supabase/tests/database/wine_match_group_evidence.test.sql` (17 assertions):
   a result RPC fills the row; an error RPC sets `last_run_status = 'failed'` +
   `last_error_at`; the review views read counts/status from the table while the
@@ -217,7 +237,8 @@ after `supabase db push --linked`:
 - This doc.
 - No `apps/web` change — `wine_match_review_view` and `wine_match_queue_summary`
   keep their exact column lists / signature, so `page.tsx`, `reviewQuery.ts`
-  and `database.types.ts` are untouched. Regen types after the push anyway for
-  the new table.
-- `supabase db push --linked` is a **separate manual step** after merge
-  (memory `feedback_merge-is-not-deploy-supabase`).
+  and `database.types.ts` are untouched. Regenerating `database.types.ts` to
+  pick up the new table is optional (nothing in the app queries it directly).
+- Pushed to prod with `supabase db push --linked` on 6 Sep 2026 (the SSL
+  `pgdelta` cert stack trace after "Finished supabase db push." is the known
+  cosmetic noise — memory `project_supabase-db-push-behaviour`).
