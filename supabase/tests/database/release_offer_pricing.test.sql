@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(48);
+SELECT plan(51);
 
 INSERT INTO auth.users (id) VALUES
     ('11000000-0000-0000-0000-000000000001'),
@@ -22,6 +22,10 @@ INSERT INTO private.skus (
     first_seen_run_id, first_seen_at, last_seen_run_id, last_seen_at
 ) VALUES (
     '21000000001', '06-00750', 6, 750, 9000, 9500, 8000, TRUE,
+    '21000000-0000-0000-0000-000000000001', now(),
+    '21000000-0000-0000-0000-000000000001', now()
+), (
+    '21000000001', '01-01500', 1, 1500, 4000, 4200, 3500, TRUE,
     '21000000-0000-0000-0000-000000000001', now(),
     '21000000-0000-0000-0000-000000000001', now()
 );
@@ -123,6 +127,18 @@ SELECT is(
     (SELECT release_price_p FROM public.release_price_anchor_view
      WHERE parent_sku = '21000000001' AND format_code = '06-00750'),
     11000, 'the imported anchor is 11000 before any owner override');
+SELECT is_empty(
+    $$ SELECT 1 FROM public.release_price_market_view
+       WHERE parent_sku = '21000000001' AND format_code = '01-01500' $$,
+    'release evidence for 6x75cl does not create a market row for 1x150cl');
+SELECT is(
+    (SELECT release_price_p FROM public.wine_card_format_view
+     WHERE parent_sku = '21000000001' AND format_code = '01-01500'),
+    NULL::INT, 'the sibling wine-card format has no imported release price');
+SELECT is(
+    (SELECT release_price_p FROM public.wine_scenario_view
+     WHERE parent_sku = '21000000001' AND format_code = '01-01500'),
+    NULL::INT, 'the sibling scenario format has no imported release price');
 SELECT is(
     public.set_owner_release_anchor('21000000001', '06-00750', 9900)->>'superseded_source_price_p',
     '11000', 'setting an owner price snapshots the imported anchor it supersedes');

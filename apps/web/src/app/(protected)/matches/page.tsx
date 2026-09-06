@@ -9,6 +9,19 @@ import {
   type CellarTrackerGroupPanel,
 } from "@/lib/matching/cellartrackerPanels";
 import { MATCH_SOURCES, type MatchSource } from "@/lib/matching/adapters";
+import {
+  DEFAULT_LEGACY_COVERAGE_TIER,
+  DEFAULT_MATCH_REVIEW_BAND,
+  LEGACY_COVERAGE_TIERS,
+  MATCH_REVIEW_BANDS,
+  MATCH_REVIEW_SORTABLE_STATES,
+  parseMatchReviewQuery,
+  type LegacyCoverageTier,
+  type MatchReviewSource,
+  type MatchReviewState,
+  type MatchReviewSort,
+  type MatchReviewBandFilter,
+} from "@/lib/matching/reviewQuery";
 import { MatchGroupList, type MatchGroupView } from "@/components/matching/MatchGroupList";
 import { Pagination } from "@/components/nav/Pagination";
 import { MatchRunControl } from "@/components/releaseOffers/MatchRunControl";
@@ -24,35 +37,38 @@ const PAGE_SIZE = 50;
 // `needs-review` stays a valid URL (the whole unresolved backlog, for old
 // bookmarks) but is not a tile — the three disjoint queue buckets that partition
 // it are. Tiles render in this order minus `needs-review`.
-const STATES = [
-  "with-suggestions", "no-suggestions", "errors",
-  "linked", "no-suitable-match", "all", "needs-review",
-] as const;
-type StateFilter = (typeof STATES)[number];
-const DEFAULT_STATE: StateFilter = "with-suggestions";
+type StateFilter = MatchReviewState;
 const TILE_STATES: StateFilter[] = [
   "with-suggestions", "no-suggestions", "errors", "linked", "no-suitable-match", "all",
 ];
 
-type SortKey = "queue" | "match" | "coverage";
+type SortKey = MatchReviewSort;
 // The score-first and coverage sorts only make sense where groups carry
 // candidates. The tier filter is scoped to the same three states.
-const SORTABLE_STATES: StateFilter[] = ["with-suggestions", "all", "needs-review"];
+const SORTABLE_STATES = MATCH_REVIEW_SORTABLE_STATES;
 
 // Token coverage of the rank-1 candidate (triage spec §4.2). `workable`
 // excludes only the `low` tier, never the `none` tier, so a group with no
 // suggestions still shows under "All groups" instead of being filtered away.
-const TIER_FILTERS = ["workable", "low", "all"] as const;
-type TierFilter = (typeof TIER_FILTERS)[number];
-const DEFAULT_TIER: TierFilter = "workable";
+const TIER_FILTERS = LEGACY_COVERAGE_TIERS;
+type TierFilter = LegacyCoverageTier;
+const DEFAULT_TIER = DEFAULT_LEGACY_COVERAGE_TIER;
 const TIER_LABEL: Record<TierFilter, string> = {
-  workable: "Worth reviewing",
+  workable: "Non-low coverage",
   low: "Low coverage",
   all: "All tiers",
 };
 
+const REVIEW_LABEL: Record<MatchReviewBandFilter, string> = {
+  all: "All evidence",
+  likely: "Likely",
+  ambiguous: "Ambiguous",
+  weak: "Weak",
+  legacy: "Legacy",
+};
+
 const SOURCE_FILTERS = ["all", ...MATCH_SOURCES] as const;
-type SourceFilter = (typeof SOURCE_FILTERS)[number];
+type SourceFilter = MatchReviewSource;
 
 const SOURCE_LABEL: Record<SourceFilter, string> = {
   all: "All sources",
@@ -93,6 +109,16 @@ type ReviewRow = {
   second_wine_conflict: boolean;
   token_coverage: number | null;
   coverage_tier: string;
+  algorithm_version: string | null;
+  evidence_score: number | null;
+  score_margin: number | null;
+  review_band: string;
+  review_priority: number;
+  impact_band: string | null;
+  risk_flags: string[];
+  match_reasons: string[];
+  top_candidate_parent_sku: string | null;
+  top_candidate_was_biddable_at_observation: boolean | null;
 };
 
 type SuggestionRow = {
@@ -107,6 +133,15 @@ type SuggestionRow = {
   typo_count: number | null;
   is_biddable: boolean;
   match_score: number | null;
+  algorithm_version: string | null;
+  evidence_score: number | null;
+  score_margin: number | null;
+  review_band: string;
+  impact_band: string | null;
+  risk_flags: string[];
+  match_reasons: string[];
+  comparison_evidence: Record<string, unknown> | null;
+  was_biddable_at_observation: boolean;
 };
 
 type ReleaseRecordRow = {
@@ -120,10 +155,6 @@ type ReleaseRecordRow = {
   description: string | null;
   match_group_key: string;
 };
-
-function firstParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function escapeLike(value: string): string {
   return value.replaceAll("%", "\\%").replaceAll("_", "\\_");
@@ -166,6 +197,13 @@ function applyTierFilter<T extends {
   if (tier === "workable") return query.neq("coverage_tier", "low");
   if (tier === "low") return query.eq("coverage_tier", "low");
   return query;
+}
+
+function applyReviewFilter<T extends {
+  eq(column: string, value: string): T;
+  gt(column: string, value: number): T;
+}>(query: T, review: MatchReviewBandFilter): T {
+  return review === "all" ? query : query.gt("suggestion_count", 0).eq("review_band", review);
 }
 
 function runProgress(row: Record<string, unknown> | null): (MatchRunProgress & CellarTrackerMatchProgress) | null {
@@ -219,23 +257,16 @@ export default async function MatchesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const sourceParam = firstParam(params.source);
-  const sourceFilter: SourceFilter = sourceParam === "release_offer" || sourceParam === "cellartracker"
-    ? sourceParam
-    : "all";
-  const stateParam = firstParam(params.state);
-  const state: StateFilter = STATES.includes(stateParam as StateFilter) ? (stateParam as StateFilter) : DEFAULT_STATE;
-  const sortParam = firstParam(params.sort);
-  const sort: SortKey = (sortParam === "match" || sortParam === "coverage") && SORTABLE_STATES.includes(state)
-    ? sortParam
-    : "queue";
-  const tierParam = firstParam(params.tier);
-  const tierApplies = SORTABLE_STATES.includes(state);
-  const tier: TierFilter = tierApplies && TIER_FILTERS.includes(tierParam as TierFilter)
-    ? (tierParam as TierFilter)
-    : DEFAULT_TIER;
-  const search = firstParam(params.q)?.trim().slice(0, 200) ?? "";
-  const page = Math.max(1, Number(firstParam(params.page) ?? "1") || 1);
+  const {
+    source: sourceFilter,
+    state,
+    sort,
+    tier,
+    tierApplies,
+    review,
+    search,
+    page,
+  } = parseMatchReviewQuery(params);
 
   const owner = await requireOwner();
   const { supabase } = owner;
@@ -265,14 +296,16 @@ export default async function MatchesPage({
     // a run failed), then most-suggested / best-scored, then the identity.
     rowsQuery = rowsQuery
       .order("last_error_at", { ascending: false, nullsFirst: false })
-      .order("suggestion_count", { ascending: false })
-      .order("top_match_score", { ascending: false, nullsFirst: false })
+      .order("review_priority", { ascending: true })
+      .order("evidence_score", { ascending: false, nullsFirst: false })
+      .order("score_margin", { ascending: false, nullsFirst: false })
       .order("source", { ascending: true })
       .order("match_group_key", { ascending: true });
   }
   if (sourceFilter !== "all") rowsQuery = rowsQuery.eq("source", sourceFilter);
   rowsQuery = applyStateFilter(rowsQuery, state);
   if (tierApplies) rowsQuery = applyTierFilter(rowsQuery, tier);
+  if (tierApplies) rowsQuery = applyReviewFilter(rowsQuery, review);
   if (search) rowsQuery = rowsQuery.ilike("source_wine", `%${escapeLike(search)}%`);
   const from = (page - 1) * PAGE_SIZE;
 
@@ -297,6 +330,7 @@ export default async function MatchesPage({
     needs_review: 0, with_suggestions: 0, no_suggestions: 0, errors: 0,
     linked: 0, no_suitable_match: 0, all_groups: 0,
     workable: 0, low_coverage: 0, second_wine_conflicts: 0,
+    likely: 0, ambiguous: 0, weak: 0, legacy: 0,
   };
 
   const releaseGroups = groups.filter((group) => group.source === "release_offer");
@@ -336,7 +370,7 @@ export default async function MatchesPage({
     rows<SuggestionRow>(
       releaseKeys,
       () => supabase.from("release_offer_match_suggestion_view")
-        .select("match_group_key,parent_sku,rank,name,producer,region,stock_origin,purchase_mode,typo_count,is_biddable,match_score")
+        .select("match_group_key,parent_sku,rank,name,producer,region,stock_origin,purchase_mode,typo_count,is_biddable,match_score,algorithm_version,evidence_score,score_margin,review_band,impact_band,risk_flags,match_reasons,comparison_evidence,was_biddable_at_observation")
         .in("match_group_key", releaseKeys).order("match_group_key").order("rank"),
       "Release offer suggestions",
     ),
@@ -355,7 +389,7 @@ export default async function MatchesPage({
     rows<SuggestionRow>(
       cellarKeys,
       () => supabase.from("cellartracker_match_suggestion_view")
-        .select("match_group_key,parent_sku,rank,name,producer,region,stock_origin,purchase_mode,typo_count,is_biddable,match_score")
+        .select("match_group_key,parent_sku,rank,name,producer,region,stock_origin,purchase_mode,typo_count,is_biddable,match_score,algorithm_version,evidence_score,score_margin,review_band,impact_band,risk_flags,match_reasons,comparison_evidence,was_biddable_at_observation")
         .in("match_group_key", cellarKeys).order("match_group_key").order("rank"),
       "CellarTracker suggestions",
     ),
@@ -405,6 +439,15 @@ export default async function MatchesPage({
       typo_count: candidate.typo_count,
       is_bbx_eligible: candidate.is_biddable,
       match_score: candidate.match_score,
+      algorithm_version: candidate.algorithm_version,
+      evidence_score: candidate.evidence_score,
+      score_margin: candidate.score_margin,
+      review_band: candidate.review_band,
+      impact_band: candidate.impact_band,
+      risk_flags: candidate.risk_flags,
+      match_reasons: candidate.match_reasons,
+      comparison_evidence: candidate.comparison_evidence,
+      was_biddable_at_observation: candidate.was_biddable_at_observation,
     }));
 
     let panel: MatchGroupView["panel"];
@@ -456,6 +499,16 @@ export default async function MatchesPage({
       second_wine_conflict: group.second_wine_conflict,
       coverage_tier: group.coverage_tier,
       token_coverage: group.token_coverage,
+      algorithm_version: group.algorithm_version,
+      evidence_score: group.evidence_score,
+      score_margin: group.score_margin,
+      review_band: group.review_band,
+      review_priority: group.review_priority,
+      impact_band: group.impact_band,
+      risk_flags: group.risk_flags,
+      match_reasons: group.match_reasons,
+      top_candidate_parent_sku: group.top_candidate_parent_sku,
+      top_candidate_was_biddable_at_observation: group.top_candidate_was_biddable_at_observation,
       candidates,
       catalogueSearchQuery,
       panel,
@@ -472,6 +525,7 @@ export default async function MatchesPage({
   returnParams.set("state", state);
   if (sort !== "queue") returnParams.set("sort", sort);
   if (tierApplies && tier !== DEFAULT_TIER) returnParams.set("tier", tier);
+  if (tierApplies && review !== DEFAULT_MATCH_REVIEW_BAND) returnParams.set("review", review);
   if (search) returnParams.set("q", search);
   returnParams.set("page", String(page));
   const returnPath = `${MATCH_PATH}?${returnParams.toString()}`;
@@ -486,32 +540,44 @@ export default async function MatchesPage({
     "needs-review": Number(summary.needs_review),
   };
 
-  // The tier filter, like the sort, only travels into states where it applies.
-  function carryTier(query: URLSearchParams, nextState: StateFilter): URLSearchParams {
+  // Candidate filters, like candidate sorts, only travel into states where they apply.
+  function carryCandidateFilters(query: URLSearchParams, nextState: StateFilter): URLSearchParams {
     if (tier !== DEFAULT_TIER && SORTABLE_STATES.includes(nextState)) query.set("tier", tier);
+    if (review !== DEFAULT_MATCH_REVIEW_BAND && SORTABLE_STATES.includes(nextState)) {
+      query.set("review", review);
+    }
     return query;
   }
   function sourceHref(next: SourceFilter): string {
     const query = new URLSearchParams({ source: next, state });
     if (sort !== "queue") query.set("sort", sort);
-    return `${MATCH_PATH}?${carryTier(query, state).toString()}`;
+    return `${MATCH_PATH}?${carryCandidateFilters(query, state).toString()}`;
   }
   function stateHref(next: StateFilter): string {
     const query = new URLSearchParams({ source: sourceFilter, state: next });
     // Carry the score sort only into states where it still applies.
     if (sort !== "queue" && SORTABLE_STATES.includes(next)) query.set("sort", sort);
-    return `${MATCH_PATH}?${carryTier(query, next).toString()}`;
+    return `${MATCH_PATH}?${carryCandidateFilters(query, next).toString()}`;
   }
   function sortHref(next: SortKey): string {
     const query = new URLSearchParams({ source: sourceFilter, state });
     if (next !== "queue") query.set("sort", next);
     if (search) query.set("q", search);
-    return `${MATCH_PATH}?${carryTier(query, state).toString()}`;
+    return `${MATCH_PATH}?${carryCandidateFilters(query, state).toString()}`;
   }
   function tierHref(next: TierFilter): string {
     const query = new URLSearchParams({ source: sourceFilter, state });
     if (sort !== "queue") query.set("sort", sort);
     if (next !== DEFAULT_TIER) query.set("tier", next);
+    if (review !== DEFAULT_MATCH_REVIEW_BAND) query.set("review", review);
+    if (search) query.set("q", search);
+    return `${MATCH_PATH}?${query.toString()}`;
+  }
+  function reviewHref(next: MatchReviewBandFilter): string {
+    const query = new URLSearchParams({ source: sourceFilter, state });
+    if (sort !== "queue") query.set("sort", sort);
+    if (tier !== DEFAULT_TIER) query.set("tier", tier);
+    if (next !== DEFAULT_MATCH_REVIEW_BAND) query.set("review", next);
     if (search) query.set("q", search);
     return `${MATCH_PATH}?${query.toString()}`;
   }
@@ -525,6 +591,13 @@ export default async function MatchesPage({
     workable: workableCount,
     low: lowCount,
     all: workableCount + lowCount,
+  };
+  const reviewCount: Record<MatchReviewBandFilter, number> = {
+    all: Number(summary.with_suggestions),
+    likely: Number(summary.likely),
+    ambiguous: Number(summary.ambiguous),
+    weak: Number(summary.weak),
+    legacy: Number(summary.legacy),
   };
 
   return <main className="min-h-0 flex-1 overflow-auto bg-accent-soft">
@@ -553,15 +626,21 @@ export default async function MatchesPage({
       <section className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {TILE_STATES.map((value) => <Link key={value} href={stateHref(value)} aria-current={state === value ? "true" : undefined} className={`rounded-lg border p-4 ${state === value ? "border-accent bg-background" : "border-border bg-background"}`}><p className="text-xs uppercase text-ink-muted">{STATE_LABEL[value]}</p><p className="mt-1 text-xl font-semibold">{tileCount[value].toLocaleString()}</p></Link>)}
       </section>
+      {tierApplies && <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-ink-muted">Review evidence:</span>
+        {MATCH_REVIEW_BANDS.map((value) => <Link key={value} href={reviewHref(value)} aria-current={review === value ? "true" : undefined} className={`rounded-full border px-3 py-1 text-xs ${review === value ? "border-accent bg-accent text-accent-ink" : "border-border bg-background text-ink-muted hover:text-ink"}`}>{REVIEW_LABEL[value]}{state === "with-suggestions" ? ` (${reviewCount[value].toLocaleString()})` : ""}</Link>)}
+      </div>}
       {tierApplies && <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-ink-muted">Token coverage:</span>
+          <span className="text-xs text-ink-muted">Legacy Algolia coverage:</span>
           {TIER_FILTERS.map((value) => <Link key={value} href={tierHref(value)} aria-current={tier === value ? "true" : undefined} className={`rounded-full border px-3 py-1 text-xs ${tier === value ? "border-accent bg-accent text-accent-ink" : "border-border bg-background text-ink-muted hover:text-ink"}`}>{TIER_LABEL[value]}{state === "with-suggestions" ? ` (${tierCount[value].toLocaleString()})` : ""}</Link>)}
         </div>
         <p className="text-xs text-ink-muted">
           {tier === "low"
-            ? "Groups whose top candidate accounts for under 75% of the source name's tokens. Sampling found none of these correct: they are mostly wines BBR does not stock, with the search returning its nearest miss. Expect to record most as no suitable match."
-            : "Hiding the groups whose top candidate covers under 75% of the source name's tokens. Coverage is a triage aid, not a confidence score — the top tier sampled roughly one error in eight, so confirm by name."}
+            ? "Groups whose top candidate accounts for under 75% of the source name's tokens. This is legacy search evidence, not a judgement that the candidate is wrong."
+            : tier === "workable"
+              ? "Showing only groups outside the legacy low-coverage tier. This diagnostic filter can hide correct candidates when names use abbreviations or extra catalogue geography."
+              : "Showing every group with suggestions. Legacy coverage remains available as a diagnostic and does not hide records by default."}
           {conflictCount > 0 && ` ${conflictCount.toLocaleString()} unresolved group${conflictCount === 1 ? " carries" : "s carry"} a second-wine mismatch and are flagged in the list.`}
         </p>
       </div>}
@@ -573,12 +652,13 @@ export default async function MatchesPage({
           <input type="hidden" name="state" value={state} />
           {sort !== "queue" && <input type="hidden" name="sort" value={sort} />}
           {tierApplies && tier !== DEFAULT_TIER && <input type="hidden" name="tier" value={tier} />}
+          {tierApplies && review !== DEFAULT_MATCH_REVIEW_BAND && <input type="hidden" name="review" value={review} />}
           <input type="search" name="q" defaultValue={search} placeholder="Search source wine" className="min-w-64 flex-1 rounded border border-border px-3 py-2 text-sm" />
           <button className="rounded border border-accent px-3 py-2 text-sm text-accent">Search</button>
           {search && <Link href={stateHref(state)} className="rounded border border-border px-3 py-2 text-sm">Clear</Link>}
           {SORTABLE_STATES.includes(state) && <span className="ml-auto flex items-center gap-1 text-xs text-ink-muted">
             <span>Sort:</span>
-            <Link href={sortHref("queue")} aria-current={sort === "queue" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "queue" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Queue order</Link>
+            <Link href={sortHref("queue")} aria-current={sort === "queue" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "queue" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Review priority</Link>
             <Link href={sortHref("match")} aria-current={sort === "match" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "match" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Best name match</Link>
             <Link href={sortHref("coverage")} aria-current={sort === "coverage" ? "true" : undefined} className={`rounded px-2 py-1 ${sort === "coverage" ? "bg-accent text-accent-ink" : "hover:text-ink"}`}>Token coverage</Link>
           </span>}
@@ -596,6 +676,7 @@ export default async function MatchesPage({
             state,
             ...(sort !== "queue" ? { sort } : {}),
             ...(tierApplies && tier !== DEFAULT_TIER ? { tier } : {}),
+            ...(tierApplies && review !== DEFAULT_MATCH_REVIEW_BAND ? { review } : {}),
             ...(search ? { q: search } : {}),
           }}
         />

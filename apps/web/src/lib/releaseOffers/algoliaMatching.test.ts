@@ -146,6 +146,36 @@ describe("historic-offer Algolia matching", () => {
     expect(ranked.map((candidate) => candidate.parent_sku)).toEqual(["20180000001", "20180000002"]);
   });
 
+  it("ranks the 2017 Lynch-Bages Parent ID first after alias and geography normalisation", () => {
+    const ranked = topHistoricOfferCandidates([
+      {
+        parent_sku: "20178004817",
+        name: "2017 Chateau Lynch-Bages, Pauillac, Bordeaux",
+        vintage: 2017,
+        producer: "Chateau Lynch-Bages",
+        country: "France",
+        region: "Bordeaux",
+        subregion: "Pauillac",
+      },
+      {
+        parent_sku: "20178004820",
+        name: "2017 Echo de Lynch-Bages, Pauillac, Bordeaux",
+        vintage: 2017,
+        producer: "Chateau Lynch-Bages",
+        country: "France",
+        region: "Bordeaux",
+        subregion: "Pauillac",
+      },
+    ], "2017 Ch. Lynch-Bages, Pauillac", 5, 2017);
+
+    expect(ranked[0]).toMatchObject({
+      parent_sku: "20178004817",
+      review_band: "likely",
+      evidence_score: 1,
+    });
+    expect(ranked[0].match_reasons).toContain("approved_alias_normalised");
+  });
+
   it("rejects an adjacent vintage from an otherwise exact source name", () => {
     expect(exactParentSkus({
       match_group_key: "2025|txakoli rezabal getariako txakolina spain",

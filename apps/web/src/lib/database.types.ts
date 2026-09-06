@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -209,6 +204,27 @@ export type Database = {
             foreignKeyName: "cellar_import_rows_import_id_fkey"
             columns: ["import_id"]
             isOneToOne: false
+            referencedRelation: "bbr_cellar_positions_market_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_position_observations"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_positions_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
             referencedRelation: "bbr_snapshot_view"
             referencedColumns: ["import_id"]
           },
@@ -337,6 +353,27 @@ export type Database = {
             foreignKeyName: "cellar_imports_superseded_by_fkey"
             columns: ["superseded_by"]
             isOneToOne: false
+            referencedRelation: "bbr_cellar_positions_market_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "bbr_position_observations"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "bbr_positions_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
             referencedRelation: "bbr_snapshot_view"
             referencedColumns: ["import_id"]
           },
@@ -420,6 +457,27 @@ export type Database = {
           vintage?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_cellar_positions_market_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_position_observations"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_positions_view"
+            referencedColumns: ["latest_import_id"]
+          },
           {
             foreignKeyName: "cellartracker_evidence_import_id_fkey"
             columns: ["import_id"]
@@ -553,6 +611,27 @@ export type Database = {
             foreignKeyName: "cellartracker_match_runs_snapshot_import_id_fkey"
             columns: ["snapshot_import_id"]
             isOneToOne: false
+            referencedRelation: "bbr_cellar_positions_market_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_match_runs_snapshot_import_id_fkey"
+            columns: ["snapshot_import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_position_observations"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_match_runs_snapshot_import_id_fkey"
+            columns: ["snapshot_import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_positions_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_match_runs_snapshot_import_id_fkey"
+            columns: ["snapshot_import_id"]
+            isOneToOne: false
             referencedRelation: "bbr_snapshot_view"
             referencedColumns: ["import_id"]
           },
@@ -567,7 +646,12 @@ export type Database = {
       }
       cellartracker_match_suggestions: {
         Row: {
+          algorithm_version: string | null
+          comparison_evidence: Json | null
+          evidence_score: number | null
+          impact_band: string | null
           match_group_key: string
+          match_reasons: string[]
           match_score: number | null
           matched_words: string[]
           name: string
@@ -578,6 +662,10 @@ export type Database = {
           purchase_mode: string | null
           rank: number
           region: string | null
+          review_band: string | null
+          review_priority: number | null
+          risk_flags: string[]
+          score_margin: number | null
           source_run_id: string
           stock_origin: string | null
           typo_count: number | null
@@ -585,7 +673,12 @@ export type Database = {
           was_biddable_at_observation: boolean
         }
         Insert: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           match_group_key: string
+          match_reasons?: string[]
           match_score?: number | null
           matched_words?: string[]
           name: string
@@ -596,6 +689,10 @@ export type Database = {
           purchase_mode?: string | null
           rank: number
           region?: string | null
+          review_band?: string | null
+          review_priority?: number | null
+          risk_flags?: string[]
+          score_margin?: number | null
           source_run_id: string
           stock_origin?: string | null
           typo_count?: number | null
@@ -603,7 +700,12 @@ export type Database = {
           was_biddable_at_observation: boolean
         }
         Update: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           match_group_key?: string
+          match_reasons?: string[]
           match_score?: number | null
           matched_words?: string[]
           name?: string
@@ -614,6 +716,10 @@ export type Database = {
           purchase_mode?: string | null
           rank?: number
           region?: string | null
+          review_band?: string | null
+          review_priority?: number | null
+          risk_flags?: string[]
+          score_margin?: number | null
           source_run_id?: string
           stock_origin?: string | null
           typo_count?: number | null
@@ -977,7 +1083,12 @@ export type Database = {
       }
       release_offer_match_suggestions: {
         Row: {
+          algorithm_version: string | null
+          comparison_evidence: Json | null
+          evidence_score: number | null
+          impact_band: string | null
           match_group_key: string
+          match_reasons: string[]
           match_score: number | null
           matched_words: string[]
           name: string
@@ -988,6 +1099,10 @@ export type Database = {
           purchase_mode: string | null
           rank: number
           region: string | null
+          review_band: string | null
+          review_priority: number | null
+          risk_flags: string[]
+          score_margin: number | null
           source_run_id: string
           stock_origin: string | null
           typo_count: number | null
@@ -995,7 +1110,12 @@ export type Database = {
           was_biddable_at_observation: boolean
         }
         Insert: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           match_group_key: string
+          match_reasons?: string[]
           match_score?: number | null
           matched_words?: string[]
           name: string
@@ -1006,6 +1126,10 @@ export type Database = {
           purchase_mode?: string | null
           rank: number
           region?: string | null
+          review_band?: string | null
+          review_priority?: number | null
+          risk_flags?: string[]
+          score_margin?: number | null
           source_run_id: string
           stock_origin?: string | null
           typo_count?: number | null
@@ -1013,7 +1137,12 @@ export type Database = {
           was_biddable_at_observation: boolean
         }
         Update: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           match_group_key?: string
+          match_reasons?: string[]
           match_score?: number | null
           matched_words?: string[]
           name?: string
@@ -1024,6 +1153,10 @@ export type Database = {
           purchase_mode?: string | null
           rank?: number
           region?: string | null
+          review_band?: string | null
+          review_priority?: number | null
+          risk_flags?: string[]
+          score_margin?: number | null
           source_run_id?: string
           stock_origin?: string | null
           typo_count?: number | null
@@ -1661,6 +1794,27 @@ export type Database = {
             foreignKeyName: "cellar_imports_superseded_by_fkey"
             columns: ["superseded_by"]
             isOneToOne: false
+            referencedRelation: "bbr_cellar_positions_market_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "bbr_position_observations"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "bbr_positions_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellar_imports_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
             referencedRelation: "bbr_snapshot_view"
             referencedColumns: ["import_id"]
           },
@@ -1702,7 +1856,22 @@ export type Database = {
           subregion: string | null
           vintage: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "wine_card_view"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
       }
       catalogue_mv: {
         Row: {
@@ -1738,7 +1907,22 @@ export type Database = {
           subregion: string | null
           vintage: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "wine_card_view"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
       }
       catalogue_view: {
         Row: {
@@ -1774,7 +1958,22 @@ export type Database = {
           subregion: string | null
           vintage: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "wine_card_view"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
       }
       cellartracker_excluded_record_view: {
         Row: {
@@ -1815,8 +2014,13 @@ export type Database = {
       }
       cellartracker_match_suggestion_view: {
         Row: {
+          algorithm_version: string | null
+          comparison_evidence: Json | null
+          evidence_score: number | null
+          impact_band: string | null
           is_biddable: boolean | null
           match_group_key: string | null
+          match_reasons: string[] | null
           match_score: number | null
           matched_words: string[] | null
           name: string | null
@@ -1827,14 +2031,24 @@ export type Database = {
           purchase_mode: string | null
           rank: number | null
           region: string | null
+          review_band: string | null
+          review_priority: number | null
+          risk_flags: string[] | null
+          score_margin: number | null
           source_run_id: string | null
           stock_origin: string | null
           typo_count: number | null
           vintage: number | null
+          was_biddable_at_observation: boolean | null
         }
         Insert: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           is_biddable?: never
           match_group_key?: string | null
+          match_reasons?: string[] | null
           match_score?: number | null
           matched_words?: string[] | null
           name?: string | null
@@ -1845,14 +2059,24 @@ export type Database = {
           purchase_mode?: string | null
           rank?: number | null
           region?: string | null
+          review_band?: never
+          review_priority?: never
+          risk_flags?: string[] | null
+          score_margin?: number | null
           source_run_id?: string | null
           stock_origin?: string | null
           typo_count?: number | null
           vintage?: number | null
+          was_biddable_at_observation?: boolean | null
         }
         Update: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           is_biddable?: never
           match_group_key?: string | null
+          match_reasons?: string[] | null
           match_score?: number | null
           matched_words?: string[] | null
           name?: string | null
@@ -1863,10 +2087,15 @@ export type Database = {
           purchase_mode?: string | null
           rank?: number | null
           region?: string | null
+          review_band?: never
+          review_priority?: never
+          risk_flags?: string[] | null
+          score_margin?: number | null
           source_run_id?: string | null
           stock_origin?: string | null
           typo_count?: number | null
           vintage?: number | null
+          was_biddable_at_observation?: boolean | null
         }
         Relationships: [
           {
@@ -1958,6 +2187,27 @@ export type Database = {
           vintage: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_cellar_positions_market_view"
+            referencedColumns: ["latest_import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_position_observations"
+            referencedColumns: ["import_id"]
+          },
+          {
+            foreignKeyName: "cellartracker_evidence_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bbr_positions_view"
+            referencedColumns: ["latest_import_id"]
+          },
           {
             foreignKeyName: "cellartracker_evidence_import_id_fkey"
             columns: ["import_id"]
@@ -2136,7 +2386,15 @@ export type Database = {
           parent_sku?: never
           scan_run_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "observation_events_scan_run_id_fkey"
+            columns: ["scan_run_id"]
+            isOneToOne: false
+            referencedRelation: "scan_health_view"
+            referencedColumns: ["run_id"]
+          },
+        ]
       }
       product_detail_view: {
         Row: {
@@ -2300,8 +2558,13 @@ export type Database = {
       }
       release_offer_match_suggestion_view: {
         Row: {
+          algorithm_version: string | null
+          comparison_evidence: Json | null
+          evidence_score: number | null
+          impact_band: string | null
           is_biddable: boolean | null
           match_group_key: string | null
+          match_reasons: string[] | null
           match_score: number | null
           matched_words: string[] | null
           name: string | null
@@ -2312,14 +2575,24 @@ export type Database = {
           purchase_mode: string | null
           rank: number | null
           region: string | null
+          review_band: string | null
+          review_priority: number | null
+          risk_flags: string[] | null
+          score_margin: number | null
           source_run_id: string | null
           stock_origin: string | null
           typo_count: number | null
           vintage: number | null
+          was_biddable_at_observation: boolean | null
         }
         Insert: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           is_biddable?: never
           match_group_key?: string | null
+          match_reasons?: string[] | null
           match_score?: number | null
           matched_words?: string[] | null
           name?: string | null
@@ -2330,14 +2603,24 @@ export type Database = {
           purchase_mode?: string | null
           rank?: number | null
           region?: string | null
+          review_band?: never
+          review_priority?: never
+          risk_flags?: string[] | null
+          score_margin?: number | null
           source_run_id?: string | null
           stock_origin?: string | null
           typo_count?: number | null
           vintage?: number | null
+          was_biddable_at_observation?: boolean | null
         }
         Update: {
+          algorithm_version?: string | null
+          comparison_evidence?: Json | null
+          evidence_score?: number | null
+          impact_band?: string | null
           is_biddable?: never
           match_group_key?: string | null
+          match_reasons?: string[] | null
           match_score?: number | null
           matched_words?: string[] | null
           name?: string | null
@@ -2348,10 +2631,15 @@ export type Database = {
           purchase_mode?: string | null
           rank?: number | null
           region?: string | null
+          review_band?: never
+          review_priority?: never
+          risk_flags?: string[] | null
+          score_margin?: number | null
           source_run_id?: string | null
           stock_origin?: string | null
           typo_count?: number | null
           vintage?: number | null
+          was_biddable_at_observation?: boolean | null
         }
         Relationships: [
           {
@@ -2529,7 +2817,22 @@ export type Database = {
           release_price_p: number | null
           wine_ref: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "wine_card_view"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
       }
       wine_card_view: {
         Row: {
@@ -2600,14 +2903,22 @@ export type Database = {
       }
       wine_match_review_view: {
         Row: {
+          algorithm_version: string | null
           coverage_tier: string | null
+          evidence_score: number | null
+          impact_band: string | null
           is_bbx_eligible: boolean | null
           last_error_at: string | null
           last_run_status: string | null
           linked_row_count: number | null
           match_group_key: string | null
           match_method: string | null
+          match_reasons: string[] | null
           parent_sku: string | null
+          review_band: string | null
+          review_priority: number | null
+          risk_flags: string[] | null
+          score_margin: number | null
           second_wine_conflict: boolean | null
           source: string | null
           source_row_count: number | null
@@ -2617,6 +2928,8 @@ export type Database = {
           suggestions_observed_at: string | null
           suppressed_row_count: number | null
           token_coverage: number | null
+          top_candidate_parent_sku: string | null
+          top_candidate_was_biddable_at_observation: boolean | null
           top_match_score: number | null
           unresolved_row_count: number | null
           wine_ref: string | null
@@ -2625,8 +2938,13 @@ export type Database = {
       }
       wine_match_suggestion_view: {
         Row: {
+          algorithm_version: string | null
+          comparison_evidence: Json | null
+          evidence_score: number | null
+          impact_band: string | null
           is_bbx_eligible: boolean | null
           match_group_key: string | null
+          match_reasons: string[] | null
           match_score: number | null
           name: string | null
           observed_at: string | null
@@ -2634,8 +2952,13 @@ export type Database = {
           producer: string | null
           rank: number | null
           region: string | null
+          review_band: string | null
+          review_priority: number | null
+          risk_flags: string[] | null
+          score_margin: number | null
           source: string | null
           vintage: number | null
+          was_biddable_at_observation: boolean | null
         }
         Relationships: []
       }
@@ -2675,7 +2998,22 @@ export type Database = {
           vintage: number | null
           wine_ref: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "wine_card_view"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
       }
     }
     Functions: {
@@ -2957,13 +3295,17 @@ export type Database = {
         Args: { p_source?: string }
         Returns: {
           all_groups: number
+          ambiguous: number
           errors: number
+          legacy: number
+          likely: number
           linked: number
           low_coverage: number
           needs_review: number
           no_suggestions: number
           no_suitable_match: number
           second_wine_conflicts: number
+          weak: number
           with_suggestions: number
           workable: number
         }[]
@@ -2986,12 +3328,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3015,11 +3357,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3040,11 +3382,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3065,11 +3407,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3082,11 +3424,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

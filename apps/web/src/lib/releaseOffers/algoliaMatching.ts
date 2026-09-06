@@ -5,6 +5,8 @@ import {
   stripGeographicSegments,
   wineCoreTokens,
 } from "@/lib/wine/coreKey";
+import { rankIdentityCandidates } from "@/lib/wine/identityRanking";
+import type { CandidateEvidence, ReviewBand } from "@/lib/wine/identityTypes";
 
 export type HistoricOfferMatchGroup = {
   match_group_key: string;
@@ -113,7 +115,16 @@ function comparableMatchKey(name: string, geography: ReadonlySet<string>): strin
   return releaseWineMatchKey(stripGeographicSegments(name, geography));
 }
 
-export type RankedHistoricOfferCandidate = HistoricOfferCandidate & { match_score: number };
+export type RankedHistoricOfferCandidate = HistoricOfferCandidate & {
+  match_score: number;
+  algorithm_version: string;
+  evidence_score: number;
+  score_margin: number | null;
+  review_band: ReviewBand;
+  risk_flags: string[];
+  match_reasons: string[];
+  comparison_evidence: CandidateEvidence["components"];
+};
 
 function catalogueCoreTokens(hit: AlgoliaWineHit, candidate: HistoricOfferCandidate): string[] {
   return wineCoreTokens(
@@ -130,23 +141,56 @@ export function topHistoricOfferCandidates(
   hits: AlgoliaWineHit[],
   sourceWine: string,
   limit = 5,
+  sourceVintage: number | null = null,
 ): RankedHistoricOfferCandidate[] {
   const sourceTokens = wineCoreTokens(sourceWine);
   const seen = new Set<string>();
-  const scored: Array<{ candidate: RankedHistoricOfferCandidate; order: number }> = [];
+  const prepared: Array<{
+    candidate: HistoricOfferCandidate & { match_score: number };
+    candidateText: string;
+    sourceText: string;
+    order: number;
+  }> = [];
   for (let hitIndex = 0; hitIndex < hits.length; hitIndex += 1) {
     const candidate = toHistoricOfferCandidate(hits[hitIndex], hitIndex + 1);
     if (!candidate || seen.has(candidate.parent_sku)) continue;
     seen.add(candidate.parent_sku);
-    scored.push({
+    const geography = catalogueGeography(hits[hitIndex]);
+    const candidateText = `${stripGeographicSegments(candidate.name, geography)} ${candidate.producer ?? ""}`.trim();
+    const sourceText = stripGeographicSegments(sourceWine, geography);
+    prepared.push({
       candidate: {
         ...candidate,
         match_score: coreKeyScore(sourceTokens, catalogueCoreTokens(hits[hitIndex], candidate)),
       },
+      candidateText,
+      sourceText,
       order: hitIndex,
     });
   }
-  scored.sort((left, right) =>
-    right.candidate.match_score - left.candidate.match_score || left.order - right.order);
-  return scored.slice(0, limit).map((entry, index) => ({ ...entry.candidate, rank: index + 1 }));
+  const ranked = rankIdentityCandidates(prepared.map((entry) => ({
+    id: entry.candidate.parent_sku,
+    originalRank: entry.order,
+    value: entry.candidate,
+    input: {
+      source: "release_offer",
+      field: "wine_name",
+      sourceText: entry.sourceText,
+      candidateText: entry.candidateText,
+      sourceVintage,
+      candidateVintage: entry.candidate.vintage,
+      riskFlags: sourceVintage === null ? ["source_vintage_missing"] : [],
+    },
+  })));
+  return ranked.slice(0, limit).map(({ value, evidence }, index) => ({
+    ...value,
+    rank: index + 1,
+    algorithm_version: evidence.algorithmVersion,
+    evidence_score: evidence.evidenceScore,
+    score_margin: evidence.scoreMargin,
+    review_band: evidence.reviewBand,
+    risk_flags: evidence.riskFlags,
+    match_reasons: evidence.reasons,
+    comparison_evidence: evidence.components,
+  }));
 }

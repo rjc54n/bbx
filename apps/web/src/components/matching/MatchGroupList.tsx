@@ -21,6 +21,15 @@ export type MatchCandidate = {
   typo_count: number | null;
   is_bbx_eligible: boolean;
   match_score: number | null;
+  algorithm_version: string | null;
+  evidence_score: number | null;
+  score_margin: number | null;
+  review_band: string;
+  impact_band: string | null;
+  risk_flags: string[];
+  match_reasons: string[];
+  comparison_evidence: Record<string, unknown> | null;
+  was_biddable_at_observation: boolean;
 };
 
 export type ReleaseOfferPanel = {
@@ -66,12 +75,52 @@ export type MatchGroupView = {
   /** 'full' | 'full_with_typos' | 'partial' | 'low' | 'none' (triage spec §4.2). */
   coverage_tier: string;
   token_coverage: number | null;
+  algorithm_version: string | null;
+  evidence_score: number | null;
+  score_margin: number | null;
+  review_band: string;
+  review_priority: number;
+  impact_band: string | null;
+  risk_flags: string[];
+  match_reasons: string[];
+  top_candidate_parent_sku: string | null;
+  top_candidate_was_biddable_at_observation: boolean | null;
   candidates: MatchCandidate[];
   /** Default text for the "search the wider catalogue" box. */
   catalogueSearchQuery: string;
   panel: MatchGroupPanel;
   favouriteTarget: FavouriteTarget | null;
   isFavourite: boolean;
+};
+
+const REVIEW_BAND_LABEL: Record<string, string> = {
+  likely: "Likely match",
+  ambiguous: "Ambiguous match",
+  weak: "Weak match",
+  legacy: "Legacy suggestion",
+};
+
+const IMPACT_BAND_LABEL: Record<string, string> = {
+  current_market: "Current market relevance",
+  source_evidence: "Source evidence available",
+  identity_only: "Identity only",
+};
+
+const REASON_LABEL: Record<string, string> = {
+  canonical_name_exact: "Canonical wine name agrees",
+  high_token_overlap: "High balanced token overlap",
+  vintage_agreement: "Vintage agrees",
+  approved_alias_normalised: "Approved abbreviation normalised",
+  producer_agreement: "Producer agrees",
+};
+
+const RISK_LABEL: Record<string, string> = {
+  vintage_disagreement: "Vintage disagrees",
+  second_wine_conflict: "Second-wine marker disagrees",
+  candidate_extra_terms: "Candidate has distinguishing extra terms",
+  small_score_margin: "Runner-up has a similar score",
+  source_vintage_missing: "Source vintage is missing",
+  retrieval_degraded: "Optional catalogue query failed",
 };
 
 const TIER_LABEL: Record<string, string> = {
@@ -87,6 +136,10 @@ function coverageNote(group: MatchGroupView): string | null {
   return typeof group.token_coverage === "number"
     ? `${label} · ${Math.round(group.token_coverage * 100)}%`
     : label;
+}
+
+function evidenceFact(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function displayMethod(value: string | null) {
@@ -169,8 +222,19 @@ export function MatchGroupList({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1"><h2 className="font-semibold">{group.source_wine}</h2><p className="mt-1 text-xs text-ink-muted">{group.subtitle}</p></div>
           {group.favouriteTarget && <FavouriteStar target={group.favouriteTarget} favourite={group.isFavourite} label={group.source_wine} />}
-          <div className="text-right text-xs"><p>{group.unresolved_row_count} unresolved · {group.linked_row_count} linked · {group.suppressed_row_count} suppressed</p>{group.parent_sku && <p className="mt-1 font-medium">Parent {group.parent_sku} · {displayMethod(group.match_method)}</p>}{group.parent_sku && <p className="text-ink-muted">{group.is_bbx_eligible ? "Currently in the BBX-eligible catalogue" : "Found in BBR catalogue, not currently BBX-eligible"}</p>}{group.unresolved_row_count > 0 && coverageNote(group) && <p className="mt-1 text-ink-muted">{coverageNote(group)}</p>}</div>
+          <div className="text-right text-xs"><p>{group.unresolved_row_count} unresolved · {group.linked_row_count} linked · {group.suppressed_row_count} suppressed</p>{group.parent_sku && <p className="mt-1 font-medium">Parent {group.parent_sku} · {displayMethod(group.match_method)}</p>}{group.parent_sku && <p className="text-ink-muted">{group.is_bbx_eligible ? "Currently in the BBX-eligible catalogue" : "Found in BBR catalogue, not currently BBX-eligible"}</p>}</div>
         </div>
+        {group.unresolved_row_count > 0 && group.candidates.length > 0 && <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full border border-border bg-background px-2 py-1 font-medium">{REVIEW_BAND_LABEL[group.review_band] ?? group.review_band}</span>
+          {group.impact_band && <span className="rounded-full border border-border bg-background px-2 py-1">{IMPACT_BAND_LABEL[group.impact_band] ?? group.impact_band}</span>}
+          {typeof group.evidence_score === "number" && <span className="text-ink-muted">Evidence score {Math.round(group.evidence_score * 100)}%</span>}
+          {typeof group.score_margin === "number" && <span className="text-ink-muted">Lead over runner-up {Math.round(group.score_margin * 100)} points</span>}
+          {group.review_band === "legacy" && <span className="text-ink-muted">Run matching again to calculate v2 evidence.</span>}
+        </div>}
+        {group.unresolved_row_count > 0 && (group.match_reasons.length > 0 || group.risk_flags.length > 0) && <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+          {group.match_reasons.slice(0, 4).map((reason) => <p key={reason} className="text-ink-muted">Reason: {REASON_LABEL[reason] ?? reason.replaceAll("_", " ")}</p>)}
+          {group.risk_flags.map((risk) => <p key={risk} className="font-medium text-ink">Check: {RISK_LABEL[risk] ?? risk.replaceAll("_", " ")}</p>)}
+        </div>}
         {/* The one hazard that survives into the high-coverage tiers: the source
             and the top candidate disagree about a second wine. Confirming links
             a second wine to a grand vin's Parent ID or the reverse, and
@@ -183,8 +247,13 @@ export function MatchGroupList({
           ? <ReleaseOfferPanelView panel={group.panel} />
           : <CellarTrackerPanelView panel={group.panel} />}
         {group.unresolved_row_count > 0 && group.candidates.length > 0 && <div className="mt-3 grid gap-2 lg:grid-cols-2">
-          {group.candidates.map((candidate) => <div key={candidate.parent_sku} className="flex items-start justify-between gap-3 rounded border border-border p-3 text-xs"><div><p className="font-medium">#{candidate.rank} {candidate.name}</p><p className="mt-1 text-ink-muted">Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"}</p><p className="text-ink-muted">{candidate.stock_origin ?? "Stock origin unavailable"} · {candidate.purchase_mode ?? "Purchase mode unavailable"} · {candidate.is_bbx_eligible ? "BBX-eligible" : "not currently BBX-eligible"}{candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}{typeof candidate.match_score === "number" ? ` · ${Math.round(candidate.match_score * 100)}% name match` : ""}</p></div><form action={() => submit({ source: group.source, op: "confirm", matchGroupKey: group.match_group_key, parentSku: candidate.parent_sku })}><SubmitButton pendingLabel="Confirming…" className="rounded border border-accent px-2 py-1 text-accent">Confirm group</SubmitButton></form></div>)}
+          {group.candidates.map((candidate) => {
+            const validFragments = evidenceFact(candidate.comparison_evidence?.valid_in_bond_fragment_count);
+            const validFormats = evidenceFact(candidate.comparison_evidence?.valid_format_count);
+            return <div key={candidate.parent_sku} className="flex items-start justify-between gap-3 rounded border border-border p-3 text-xs"><div><p className="font-medium">#{candidate.rank} {candidate.name}</p><p className="mt-1 text-ink-muted">Parent {candidate.parent_sku} · {candidate.producer ?? "Producer unavailable"} · {candidate.region ?? "Region unavailable"}</p><p className="text-ink-muted">{candidate.stock_origin ?? "Stock origin unavailable"} · {candidate.purchase_mode ?? "Purchase mode unavailable"} · {candidate.is_bbx_eligible ? "BBX-eligible now" : "not BBX-eligible now"} · {candidate.was_biddable_at_observation ? "eligible when matched" : "not eligible when matched"}{candidate.typo_count !== null ? ` · ${candidate.typo_count} typo${candidate.typo_count === 1 ? "" : "s"}` : ""}</p>{candidate.algorithm_version && <p className="mt-1 text-ink-muted">{REVIEW_BAND_LABEL[candidate.review_band] ?? candidate.review_band}{typeof candidate.evidence_score === "number" ? ` · evidence ${Math.round(candidate.evidence_score * 100)}%` : ""}{candidate.rank === 1 && typeof candidate.score_margin === "number" ? ` · ${Math.round(candidate.score_margin * 100)}-point lead` : ""}</p>}{validFragments !== null && validFormats !== null && <p className="text-ink-muted">{validFragments} valid in-bond fragment{validFragments === 1 ? "" : "s"} across {validFormats} format{validFormats === 1 ? "" : "s"}</p>}{candidate.risk_flags.map((risk) => <p key={risk} className="font-medium">Check: {RISK_LABEL[risk] ?? risk.replaceAll("_", " ")}</p>)}{!candidate.algorithm_version && typeof candidate.match_score === "number" && <p className="text-ink-muted">Legacy name-overlap score {Math.round(candidate.match_score * 100)}%</p>}</div><form action={() => submit({ source: group.source, op: "confirm", matchGroupKey: group.match_group_key, parentSku: candidate.parent_sku })}><SubmitButton pendingLabel="Confirming…" className="rounded border border-accent px-2 py-1 text-accent">Confirm group</SubmitButton></form></div>;
+          })}
         </div>}
+        {group.unresolved_row_count > 0 && coverageNote(group) && <details className="mt-3 text-xs text-ink-muted"><summary className="cursor-pointer">Legacy Algolia coverage</summary><p className="mt-1">{coverageNote(group)}. This is retrieval evidence, not match probability.</p></details>}
         {group.unresolved_row_count > 0 && <div className="mt-3 flex flex-wrap items-start gap-3">
           <form action={(formData) => submit({ source: group.source, op: "manual", matchGroupKey: group.match_group_key, parentSku: String(formData.get("parent_sku") ?? "").trim() })} className="flex gap-2"><input name="parent_sku" inputMode="numeric" pattern="[0-9]{5,30}" placeholder="Parent ID" className="w-40 rounded border border-border px-2 py-1.5 text-xs" required /><SubmitButton pendingLabel="Linking…" className="rounded border border-border px-2 py-1.5 text-xs">Link manually</SubmitButton></form>
         </div>}

@@ -95,6 +95,13 @@ against the current migrations/code for anything load-bearing.
   proposal made. Slices 1 and 2 applied to production on 3 Sep 2026; slice 3
   (a more accurate coverage metric) was applied and reverted the same day on
   performance — see §8. Confirm state against the ledger, not this line.
+- [MATCHING-QUALITY-AND-REVIEW-PRIORITISATION-PLAN.md](MATCHING-QUALITY-AND-REVIEW-PRIORITISATION-PLAN.md):
+  proposed 6 September 2026 epic and implementation plan to remove the
+  default coverage gate, add versioned field-aware matching evidence, and
+  prioritise every unresolved group without widening automatic linking.
+- [MATCHING-QUALITY-EVALUATION-2026-09-06.md](MATCHING-QUALITY-EVALUATION-2026-09-06.md):
+  read-only production baseline, challenge-set decisions, local verification
+  and the held-out and performance gates that still require a data branch.
 
 ## Roadmap
 

@@ -8,6 +8,7 @@ import {
   type RankedHistoricOfferCandidate,
 } from "./algoliaMatching";
 import { cellarTrackerCatalogueQuery, type CellarTrackerMatchGroup } from "@/lib/cellar/cellartrackerMatching";
+import { wineIdentityQueryVariants } from "@/lib/wine/identityCanonicaliser";
 
 const ALGOLIA_INDEX = "prod_product";
 const INITIAL_HITS_PER_PAGE = 20;
@@ -37,6 +38,7 @@ export type AlgoliaGroupResult = {
    * auto-link evidence. The caller records the group as processed.
    */
   validationError?: string;
+  retrievalDegraded?: boolean;
 };
 
 export type CellarTrackerGroupResult = {
@@ -55,11 +57,16 @@ function credentials() {
   return { appId, apiKey };
 }
 
-function searchParams(group: HistoricOfferMatchGroup, hitsPerPage: number, page = 0) {
+function searchParams(
+  group: HistoricOfferMatchGroup,
+  hitsPerPage: number,
+  page = 0,
+  query = group.catalogue_query ?? group.source_wine,
+) {
   const facetFilters = ["family_type:Wines"];
   if (group.source_vintage !== null) facetFilters.push(`vintage:${group.source_vintage}`);
   return new URLSearchParams({
-    query: group.catalogue_query ?? group.source_wine,
+    query,
     hitsPerPage: String(hitsPerPage),
     page: String(page),
     facetFilters: JSON.stringify(facetFilters),
@@ -135,6 +142,29 @@ function request(group: HistoricOfferMatchGroup, hitsPerPage: number, page = 0):
   return { indexName: ALGOLIA_INDEX, params: searchParams(group, hitsPerPage, page) };
 }
 
+function queryVariants(group: HistoricOfferMatchGroup): string[] {
+  return wineIdentityQueryVariants(
+    group.catalogue_query ?? group.source_wine,
+    "wine_name",
+    "release_offer",
+  );
+}
+
+function optionalRequest(group: HistoricOfferMatchGroup): SearchRequest | null {
+  const variants = queryVariants(group);
+  return variants.length === 2
+    ? { indexName: ALGOLIA_INDEX, params: searchParams(group, VALIDATION_HITS_PER_PAGE, 0, variants[1]) }
+    : null;
+}
+
+function markRetrievalDegraded(candidates: RankedHistoricOfferCandidate[]): RankedHistoricOfferCandidate[] {
+  return candidates.map((candidate) => ({
+    ...candidate,
+    risk_flags: [...new Set([...candidate.risk_flags, "retrieval_degraded"])].sort(),
+    comparison_evidence: { ...candidate.comparison_evidence, retrieval_degraded: true },
+  }));
+}
+
 export async function searchHistoricOfferGroups(
   groups: HistoricOfferMatchGroup[],
 ): Promise<AlgoliaGroupResult[]> {
@@ -159,13 +189,43 @@ export async function searchHistoricOfferGroups(
     }
     output.set(group.match_group_key, {
       group,
-      candidates: topHistoricOfferCandidates(result.hits, group.source_wine),
+      candidates: topHistoricOfferCandidates(result.hits, group.source_wine, 5, group.source_vintage),
       exactParentSkus: [],
       exhaustive: false,
       observedAt,
     });
     if (group.source_vintage !== null) validationGroups.push(group);
   });
+
+  const optionalGroups = groups.flatMap((group) => {
+    const result = output.get(group.match_group_key);
+    const extra = optionalRequest(group);
+    return extra && result && !result.error && result.candidates[0]?.review_band !== "likely"
+      ? [{ group, request: extra }]
+      : [];
+  });
+  if (optionalGroups.length > 0) {
+    const { results: optionalResults } = await executePageQueries(
+      optionalGroups.map((entry) => entry.request),
+    );
+    optionalGroups.forEach(({ group }, index) => {
+      const current = output.get(group.match_group_key);
+      if (!current) return;
+      const optional = optionalResults[index];
+      if (!optional || optional.message || !Array.isArray(optional.hits)) {
+        current.retrievalDegraded = true;
+        current.candidates = markRetrievalDegraded(current.candidates);
+        return;
+      }
+      const firstHits = initialByGroup.get(group.match_group_key)?.hits ?? [];
+      current.candidates = topHistoricOfferCandidates(
+        [...firstHits, ...optional.hits],
+        group.source_wine,
+        5,
+        group.source_vintage,
+      );
+    });
+  }
 
   const remainingRequests: Array<{ group: HistoricOfferMatchGroup; page: number }> = [];
   const validationHits = new Map<string, AlgoliaWineHit[]>();
@@ -290,5 +350,5 @@ export async function searchBbrCatalogue(query: string, vintage: number | null) 
   if (result.message || !Array.isArray(result.hits)) {
     throw new Error(result.message ?? "Algolia returned no result set.");
   }
-  return topHistoricOfferCandidates(result.hits, group.source_wine, 10);
+  return topHistoricOfferCandidates(result.hits, group.source_wine, 10, group.source_vintage);
 }

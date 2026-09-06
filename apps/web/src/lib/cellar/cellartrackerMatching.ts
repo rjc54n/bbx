@@ -5,12 +5,15 @@ import {
   type HistoricOfferCandidate,
 } from "@/lib/releaseOffers/algoliaMatching";
 import {
+  coreKey,
   coreKeyScore,
   geographyTokens,
   sharedTokenCount,
   stripGeographicSegments,
   wineCoreTokens,
 } from "@/lib/wine/coreKey";
+import { rankIdentityCandidates } from "@/lib/wine/identityRanking";
+import type { CandidateEvidence, ReviewBand } from "@/lib/wine/identityTypes";
 
 /**
  * CellarTracker commonly prefixes its Wine field with the Producer field,
@@ -73,7 +76,18 @@ export const CELLARTRACKER_AUTO_LINK_MARGIN = 0.15;
 export const CELLARTRACKER_MIN_SHARED_TOKENS = 2;
 export const CELLARTRACKER_MAX_SUGGESTIONS = 5;
 
-export type CellarTrackerRankedCandidate = HistoricOfferCandidate & { match_score: number };
+export type CellarTrackerRankedCandidate = HistoricOfferCandidate & {
+  match_score: number;
+  algorithm_version: string;
+  evidence_score: number;
+  score_margin: number | null;
+  review_band: ReviewBand;
+  risk_flags: string[];
+  match_reasons: string[];
+  comparison_evidence: CandidateEvidence["components"];
+};
+
+type LegacyCellarTrackerCandidate = HistoricOfferCandidate & { match_score: number };
 
 export type CellarTrackerMatchGroup = {
   match_group_key: string;
@@ -100,17 +114,24 @@ export function rankCellarTrackerCandidates(
 ): CellarTrackerRanking {
   const sourceTokens = cellarTrackerCoreTokens(group.source_wine, group.source_producer);
   const scored = new Map<string, {
-    candidate: CellarTrackerRankedCandidate;
+    candidate: LegacyCellarTrackerCandidate;
     tokens: string[];
     shared: number;
     contained: boolean;
     equal: boolean;
+    candidateText: string;
+    producerAgreement: boolean | null;
   }>();
 
   for (const hit of hits) {
     const candidate = toHistoricOfferCandidate(hit, 1);
     if (!candidate) continue;
     if (group.source_vintage !== null && candidate.vintage !== group.source_vintage) continue;
+    const geography = geographyTokens(
+      typeof hit.country === "string" ? hit.country : null,
+      candidate.region,
+      typeof hit.subregion === "string" ? hit.subregion : null,
+    );
     const tokens = bbrCatalogueCoreTokens({
       name: candidate.name,
       producer: candidate.producer,
@@ -125,6 +146,10 @@ export function rankCellarTrackerCandidates(
       shared,
       contained: shared === sourceTokens.length || shared === tokens.length,
       equal: shared === sourceTokens.length && shared === tokens.length,
+      candidateText: `${stripGeographicSegments(candidate.name, geography, { trailingOnly: false })} ${candidate.producer ?? ""}`.trim(),
+      producerAgreement: group.source_producer && candidate.producer
+        ? coreKey(wineCoreTokens(group.source_producer)) === coreKey(wineCoreTokens(candidate.producer))
+        : null,
     };
     const existing = scored.get(candidate.parent_sku);
     if (!existing || entry.candidate.match_score > existing.candidate.match_score) {
@@ -136,15 +161,40 @@ export function rankCellarTrackerCandidates(
     right.candidate.match_score - left.candidate.match_score
       || left.candidate.parent_sku.localeCompare(right.candidate.parent_sku));
 
+  const ranked = rankIdentityCandidates(ordered.map((entry, index) => ({
+    id: entry.candidate.parent_sku,
+    originalRank: index,
+    value: entry.candidate,
+    input: {
+      source: "cellartracker",
+      field: "wine_name",
+      sourceText: `${group.source_wine} ${group.source_producer ?? ""}`.trim(),
+      candidateText: entry.candidateText,
+      sourceVintage: group.source_vintage,
+      candidateVintage: entry.candidate.vintage,
+      producerAgreement: entry.producerAgreement,
+    },
+  })));
+
   return {
-    candidates: ordered.slice(0, limit).map((entry, index) => ({ ...entry.candidate, rank: index + 1 })),
+    candidates: ranked.slice(0, limit).map(({ value, evidence }, index) => ({
+      ...value,
+      rank: index + 1,
+      algorithm_version: evidence.algorithmVersion,
+      evidence_score: evidence.evidenceScore,
+      score_margin: evidence.scoreMargin,
+      review_band: evidence.reviewBand,
+      risk_flags: evidence.riskFlags,
+      match_reasons: evidence.reasons,
+      comparison_evidence: evidence.components,
+    })),
     autoLinkParentSku: group.source_vintage === null ? null : autoLinkParentSku(ordered, sourceTokens),
   };
 }
 
 function autoLinkParentSku(
   ordered: Array<{
-    candidate: CellarTrackerRankedCandidate;
+    candidate: LegacyCellarTrackerCandidate;
     shared: number;
     contained: boolean;
     equal: boolean;

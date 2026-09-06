@@ -178,4 +178,69 @@ describe("historic-offer Algolia server search", () => {
     expect(result.exactParentSkus).toEqual(["88888888888"]);
     expect(result.exhaustive).toBe(true);
   });
+
+  it("uses one alias-expanded retrieval query when the original result is inadequate", async () => {
+    const aliasGroup = {
+      match_group_key: "2017|ch lynch bages",
+      source_match_key: "ch lynch bages",
+      source_vintage: 2017,
+      source_wine: "2017 Ch. Lynch-Bages",
+    };
+    const queries: string[] = [];
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => {
+      const { requests } = JSON.parse(String(init.body)) as { requests: Array<{ params: string }> };
+      return response(requests.map(({ params }) => {
+        const query = new URLSearchParams(params).get("query") ?? "";
+        queries.push(query);
+        return query.includes("chateau")
+          ? {
+              hits: [{
+                parent_sku: "20178004817",
+                name: "2017 Chateau Lynch-Bages, Pauillac, Bordeaux",
+                vintage: 2017,
+                country: "France",
+                region: "Bordeaux",
+                subregion: "Pauillac",
+              }],
+              nbPages: 1,
+              exhaustiveNbHits: true,
+            }
+          : { hits: [], nbPages: 1, exhaustiveNbHits: true };
+      }));
+    }));
+
+    const [result] = await searchHistoricOfferGroups([aliasGroup]);
+
+    expect(queries).toEqual(["2017 Ch. Lynch-Bages", "2017 chateau lynch bages"]);
+    expect(result.candidates[0]).toMatchObject({
+      parent_sku: "20178004817",
+      review_band: "likely",
+    });
+    expect(result.exactParentSkus).toEqual([]);
+  });
+
+  it("retains original candidates when the optional alias query fails", async () => {
+    const aliasGroup = {
+      match_group_key: "2017|ch example",
+      source_match_key: "ch example",
+      source_vintage: 2017,
+      source_wine: "2017 Ch. Example",
+    };
+    let call = 0;
+    vi.stubGlobal("fetch", vi.fn(() => {
+      call += 1;
+      if (call === 2) return Promise.resolve(new Response("upstream failure", { status: 500 }));
+      return response([{
+        hits: [{ parent_sku: "20170000001", name: "2017 Other Example", vintage: 2017 }],
+        nbPages: 1,
+        exhaustiveNbHits: true,
+      }]);
+    }));
+
+    const [result] = await searchHistoricOfferGroups([aliasGroup]);
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.retrievalDegraded).toBe(true);
+    expect(result.candidates[0].risk_flags).toContain("retrieval_degraded");
+  });
 });

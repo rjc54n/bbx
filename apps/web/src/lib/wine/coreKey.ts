@@ -18,8 +18,8 @@ const CORE_STOPWORDS = new Set(
 
 const VINTAGE_TOKEN = /^(?:18|19|20)\d{2}$/;
 
-/** Sorted, distinct identity tokens. */
-export function wineCoreTokens(value: string | null | undefined): string[] {
+/** Identity tokens in source order, with repetitions preserved. */
+export function wineCoreSequence(value: string | null | undefined): string[] {
   const words = (value ?? "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -30,7 +30,12 @@ export function wineCoreTokens(value: string | null | undefined): string[] {
     .trim()
     .split(" ");
   const kept = words.filter((word) => word && !CORE_STOPWORDS.has(word) && !VINTAGE_TOKEN.test(word));
-  return [...new Set(kept)].sort();
+  return kept;
+}
+
+/** Sorted, distinct identity tokens. */
+export function wineCoreTokens(value: string | null | undefined): string[] {
+  return [...new Set(wineCoreSequence(value))].sort();
 }
 
 export function coreKey(tokens: readonly string[]): string {

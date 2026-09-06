@@ -27,7 +27,7 @@
 --                  2022|ct gamma excluded -> group disappears
 
 BEGIN;
-SELECT plan(62);
+SELECT plan(74);
 
 INSERT INTO auth.users (id) VALUES
     ('11111111-1111-1111-1111-111111111111'),
@@ -99,11 +99,19 @@ VALUES
     ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2023|eta', 'eta', 2023, 'Eta Wine', 1, 'failed', TIMESTAMPTZ '2026-01-20 10:10+00');
 
 INSERT INTO public.release_offer_match_suggestions (
-    match_group_key, parent_sku, source_run_id, rank, name, was_biddable_at_observation, observed_at, match_score
+    match_group_key, parent_sku, source_run_id, rank, name,
+    was_biddable_at_observation, observed_at, match_score,
+    algorithm_version, evidence_score, score_margin, review_band,
+    review_priority, impact_band, risk_flags, match_reasons, comparison_evidence
 )
 VALUES
-    ('2014|alpha', '20140000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, 'Alpha Catalogue Wine', TRUE, now(), 0.90),
-    ('2014|alpha', '20990000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 2, 'Alpha Other Wine', FALSE, now(), 0.70);
+    ('2014|alpha', '20140000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1,
+     'Alpha Catalogue Wine', TRUE, now(), 0.90,
+     'wine-identity-v2.0.0', 0.9500, 0.2000, 'likely', 10, 'current_market',
+     '{}', ARRAY['canonical_name_exact'], '{"canonical_exact":true}'::JSONB),
+    ('2014|alpha', '20990000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 2,
+     'Alpha Other Wine', FALSE, now(), 0.70,
+     NULL, NULL, NULL, NULL, NULL, NULL, '{}', '{}', NULL);
 
 -- CellarTracker ----------------------------------------------------------
 
@@ -146,9 +154,15 @@ INSERT INTO public.cellartracker_match_runs (id, snapshot_import_id, started_by,
 VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '22222222-2222-2222-2222-222222222221', '11111111-1111-1111-1111-111111111111', 'completed');
 
 INSERT INTO public.cellartracker_match_suggestions (
-    match_group_key, parent_sku, source_run_id, rank, name, was_biddable_at_observation, observed_at, match_score
+    match_group_key, parent_sku, source_run_id, rank, name,
+    was_biddable_at_observation, observed_at, match_score,
+    algorithm_version, evidence_score, score_margin, review_band,
+    review_priority, impact_band, risk_flags, match_reasons, comparison_evidence
 )
-VALUES ('2020|ct alpha', '20140000001', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 1, 'Alpha Catalogue Wine', TRUE, now(), 0.80);
+VALUES ('2020|ct alpha', '20140000001', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 1,
+    'Alpha Catalogue Wine', TRUE, now(), 0.80,
+    'wine-identity-v2.0.0', 0.7500, NULL, 'ambiguous', 20, 'current_market',
+    '{}', ARRAY['high_token_overlap'], '{"canonical_exact":false}'::JSONB);
 
 -- === Structure ==========================================================
 
@@ -168,7 +182,10 @@ SELECT columns_are(
         -- tier). Part of the common projection: each is computed the same way
         -- on both per-source review views and carried through both arms of the
         -- union, so the /matches list reads them without knowing the source.
-        'second_wine_conflict', 'token_coverage', 'coverage_tier'
+        'second_wine_conflict', 'token_coverage', 'coverage_tier',
+        'algorithm_version', 'evidence_score', 'score_margin', 'review_band',
+        'review_priority', 'impact_band', 'risk_flags', 'match_reasons',
+        'top_candidate_parent_sku', 'top_candidate_was_biddable_at_observation'
     ],
     'wine_match_review_view exposes exactly the common review projection'
 );
@@ -176,7 +193,10 @@ SELECT columns_are(
     'public', 'wine_match_suggestion_view',
     ARRAY[
         'source', 'match_group_key', 'parent_sku', 'rank', 'name', 'vintage',
-        'producer', 'region', 'match_score', 'is_bbx_eligible', 'observed_at'
+        'producer', 'region', 'match_score', 'is_bbx_eligible', 'observed_at',
+        'algorithm_version', 'evidence_score', 'score_margin', 'review_band',
+        'review_priority', 'impact_band', 'risk_flags', 'match_reasons',
+        'comparison_evidence', 'was_biddable_at_observation'
     ],
     'wine_match_suggestion_view exposes exactly the common suggestion projection'
 );
@@ -204,6 +224,10 @@ SELECT col_type_is('public', 'cellartracker_match_review_view', 'coverage_tier',
 SELECT col_type_is('public', 'wine_match_review_view', 'source', 'text', 'union: source is text');
 SELECT col_type_is('public', 'wine_match_review_view', 'wine_ref', 'text', 'union: wine_ref is text');
 SELECT col_type_is('public', 'wine_match_review_view', 'is_bbx_eligible', 'boolean', 'union: is_bbx_eligible is boolean');
+SELECT col_type_is('public', 'wine_match_review_view', 'evidence_score', 'numeric(5,4)', 'union: evidence_score is numeric(5,4)');
+SELECT col_type_is('public', 'wine_match_review_view', 'review_band', 'text', 'union: review_band is text');
+SELECT col_type_is('public', 'wine_match_review_view', 'review_priority', 'smallint', 'union: review_priority is smallint');
+SELECT col_type_is('public', 'wine_match_review_view', 'risk_flags', 'text[]', 'union: risk_flags is text[]');
 
 SELECT results_eq(
     $$
@@ -319,6 +343,27 @@ SELECT is(
     1,
     'the suggestion union carries the CellarTracker suggestion under its own source'
 );
+SELECT is(
+    (SELECT review_band FROM public.wine_match_review_view WHERE source = 'release_offer' AND match_group_key = '2014|alpha'),
+    'likely',
+    'the rank-1 release suggestion supplies the group review band'
+);
+SELECT is(
+    (SELECT top_candidate_parent_sku FROM public.wine_match_review_view WHERE source = 'release_offer' AND match_group_key = '2014|alpha'),
+    '20140000001',
+    'the review view exposes the rank-1 Parent ID'
+);
+SELECT is(
+    (SELECT review_band FROM public.wine_match_suggestion_view
+      WHERE source = 'release_offer' AND match_group_key = '2014|alpha' AND rank = 2),
+    'legacy',
+    'a suggestion without v2 evidence remains visible as legacy'
+);
+SELECT is(
+    (SELECT review_band FROM public.wine_match_review_view WHERE source = 'cellartracker' AND match_group_key = '2020|ct alpha'),
+    'ambiguous',
+    'the rank-1 CellarTracker suggestion supplies its group review band'
+);
 
 -- === Summary parity =====================================================
 
@@ -374,6 +419,30 @@ SELECT is(
     (SELECT all_groups FROM public.wine_match_queue_summary('cellartracker')),
     (SELECT count(*) FROM public.wine_match_review_view WHERE source = 'cellartracker'),
     'summary is scoped to source=cellartracker'
+);
+SELECT is(
+    (SELECT likely FROM public.wine_match_queue_summary(NULL)),
+    (SELECT count(*) FROM public.wine_match_review_view
+      WHERE unresolved_row_count > 0 AND suggestion_count > 0 AND review_band = 'likely'),
+    'summary likely equals a direct count'
+);
+SELECT is(
+    (SELECT ambiguous FROM public.wine_match_queue_summary(NULL)),
+    (SELECT count(*) FROM public.wine_match_review_view
+      WHERE unresolved_row_count > 0 AND suggestion_count > 0 AND review_band = 'ambiguous'),
+    'summary ambiguous equals a direct count'
+);
+SELECT is(
+    (SELECT weak FROM public.wine_match_queue_summary(NULL)),
+    (SELECT count(*) FROM public.wine_match_review_view
+      WHERE unresolved_row_count > 0 AND suggestion_count > 0 AND review_band = 'weak'),
+    'summary weak equals a direct count'
+);
+SELECT is(
+    (SELECT legacy FROM public.wine_match_queue_summary(NULL)),
+    (SELECT count(*) FROM public.wine_match_review_view
+      WHERE unresolved_row_count > 0 AND suggestion_count > 0 AND review_band = 'legacy'),
+    'summary legacy equals a direct count'
 );
 
 -- Explicit bucket values for this fixture set:
