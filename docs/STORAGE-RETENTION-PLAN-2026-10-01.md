@@ -2,8 +2,8 @@
 
 **Status:** proposed 1 October 2026 and revised the same day after two
 reviews (see "Review changes" at the end). The owner accepted 30-day
-price-changes behaviour on 1 October. **Steps 1–3 are done** (step 1 has no
-production effect while the sweep is disabled). Steps 4–6 have not run. Step 4
+price-changes behaviour on 1 October. **Steps 1–4 are done** (step 1 has no
+production effect while the sweep is disabled). Steps 5 and 6 have not run. Step 4
 must finish before the sweep is re-enabled; otherwise the first resumed run's
 retention would delete the whole backlog in one statement. The daily
 sweep workflow is disabled (`gh workflow disable daily_sweep.yml`) until steps
@@ -284,6 +284,45 @@ WHERE id >= <lo> AND id < <lo + 25000>
 
 Afterwards, run a plain `VACUUM (ANALYZE) private.observation_events` so the
 freed space can be reused and the planner sees the new row counts.
+
+### Step 4 result (1 October 2026, 15:01–15:09 UTC)
+
+- **Cutoff:** `2026-09-01 15:00:00+00`, fixed before the first batch. The
+  preview showed 465,552 rows: 351,699 to delete and 113,853 to keep. Flagged
+  rows ran up to id 465,161, so all 19 ranges were needed.
+- **Gate:** run between every batch (no waiting locks, nothing active for
+  more than 30 seconds), plus a Postgres log check after batches 1, 5, 10 and
+  15. The only statement timeout during the run was one from the metrics
+  exporter at 15:02:19, at its usual sporadic rate.
+
+| Time (UTC) | Batch | Id range | Rows deleted | Seconds |
+|---|---|---|---|---|
+| 15:02:01 | 1 | 1–25000 | 25,000 | 0.91 |
+| 15:02:53 | 2 | 25001–50000 | 25,000 | 0.36 |
+| 15:03:03 | 3 | 50001–75000 | 25,000 | 0.35 |
+| 15:03:13 | 4 | 75001–100000 | 25,000 | 0.28 |
+| 15:03:23 | 5 | 100001–125000 | 25,000 | 0.07 |
+| 15:04:18 | 6 | 125001–150000 | 25,000 | 2.50 |
+| 15:04:34 | 7 | 150001–175000 | 25,000 | 0.65 |
+| 15:04:44 | 8 | 175001–200000 | 25,000 | 0.32 |
+| 15:04:53 | 9 | 200001–225000 | 25,000 | 0.28 |
+| 15:05:18 | 10 | 225001–250000 | 25,000 | 3.57 |
+| 15:06:17 | 11 | 250001–275000 | 25,000 | 2.69 |
+| 15:06:32 | 12 | 275001–300000 | 11,805 | 0.38 |
+| 15:06:43 | 13 | 300001–325000 | 11,093 | 0.35 |
+| 15:06:55 | 14 | 325001–350000 | 11,841 | 0.33 |
+| 15:07:04 | 15 | 350001–375000 | 1,520 | 0.34 |
+| 15:07:21 | 16 | 375001–400000 | 11,784 | 0.33 |
+| 15:07:31 | 17 | 400001–425000 | 12,323 | 0.04 |
+| 15:07:40 | 18 | 425001–450000 | 10,174 | 0.03 |
+| 15:07:49 | 19 | 450001–475000 | 6,159 | 0.02 |
+
+**Total deleted: 351,699**, matching the preview. Verified on the server:
+113,853 rows remain, none flagged, none older than the cutoff, oldest
+`2026-09-02 07:04`. A plain `VACUUM (ANALYZE)` (15 seconds) left 0 dead rows.
+As expected, the database stays at **422 MB**, with `observation_events` at a
+55 MB heap and 78 MB of indexes: the space is now reusable, not returned. The
+size-watch in step 4a decides whether anything more is needed.
 
 ### Step 4a: watch the size; reindex only if needed
 
