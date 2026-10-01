@@ -1,7 +1,7 @@
 # Storage retention plan, 1 October 2026
 
-**Status:** proposed 1 October 2026 and revised the same day after review
-(see "Review changes" at the end). Nothing below has been built or applied.
+**Status:** proposed 1 October 2026 and revised the same day after two
+reviews (see "Review changes" at the end). Nothing below has been built or applied.
 One owner decision is open: price-changes mode behaviour (step 1). The daily
 sweep workflow is disabled (`gh workflow disable daily_sweep.yml`) until steps
 1–5 are done.
@@ -23,9 +23,9 @@ degraded from about 06:56 UTC on 1 October, before the sweep connected at
 checkpoints writing 2–16 buffers took 10–30 seconds (against 0.3 seconds at
 02:42), and by 13:00 the database refused new connections. A restart at 13:16
 cleared the jam. A manual sweep then ran: the `products` read took 3.5
-seconds, but the catalogue cache refreshes (`catalogue_mv`,
-`wine_market_summary_mv`) hit the statement timeout and the run finished
-`partial`. The exporter started timing out again straight afterwards. This
+seconds. `catalogue_mv` refreshed on its first attempt, but
+`wine_market_summary_mv` hit the statement timeout (13:42:08) and the run
+finished `partial`. The exporter started timing out again straight afterwards. This
 matches the I/O-starvation hypothesis in
 [DEPLOYMENT-INCIDENT-2026-08-28.md](DEPLOYMENT-INCIDENT-2026-08-28.md). A
 likely contributor is that the hot data no longer fits in memory:
@@ -111,14 +111,27 @@ and stop if any check fails:
    DELETE FROM observation_events WHERE observed_at < now() - interval '30 days'
    ```
 
-   It is non-fatal, following the `refresh_catalogue_caches` contract: a
-   failure is logged and alerted but does not roll back or fail the sweep. A
-   missed day's retention just means the next run deletes two days of rows.
+   It is non-fatal: a failure does not roll back or fail the sweep, and does
+   not mark the run `partial`, because the source data and caches are still
+   correct. A missed day's retention just means the next run deletes two
+   days of rows.
+
+   **Alerting.** The workflow only alerts Slack when the job fails
+   (`.github/workflows/daily_sweep.yml`, `if: failure()`), and a non-fatal
+   error leaves the job green. So a retention failure sends its own message
+   through `send_slack_message` (`core/slack.py`), the same path
+   `report_catalogue_cache_failure` uses (`core/sweep.py:55`). If delivery
+   fails, it logs a warning, as that function does.
    Putting it inside `commit_sweep` (`core/store.py:355`) would let a
    housekeeping failure throw away a whole day's sweep, so it does not go
    there.
-3. Unit tests cover both changes, including a retention failure leaving the
-   sweep `completed`.
+3. Unit tests cover:
+   - The flagged events are no longer emitted.
+   - Retention deletes only rows older than 30 days.
+   - A retention failure leaves the sweep `completed` and sends one Slack
+     message.
+   - When the Slack call itself fails, the sweep is still `completed` and a
+     warning is logged.
 
 The workflow stays disabled, so this has no production effect until step 5.
 
@@ -196,54 +209,70 @@ The SQLite bootstrap schema in `core/db.py` drops `idx_obs_entity` to match.
 taking the database from 495 to roughly 421 MB. That is an estimate; confirm
 it with the size check before step 4.
 
-### Step 4: delete old events (operational, in controlled batches)
+### Step 4: delete old events (operational, bounded batches)
 
-Run separately from any migration, through `supabase db query --linked`, one
-batch per call, with the health gate between batches:
+Fix the cutoff once, as a literal timestamp (30 days before the start of
+step 4), so every batch applies the same rule. Then delete by primary-key
+range, **at most 25,000 ids per call**, through `supabase db query --linked`:
 
-1. `DELETE … WHERE event_type = 'index_last_update_flagged'` (154k rows).
-2. `DELETE … WHERE observed_at < now() - interval '30 days'`, one calendar
-   month at a time, oldest first (July, August, then early September).
+```sql
+DELETE FROM private.observation_events
+WHERE id >= <lo> AND id < <lo + 25000>
+  AND (event_type = 'index_last_update_flagged' OR observed_at < '<cutoff>');
+```
 
-Each batch is a single statement, so an ambiguous failure is resolved by
-checking `pg_stat_activity` and re-counting the batch's rows, never by
-resending blind. Afterwards, run a plain `VACUUM (ANALYZE)` on
-`observation_events` so the freed space can be reused and the planner sees
-the new row counts.
+- Work up from `min(id)` to the highest id older than the cutoff. Ids are
+  assigned in insert order, so the later ranges are mostly kept rows and
+  delete little.
+- After each call, record the range, the rows deleted and the duration in a
+  table in this doc.
+- Run the health gate between calls. Stop if it fails, or if a call takes
+  over 30 seconds. Continue only after the instance is healthy again.
+- Each call is one statement, so an ambiguous failure is resolved by
+  checking `pg_stat_activity` and re-counting matching rows in that range,
+  never by resending blind. Re-running a range is safe anyway, because the
+  delete is idempotent.
 
-### Step 4a: reclaim space (optional, only if the margin allows)
+Afterwards, run a plain `VACUUM (ANALYZE) private.observation_events` so the
+freed space can be reused and the planner sees the new row counts.
 
-After step 4 the deleted space is reusable, so the table stops growing. The
-next 30 days of events (an estimated 120k rows) fit in the space already
-freed, and the database settles at about 421 MB. A full `VACUUM FULL` is
-**not needed** to get below the quota.
+### Step 4a: watch the size; reindex only if needed
 
-To shrink the indexes that inserts actually touch, use
-`REINDEX INDEX CONCURRENTLY` on the unique index and on
-`observation_events_pkey` instead of `VACUUM FULL`:
+The expected size after step 3 is **about 421 MB**. That is an estimate, and
+retention isn't proven to have stopped growth until it is measured. Plain
+vacuum makes deleted space reusable but doesn't guarantee new rows land in
+it, or that the indexes stop growing.
 
-- It takes no exclusive lock.
-- Its peak extra space is one rebuilt index at a time. That is an estimated
-  20 MB for the unique index once it holds about 125k rows, not a full second
-  copy of the table.
-- Before starting, check the size margin and the dashboard disk figure, and
-  confirm the session timeout. The Management API query endpoint's timeout is
-  not documented here, so test it on the smaller pkey first.
+- **Measure:** record `pg_database_size(current_database())` after each of
+  the first five sweeps following step 5.
+- **Threshold:** act if the size rises above **450 MB**, or grows by more
+  than **3 MB a day** on average across those five runs. That rate is about
+  half the pre-retention growth.
+- **Action:** run `REINDEX INDEX CONCURRENTLY` on the unique index, then on
+  `observation_events_pkey`, after a fresh health gate and size-margin check:
+  - It takes no exclusive lock.
+  - Its peak extra space is one rebuilt index at a time, an estimated 20 MB
+    for the unique index.
+  - Run the smaller pkey first, to confirm the Management API query timeout
+    allows it.
 
-`VACUUM FULL` stays off the table unless a later measurement shows the empty
-heap pages matter.
+  If the threshold isn't crossed, the reindex is deferred. `VACUUM FULL`
+  stays off the table.
 
 ### Step 5: verify and resume
 
 1. The size check shows a comfortable margin under 500 MB.
-2. Refresh the catalogue caches, which are still stale from 29 September,
-   checking each takes well under the 2-minute timeout:
-   `REFRESH MATERIALIZED VIEW CONCURRENTLY public.catalogue_mv`, then
-   `public.wine_market_summary_mv`.
+2. No separate cache refresh. On 1 October `catalogue_mv` refreshed
+   successfully (autoanalyze 13:49), but `wine_market_summary_mv` timed out
+   and was last analysed on 29 September. The manual sweep in item 3
+   refreshes both as part of its normal run, so a separate refresh would only
+   add I/O. If that sweep's cache refresh fails again, it stops there, and
+   the refresh times become the next thing to investigate.
 3. Re-enable the sweep with `gh workflow enable daily_sweep.yml`, trigger one
-   manual run, and confirm it finishes `completed` with the retention delete
-   logged.
-4. Re-check the instance that evening, per [`../AGENTS.md`](../AGENTS.md).
+   manual run, and confirm it finishes `completed`, with the retention delete
+   logged and both caches refreshed.
+4. Re-check the instance that evening, per [`../AGENTS.md`](../AGENTS.md),
+   and start the size measurements in step 4a.
 
 ### Step 6: delta-pricing evaluation (offline, any time)
 
@@ -304,6 +333,8 @@ Step 6.
 
 ## Review changes (1 October 2026)
 
+### First review
+
 An external review of the first version raised five points. All were
 accepted:
 
@@ -331,3 +362,24 @@ accepted:
 The review also separated the diagnosis: the logs support I/O degradation as
 the outage mechanism, and the 500 MB quota is a real but separate risk. "Why
 now" is rewritten to match.
+
+### Second review
+
+The second review accepted the revision and asked for two changes and two
+corrections. All were accepted:
+
+1. **Step 4 wasn't bounded.** Deleting the 154k flagged rows was still one
+   transaction, and a calendar month could be just as large. Step 4 now
+   deletes by primary-key range, at most 25,000 ids per call, with a fixed
+   cutoff, a count and duration recorded per call, and a stop rule.
+2. **A non-fatal retention failure would never have alerted anyone**,
+   because the workflow alerts only when the job fails. Retention failures
+   now send their own message through `send_slack_message`, and the tests
+   cover both a failed delete and a failed delivery.
+3. **"Stale from 29 September" was only half right.** The logs and table
+   statistics show `catalogue_mv` refreshed on 1 October and only
+   `wine_market_summary_mv` failed. Step 5 drops the separate refresh,
+   because the resume sweep refreshes both anyway.
+4. **421 MB is an expectation, not proof that growth has stopped.** Step 4a
+   now measures size after five sweeps against a stated threshold, and the
+   reindex is deferred unless that threshold is crossed.
