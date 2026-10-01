@@ -579,7 +579,8 @@ def test_refresh_catalogue_caches_retries_then_refreshes_both_views(monkeypatch)
     first = MagicMock()
     first.execute.side_effect = [RuntimeError("temporary database error")]
     second = MagicMock()
-    second.fetchone.return_value = (10,)
+    # The Postgres connection uses RealDictCursor, so rows come back as dicts.
+    second.fetchone.return_value = {"row_count": 10}
     conn.cursor.side_effect = [first, second]
     pauses = []
 
@@ -590,9 +591,9 @@ def test_refresh_catalogue_caches_retries_then_refreshes_both_views(monkeypatch)
     assert pauses == [1.0]
     assert [call.args[0] for call in second.execute.call_args_list] == [
         "REFRESH MATERIALIZED VIEW CONCURRENTLY public.catalogue_mv",
-        "SELECT count(*) FROM public.catalogue_mv",
+        "SELECT count(*) AS row_count FROM public.catalogue_mv",
         "REFRESH MATERIALIZED VIEW CONCURRENTLY public.wine_market_summary_mv",
-        "SELECT count(*) FROM public.wine_market_summary_mv",
+        "SELECT count(*) AS row_count FROM public.wine_market_summary_mv",
     ]
     assert conn.autocommit is False
 

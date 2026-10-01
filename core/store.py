@@ -652,8 +652,8 @@ def refresh_catalogue_caches(
             try:
                 for mview in CATALOGUE_CACHE_MVIEWS:
                     cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY public.{mview}")
-                    cur.execute(f"SELECT count(*) FROM public.{mview}")
-                    (rows,) = cur.fetchone()
+                    cur.execute(f"SELECT count(*) AS row_count FROM public.{mview}")
+                    rows = dict(cur.fetchone())["row_count"]
                     log.info("Refreshed %s: %d rows", mview, rows)
                     if rows == 0:
                         log.warning(
