@@ -163,5 +163,6 @@ open or still fixed without checking.
 - [STORAGE-RETENTION-PLAN-2026-10-01.md](STORAGE-RETENTION-PLAN-2026-10-01.md)
   — proposed 1 October 2026 after two failed daily sweeps: the database is at
   the free-tier 500 MB limit and its working set no longer fits in memory.
-  Plan: 30-day retention on `observation_events`, drop unused indexes,
-  offline backup, then resume the (currently disabled) sweep.
+  Plan (revised after review the same day): proven offline backup, drop
+  unused indexes, batched 30-day retention on `observation_events`, then
+  resume the (currently disabled) sweep.
