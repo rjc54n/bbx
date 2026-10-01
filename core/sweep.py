@@ -37,6 +37,7 @@ from core.store import (
     load_current_skus,
     mark_run_failed,
     mark_run_partial,
+    prune_observation_events,
     refresh_catalogue_caches,
     refresh_facet_caches,
     start_run,
@@ -50,6 +51,7 @@ log = logging.getLogger(__name__)
 REST_COVERAGE_THRESHOLD = 0.80
 BIDDABLE_FULL_BOOK_SCOPE = "biddable_full_book"
 REST_FRESHNESS_MAX_AGE_DAYS = 30
+OBSERVATION_RETENTION_DAYS = 30
 
 
 def report_catalogue_cache_failure(conn, run_id: str, *, attempts: int, reason: str) -> None:
@@ -61,6 +63,34 @@ def report_catalogue_cache_failure(conn, run_id: str, *, attempts: int, reason: 
     )
     if not send_slack_message(message):
         log.warning("Catalogue cache failure alert for sweep %s was not delivered", run_id)
+
+
+def apply_observation_retention(conn, run_id: str, now: str) -> None:
+    """Delete observation events older than the retention window.
+
+    Non-fatal: the sweep's source data and caches are already committed and
+    correct, so a failure only alerts. The workflow's own Slack alert fires
+    only when the job fails, so this sends its own message.
+    """
+    cutoff = (
+        datetime.fromisoformat(now) - timedelta(days=OBSERVATION_RETENTION_DAYS)
+    ).isoformat()
+    try:
+        deleted = prune_observation_events(conn, cutoff)
+    except Exception as exc:
+        log.exception("Observation event retention failed after sweep %s", run_id)
+        message = (
+            f"BBX sweep {run_id}: source data committed, but observation event "
+            f"retention failed ({type(exc).__name__}). Events older than "
+            f"{OBSERVATION_RETENTION_DAYS} days were not deleted."
+        )
+        if not send_slack_message(message):
+            log.warning("Retention failure alert for sweep %s was not delivered", run_id)
+        return
+    log.info(
+        "Retention: deleted %d observation events observed before %s",
+        deleted, cutoff,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -596,17 +626,14 @@ def run_daily_sweep(
             delta_enabled=delta_enabled,
             last_rest_checked_at_by_parent=last_rest_checked_at_by_parent,
         )
-        # Shadow-mode validation ground truth: the listed tier is always
-        # fully REST-priced and diffed, so (unlike the unlisted tier, which
-        # mostly isn't checked this run) we actually know whether each
-        # flagged parent_sku's price changed. Persisted below as
-        # observation_events once `now` exists; see docs/PHASE3-4-
-        # IMPLEMENTATION.md Step 6 for the query this feeds.
+        # Shadow-mode validation count for the listed tier. Per-SKU flags
+        # were persisted as observation_events until 1 October 2026; the
+        # history is in the offline backup and the evaluation runs there
+        # (docs/STORAGE-RETENTION-PLAN-2026-10-01.md, step 6).
         listed_flagged = _index_last_update_flagged(listed_hits, last_run_finished_at)
         log.info(
             "index_last_update validation: %d/%d listed parent_skus flagged "
-            "as changed since last run (ground truth available via this "
-            "run's price_changed events).",
+            "as changed since last run.",
             len(listed_flagged), len(listed_parent_skus),
         )
         log.info(
@@ -772,18 +799,6 @@ def run_daily_sweep(
             all_events = prod_events + sku_events + offer_events
             log.info("Diff complete: %d events", len(all_events))
 
-        # Per-SKU index_last_update validation data (see Phase 2 above):
-        # positives only, to keep volume down -- the denominator (how many
-        # listed parent_skus were checked this run) is reconstructable from
-        # skus.last_seen_run_id/is_listed, not duplicated here as events.
-        all_events.extend(
-            ObservationEvent(
-                scan_run_id=run_id, entity_type="product", entity_key=psku,
-                event_type="index_last_update_flagged", observed_at=now,
-            )
-            for psku in sorted(listed_flagged)
-        )
-
         # --- Phase 5: Atomic commit ---
         baseline_unchecked_after = (
             all_parent_skus
@@ -846,6 +861,8 @@ def run_daily_sweep(
                 "Facet cache refresh failed after sweep %s; caches may be stale until "
                 "the next sweep", run_id,
             )
+
+        apply_observation_retention(conn, run_id, now)
 
         log.info(
             "Sweep %s finished as '%s' — %d events recorded",

@@ -1,8 +1,11 @@
 # Storage retention plan, 1 October 2026
 
 **Status:** proposed 1 October 2026 and revised the same day after two
-reviews (see "Review changes" at the end). Nothing below has been built or applied.
-One owner decision is open: price-changes mode behaviour (step 1). The daily
+reviews (see "Review changes" at the end). The owner accepted 30-day
+price-changes behaviour on 1 October. **Step 1 is committed to `main`** (no
+production effect while the sweep is disabled). Steps 2–6 have not run. Step 4
+must finish before the sweep is re-enabled; otherwise the first resumed run's
+retention would delete the whole backlog in one statement. The daily
 sweep workflow is disabled (`gh workflow disable daily_sweep.yml`) until steps
 1–5 are done.
 
@@ -135,7 +138,7 @@ and stop if any check fails:
 
 The workflow stays disabled, so this has no production effect until step 5.
 
-**Owner decision pending: price-changes mode.** `recent_price_change_view`
+**Owner decision (accepted 1 October 2026): price-changes mode.** `recent_price_change_view`
 shows each SKU's latest `price_changed` event and has no date filter. Under
 30-day retention, a SKU whose price hasn't changed for 30 days drops out of
 the mode, where today it stays indefinitely. The mode would become "price

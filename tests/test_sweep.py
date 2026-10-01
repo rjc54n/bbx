@@ -1496,39 +1496,23 @@ class TestRunDailySweepWavePricing:
         assert row["wave_rotation_count"] == 1  # only `included`
         assert row["wave_priced_count"] == 1
 
-    def test_index_last_update_flagged_persisted_for_listed_tier(self, conn, monkeypatch):
-        # External review, 2026-07-24: shadow-mode counts over the unlisted
-        # tier alone can't validate index_last_update, because there's no
-        # ground truth there most days. The listed tier IS always fully
-        # REST-priced and diffed, so persisting per-SKU flags for it is what
-        # makes a later precision/recall query against price_changed events
-        # possible.
+    def test_index_last_update_flags_are_no_longer_persisted(self, conn, monkeypatch):
+        # Per-SKU flags stopped being stored on 1 October 2026 (storage
+        # retention plan); the delta selection itself still runs.
         anchor_sku = "FLAGCHECK"
         _patch_fetchers(monkeypatch, [_hit(anchor_sku, index_last_update="1-1-2020 1am")], _rest_entries(anchor_sku))
-        run1 = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
-        # No baseline on the first run -- nothing should be flagged yet.
-        events1 = [dict(e) for e in conn.execute(
-            "SELECT * FROM observation_events WHERE scan_run_id=? AND event_type='index_last_update_flagged'",
-            (run1,),
-        ).fetchall()]
-        assert events1 == []
-
-        # Day 2: same listed wine, but its index_last_update is now safely
-        # in the future relative to day 1's finished_at -- must be flagged.
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
         _patch_fetchers(
             monkeypatch,
             [_hit(anchor_sku, index_last_update="1-1-2030 1am")],
             _rest_entries(anchor_sku),
         )
-        run2 = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
 
-        events2 = [dict(e) for e in conn.execute(
-            "SELECT * FROM observation_events WHERE scan_run_id=? AND event_type='index_last_update_flagged'",
-            (run2,),
-        ).fetchall()]
-        assert len(events2) == 1
-        assert events2[0]["entity_type"] == "product"
-        assert events2[0]["entity_key"] == anchor_sku
+        flagged = conn.execute(
+            "SELECT count(*) FROM observation_events WHERE event_type='index_last_update_flagged'"
+        ).fetchone()[0]
+        assert flagged == 0
 
     def test_delta_enabled_prices_an_unlisted_sku_outside_the_rotation_bucket(self, conn, monkeypatch):
         # Day 1: establish a completed run so there's a finished_at baseline
@@ -1585,3 +1569,65 @@ class TestRunDailySweepWavePricing:
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date2)
 
         assert requested == [set()]
+
+
+def _insert_event(conn, run_id, observed_at, entity_key):
+    conn.execute(
+        "INSERT INTO observation_events "
+        "(scan_run_id, observed_at, entity_type, entity_key, event_type, field_name) "
+        "VALUES (?, ?, 'sku', ?, 'price_changed', 'market_price_p')",
+        (run_id, observed_at, entity_key),
+    )
+    conn.commit()
+
+
+def test_observation_retention_deletes_only_events_older_than_window(conn, monkeypatch):
+    sent = []
+    monkeypatch.setattr(sweep, "send_slack_message", lambda text: sent.append(text) or True)
+    _patch_fetchers(monkeypatch, [_hit("SKU1")], _rest_entries("SKU1"))
+    run_id = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+    now = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+    _insert_event(conn, run_id, (now - timedelta(days=31)).isoformat(), "OLD|1")
+    _insert_event(conn, run_id, (now - timedelta(days=29)).isoformat(), "RECENT|1")
+
+    sweep.apply_observation_retention(conn, run_id, now.isoformat())
+
+    keys = {r[0] for r in conn.execute(
+        "SELECT entity_key FROM observation_events WHERE entity_key IN ('OLD|1', 'RECENT|1')"
+    ).fetchall()}
+    assert keys == {"RECENT|1"}
+    assert sent == []
+
+
+def test_retention_failure_leaves_sweep_completed_and_alerts_once(conn, monkeypatch):
+    sent = []
+    monkeypatch.setattr(sweep, "send_slack_message", lambda text: sent.append(text) or True)
+
+    def boom(conn, cutoff):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(sweep, "prune_observation_events", boom)
+    _patch_fetchers(monkeypatch, [_hit("SKU1")], _rest_entries("SKU1"))
+
+    run_id = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+    status = conn.execute("SELECT status FROM scan_runs WHERE id=?", (run_id,)).fetchone()[0]
+    assert status == "completed"
+    assert len(sent) == 1
+    assert "retention failed (RuntimeError)" in sent[0]
+
+
+def test_retention_alert_delivery_failure_is_logged_not_raised(conn, monkeypatch, caplog):
+    monkeypatch.setattr(sweep, "send_slack_message", lambda text: False)
+
+    def boom(conn, cutoff):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(sweep, "prune_observation_events", boom)
+    _patch_fetchers(monkeypatch, [_hit("SKU1")], _rest_entries("SKU1"))
+
+    run_id = run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+
+    status = conn.execute("SELECT status FROM scan_runs WHERE id=?", (run_id,)).fetchone()[0]
+    assert status == "completed"
+    assert "Retention failure alert for sweep" in caplog.text

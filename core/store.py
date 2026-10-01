@@ -144,6 +144,28 @@ def mark_run_failed(conn, run_id: str, error_message: str) -> None:
     cur.close()
 
 
+def prune_observation_events(conn, cutoff: str) -> int:
+    """Delete observation events observed before `cutoff`; return the count.
+
+    Runs in its own transaction after the sweep's commit, so a failure here
+    can never roll back a day's source data. Nothing reads old events back:
+    the full history lives in an offline backup (see
+    docs/STORAGE-RETENTION-PLAN-2026-10-01.md).
+    """
+    p = placeholder()
+    cur = conn.cursor()
+    try:
+        cur.execute(f"DELETE FROM observation_events WHERE observed_at < {p}", (cutoff,))
+        deleted = cur.rowcount
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+    return deleted
+
+
 def mark_run_partial(conn, run_id: str, error_message: str) -> None:
     """Record a committed source scan whose read-model refresh did not finish.
 
