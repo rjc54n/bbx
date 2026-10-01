@@ -2,12 +2,10 @@
 
 **Status:** proposed 1 October 2026 and revised the same day after two
 reviews (see "Review changes" at the end). The owner accepted 30-day
-price-changes behaviour on 1 October. **Steps 1–4 are done, plus a `VACUUM FULL` (database now 317 MB)** (step 1 has no
-production effect while the sweep is disabled). Steps 5 and 6 have not run. Step 4
-must finish before the sweep is re-enabled; otherwise the first resumed run's
-retention would delete the whole backlog in one statement. The daily
-sweep workflow is disabled (`gh workflow disable daily_sweep.yml`) until steps
-1–5 are done.
+price-changes behaviour on 1 October. **Steps 1–5 are done, plus a `VACUUM FULL` (database now 317 MB).** The
+daily sweep was re-enabled at 15:19 UTC on 1 October. Still open: the evening
+health re-check, the five-sweep size watch (step 4a) and the offline
+evaluation (step 6).
 
 All sizes are from read-only queries against production on 1 October 2026.
 Post-cleanup sizes are estimates, marked as such.
@@ -385,6 +383,40 @@ it, or that the indexes stop growing.
    logged and both caches refreshed.
 4. Re-check the instance that evening, per [`../AGENTS.md`](../AGENTS.md),
    and start the size measurements in step 4a.
+
+### Step 5 result (1 October 2026, 15:19–15:48 UTC)
+
+- **Gate (15:19):** no timeouts, last checkpoint 63 buffers in 6.9 seconds,
+  no waiting locks, 317 MB. The workflow was re-enabled and run manually
+  ([run 36883325391](https://github.com/rjc54n/bbx/actions/runs/36883325391),
+  17 minutes, green).
+- **Sweep `dfbaa7fd`:**
+
+  | Phase | Morning run (before cleanup) | This run |
+  |---|---|---|
+  | Load current state | 3.5 s | 9.4 s |
+  | `commit_sweep` | ~6.5 min | 1.5 min |
+  | `catalogue_mv` refresh | ~110 s | 16 s |
+  | `wine_market_summary_mv` refresh | timed out at 120 s | 48 s |
+  | Facet caches | — | 18 s |
+  | Retention | — | 0 deleted, 24.6 s |
+
+  388 diff events. The repaired row-count log works ("Refreshed
+  catalogue_mv: 69901 rows").
+- **Status `partial`, not caused by this work:** Algolia reported 51,948
+  hits and 51,947 were collected, so `algolia_complete` was false and the
+  disappearance checks were skipped, as designed. Source data and all caches
+  committed. If it recurs on the next scheduled run, look into it.
+- **Retention took 24.6 seconds to delete nothing.** It scans the whole
+  table, because no index covers `observed_at`, but a 15 MB scan should take
+  about a second. It's harmless at this size, and a sign of the same disk
+  pressure.
+- **Health:** the metrics exporter timed out four times between 15:35 and
+  15:37, during the cache refreshes. Unlike the morning, it recovered at
+  once: no timeouts from 15:36:51 to at least 15:48, the exporter back to
+  10–14 seconds, and the checkpoint covering the commit wrote 14,659
+  buffers over the normal 270-second spread.
+- **Size, first step 4a reading:** 317 MB (332,868,755 bytes), +0.2 MB.
 
 ### Step 6: delta-pricing evaluation (offline, any time)
 
