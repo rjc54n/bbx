@@ -2,7 +2,7 @@
 
 **Status:** proposed 1 October 2026 and revised the same day after two
 reviews (see "Review changes" at the end). The owner accepted 30-day
-price-changes behaviour on 1 October. **Steps 1–4 are done** (step 1 has no
+price-changes behaviour on 1 October. **Steps 1–4 are done, plus a `VACUUM FULL` (database now 317 MB)** (step 1 has no
 production effect while the sweep is disabled). Steps 5 and 6 have not run. Step 4
 must finish before the sweep is re-enabled; otherwise the first resumed run's
 retention would delete the whole backlog in one statement. The daily
@@ -324,10 +324,34 @@ As expected, the database stays at **422 MB**, with `observation_events` at a
 55 MB heap and 78 MB of indexes: the space is now reusable, not returned. The
 size-watch in step 4a decides whether anything more is needed.
 
+### Step 4 follow-up: `VACUUM FULL` after all (owner decision, 1 October 2026)
+
+The plan had ruled out `VACUUM FULL`, because before the delete it would
+have needed room for a copy of 465k rows. Once step 4 had left only 24% of
+the rows, the rewrite needed room only for those, and the paused sweep meant
+its exclusive lock blocked nothing. Plain vacuum had freed the space but
+couldn't return it: the deleted rows were the oldest, at the start of the
+file, in front of the live pages. The owner chose to run it before resuming
+the sweep.
+
+- **Gate (15:14 UTC):** no statement timeouts since the deletes, exporter at
+  its 10–14 second baseline, no locks held or waited on for
+  `observation_events`. Before the run: filenode 17684, database 442,928,275
+  bytes.
+- **Run:** `supabase db query --linked "VACUUM (FULL, ANALYZE)
+  private.observation_events"`, 15:15:24–15:15:35, 11 seconds wall time.
+- **Verified:**
+  - Filenode changed to 71952, so the rewrite completed; 113,853 rows.
+  - Heap 55 → 15 MB, indexes 78 → 13 MB (unique 10 MB, pkey 2.5 MB,
+    `idx_obs_run` 0.8 MB).
+  - **Database 422 → 317 MB** (332,647,571 bytes).
+  - No errors, lock waits or timeouts in the logs afterwards.
+
 ### Step 4a: watch the size; reindex only if needed
 
-The expected size after step 3 is **about 421 MB**. That is an estimate, and
-retention isn't proven to have stopped growth until it is measured. Plain
+After the `VACUUM FULL` follow-up, the baseline is **317 MB** (measured).
+Retention isn't proven to have stopped growth until it is measured over
+several sweeps. Plain
 vacuum makes deleted space reusable but doesn't guarantee new rows land in
 it, or that the indexes stop growing.
 
