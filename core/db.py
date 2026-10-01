@@ -267,8 +267,6 @@ CREATE TABLE IF NOT EXISTS observation_events (
     UNIQUE (scan_run_id, entity_type, entity_key, event_type, field_name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_obs_entity
-    ON observation_events(entity_type, entity_key, observed_at);
 CREATE INDEX IF NOT EXISTS idx_obs_run
     ON observation_events(scan_run_id);
 """

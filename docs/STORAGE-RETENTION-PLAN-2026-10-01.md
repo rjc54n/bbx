@@ -2,8 +2,8 @@
 
 **Status:** proposed 1 October 2026 and revised the same day after two
 reviews (see "Review changes" at the end). The owner accepted 30-day
-price-changes behaviour on 1 October. **Steps 1 and 2 are done** (step 1 has no
-production effect while the sweep is disabled). Steps 3–6 have not run. Step 4
+price-changes behaviour on 1 October. **Steps 1–3 are done** (step 1 has no
+production effect while the sweep is disabled). Steps 4–6 have not run. Step 4
 must finish before the sweep is re-enabled; otherwise the first resumed run's
 retention would delete the whole backlog in one statement. The daily
 sweep workflow is disabled (`gh workflow disable daily_sweep.yml`) until steps
@@ -239,6 +239,24 @@ The SQLite bootstrap schema in `core/db.py` drops `idx_obs_entity` to match.
 **Expected effect:** about 74 MB freed straight away (30 MB plus 44 MB),
 taking the database from 495 to roughly 421 MB. That is an estimate; confirm
 it with the size check before step 4.
+
+### Step 3 result (1 October 2026, about 15:00 UTC)
+
+- **Local test:** applied with `supabase migration up --local` against the
+  restored copy in 1.6 seconds. The pgTAP suite passes (479 tests) on a
+  clean `supabase db reset`. Run against the restored production data, three
+  test files fail because their fixtures collide with real products, which
+  is environmental. The backup was reloaded locally afterwards for step 6.
+- **Gate:** no statement timeouts since 14:42, no waiting locks, last
+  checkpoint 14 buffers in 2.4 seconds.
+- **Applied:** `supabase db push --linked`, with only `20261001160000`
+  pending, in 7.6 seconds. Verified on the server: all six indexes gone, the
+  migration recorded, and the 28 September run `failed`.
+- **Effect:** database **495 → 422 MB** (519,335,059 → 442,846,355 bytes).
+  `products` indexes 63 → 19 MB, `observation_events` indexes 108 → 78 MB.
+- **Not touched:** four other `scan_runs` rows are still `running` (three
+  bootstrap attempts from 18 July and one from 24 August). That's cosmetic;
+  fix them the same way if wanted.
 
 ### Step 4: delete old events (operational, bounded batches)
 
