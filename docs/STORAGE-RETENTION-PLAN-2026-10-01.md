@@ -2,8 +2,8 @@
 
 **Status:** proposed 1 October 2026 and revised the same day after two
 reviews (see "Review changes" at the end). The owner accepted 30-day
-price-changes behaviour on 1 October. **Step 1 is committed to `main`** (no
-production effect while the sweep is disabled). Steps 2–6 have not run. Step 4
+price-changes behaviour on 1 October. **Steps 1 and 2 are done** (step 1 has no
+production effect while the sweep is disabled). Steps 3–6 have not run. Step 4
 must finish before the sweep is re-enabled; otherwise the first resumed run's
 retention would delete the whole backlog in one statement. The daily
 sweep workflow is disabled (`gh workflow disable daily_sweep.yml`) until steps
@@ -95,9 +95,15 @@ deleting old events cannot change any sweep result.
 Each production step has the same **health gate**. Run it before every step,
 and stop if any check fails:
 
-- **Instance health:** `SELECT now()` returns in milliseconds, the metrics
-  exporter is not timing out in the Postgres logs, and recent checkpoint
-  `write` times are under a second for small checkpoints.
+- **Instance health:**
+  - `SELECT now()` returns in milliseconds.
+  - The metrics exporter's queries are at their usual 10–15 seconds, not
+    timing out repeatedly.
+  - Recent checkpoints write at about 0.1 seconds per buffer or faster.
+    When it's ahead of schedule, the checkpointer pauses about 100 ms
+    between writes, so 77 buffers in 8 seconds is normal pacing. This
+    morning's 3 buffers in 9.9 seconds was not. An earlier version of this
+    gate said "under a second for small checkpoints", which was wrong.
 - **Size:** `pg_database_size(current_database())`, plus the dashboard's
   disk-usage figure (which includes WAL).
 - **Timing:** outside 02:00–05:00 UTC.
@@ -173,6 +179,28 @@ Gate as above. Docker Desktop must be running, because the CLI runs
    where the conflict target is the table's unique key. Overlapping rows are
    then skipped instead of failing, and the sequence-assigned `id` values are
    not reused.
+
+### Step 2 result (1 October 2026, 14:45–15:50 UTC)
+
+- **Gate:** queries fast, exporter at its 10–15 second baseline with one
+  timeout at 14:42, last checkpoint 77 buffers in 8.0 seconds (normal
+  pacing). Judged a pass for a read-only dump.
+- **Dump:** `~/bbx-backups/private-2026-10-01.sql`, 106 MB, 89 seconds. It
+  covers `_migrations` (1 row), `scan_runs` (85), `observation_events`
+  (465,552), `products` (52,966), `offers` (46,905) and `skus` (70,377), which
+  is about 140 MB of table data. The earlier 300 MB estimate wrongly counted
+  indexes.
+- **Restore:** the local stack was empty, so `supabase db reset --local`
+  rebuilt it from the repository migrations. The dump then loaded with
+  `psql -v ON_ERROR_STOP=1` with no errors and no conflicts with seeded rows
+  (there is no `seed.sql`).
+- **Comparison:** row counts are identical for every table. The event id sum
+  (108,369,565,128), and `sum(hashtext(...))` over every column of
+  `observation_events` and over the key and price columns of `skus` and
+  `products`, match production exactly.
+- The local database keeps the restored copy for the step 6 evaluation. The
+  backup is a single file on one laptop, so a second copy elsewhere is
+  sensible.
 
 ### Step 3: drop unused indexes (one small migration, `supabase db push --linked`)
 
