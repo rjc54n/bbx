@@ -160,3 +160,8 @@ open or still fixed without checking.
   causal mechanism (disk-I/O starvation) is a documented working hypothesis,
   not a confirmed root cause; the timeline and ruled-out causes are
   established. Rules also folded into [`../AGENTS.md`](../AGENTS.md).
+- [STORAGE-RETENTION-PLAN-2026-10-01.md](STORAGE-RETENTION-PLAN-2026-10-01.md)
+  — proposed 1 October 2026 after two failed daily sweeps: the database is at
+  the free-tier 500 MB limit and its working set no longer fits in memory.
+  Plan: 30-day retention on `observation_events`, drop unused indexes,
+  offline backup, then resume the (currently disabled) sweep.
