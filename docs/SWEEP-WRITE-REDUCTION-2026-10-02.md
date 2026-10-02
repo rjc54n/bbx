@@ -103,6 +103,13 @@ thousand. The daily table bloat follows, and with it most of the autovacuum
 work. The cache refreshes still read their sources in full, but write only
 what changed. This is an estimate, to be measured on the first runs.
 
+**Correction (2 October, after review):** "write only what changed" was too
+optimistic. The per-run `last_rest_checked_at` stamp on about 16k parents
+flows into both cached views. Measured locally, it forces about 28k
+`catalogue_mv` and 16.6k `wine_market_summary_mv` row rewrites per refresh.
+The fix is designed in
+[REST-CHECK-DECOUPLING-2026-10-02.md](REST-CHECK-DECOUPLING-2026-10-02.md).
+
 ### 2. Clear the query statistics after each sweep
 
 At the end of `run_daily_sweep`, call `extensions.pg_stat_statements_reset()`.

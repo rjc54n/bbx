@@ -171,3 +171,8 @@ open or still fixed without checking.
   the free plan (Nano, 0.5 GB). Make the sweep write only changed rows
   instead of rewriting the whole ~52k-wine book daily, reset query
   statistics after each run, and drop "Last seen" from the catalogue.
+- [REST-CHECK-DECOUPLING-2026-10-02.md](REST-CHECK-DECOUPLING-2026-10-02.md)
+  — design, 2 October 2026: move the per-run REST-check timestamp into a
+  narrow table served through `catalogue_view`, so it stops forcing ~45k
+  cached-view row rewrites per sweep, without rebuilding the 17 views on
+  the cached views.
