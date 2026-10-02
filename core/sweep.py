@@ -37,7 +37,9 @@ from core.store import (
     load_current_skus,
     mark_run_failed,
     mark_run_partial,
+    load_rest_checks,
     prune_observation_events,
+    publish_rest_checks,
     refresh_catalogue_caches,
     refresh_facet_caches,
     reset_query_statistics,
@@ -593,9 +595,11 @@ def run_daily_sweep(
             )
         else:
             current_products = load_current_products(conn)
+        # Freshness lives in product_rest_checks; products.last_rest_checked_at
+        # is frozen (docs/REST-CHECK-DECOUPLING-2026-10-02.md).
+        rest_checks = load_rest_checks(conn)
         last_rest_checked_at_by_parent = {
-            psku: row.get("last_rest_checked_at")
-            for psku, row in current_products.items()
+            psku: rest_checks.get(psku) for psku in current_products
         }
 
         # --- Phase 2: REST pricing (tiered: listed always, unlisted wave-priced) ---
@@ -854,6 +858,15 @@ def run_daily_sweep(
                 reason=reason,
             )
             final_status = "partial"
+        else:
+            try:
+                published = publish_rest_checks(conn)
+                log.info("Published %d REST check times", published)
+            except Exception:
+                log.exception(
+                    "Publishing REST check times failed after sweep %s; "
+                    "Market checked shows the previous published time", run_id,
+                )
 
         try:
             refresh_facet_caches(conn)

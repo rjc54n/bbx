@@ -1,11 +1,10 @@
 # REST-check timestamp decoupling, 2 October 2026
 
-**Status:** design, 2 October 2026, revised the same day after review (see
-"Review changes" at the end). Nothing below is built. Follows
-[SWEEP-WRITE-REDUCTION-2026-10-02.md](SWEEP-WRITE-REDUCTION-2026-10-02.md)
-and an external review of it, which pointed out that the per-run
-`last_rest_checked_at` stamp flows into both cached views. Constraints from the
-owner: free plan, full ~52k biddable universe. "Market checked" stays as it is.
+**Status:** built and verified locally, 2 October 2026 (see "Local
+verification results"). **Not deployed.** The production cutover in Delivery
+needs the owner's go-ahead. The code is committed locally but not pushed,
+because the sweep pulls `main` at run time and the new code needs the
+migration in place first. Revised after review (see "Review changes").
 
 ---
 
@@ -230,6 +229,60 @@ window and outside 02:00–05:00 UTC:
   refresh durations against 1 October's 16 s and 48 s.
 
 ---
+
+## Local verification results (2 October 2026)
+
+Against the restored 1 October backup, on local Postgres 17.
+
+**Row equivalence.** Hashes of every row of `catalogue_view`,
+`wine_card_format_view` and `wine_scenario_view` (69,899 rows each) were
+identical before and after the migration. The BBR cellar and release-price
+views are empty locally, because their source tables are in `public` and the
+backup covers `private` only. They take `last_rest_checked_at` from
+`catalogue_view` by key join, so they are identical by construction. 52,965
+parents were backfilled; one wine has never been checked.
+
+**Writes for one sweep's stamps (16,404 listed parents)**, using the real
+`commit_sweep` → `refresh_catalogue_caches` → `publish_rest_checks` path,
+with statistics read from independent sessions:
+
+| Table | Before | After |
+|---|---|---|
+| `catalogue_mv` rows rewritten | 28,191 | **0** |
+| `wine_market_summary_mv` rows rewritten | 16,569 | 2,478 (tie flips only; the input was identical) |
+| `products` rows updated | 16,404 | **0** |
+| `product_rest_checks` rows updated | — | 32,808 (stamp + publish, ~50-byte rows) |
+| WAL (stamp + both refreshes, SQL harness) | 153 MB | **9 MB** |
+| Temporary I/O | 105 MB | 89 MB |
+| Elapsed (laptop) | 10.7 s | 2.4 s |
+
+**Publication gap.** After the commit, "Market checked" still showed the old
+value. It moved only after the refresh and publish. Unit test: a failed cache
+refresh leaves `published_at` unchanged while `checked_at` advances.
+
+**Read timing, and a design change found here.** The first version of
+`catalogue_view` (a `LEFT JOIN` to the narrow table) made the catalogue page
+**4–5× slower** when read with `select("*")`. In a paired comparison, the
+Explore page went from 7.8 to 37.3 ms and the Burgundy page from 8.2 to
+31.7 ms. Postgres hash-joins all 70k rows before sorting and keeping 50. A
+correlated subquery was no better (41.6 ms), because it stops parallel
+workers. The fix is on the application side. The catalogue never shows the
+column, so `fetchCatalogue` now requests an explicit column list
+(`CATALOGUE_SELECT`) without it. Postgres then drops the join, and the page
+costs the same as before: Explore 24.6 vs 25.0 ms, Burgundy 20.9 vs 21.2 ms
+in a paired run. A unit test keeps `"*"` and `last_rest_checked_at` out of
+that list. Scenario evaluation already selects explicit columns without it,
+so it's unaffected. The pages that do show "Market checked" read one wine, a
+few hundred holdings or a few dozen release prices, where the join is cheap
+(wine page 1.0 ms, a 300-holding join 2.0 ms).
+
+**Tests.**
+- Python: 341 passed.
+- pgTAP: 487 passed on a clean `supabase db reset`, including 8 new tests in
+  `product_rest_checks.test.sql` covering grants, the published value
+  through `catalogue_view` and `wine_card_format_view`, the frozen products
+  column being ignored, and publish.
+- Web: typecheck, 359 tests and lint pass.
 
 ## Not in scope
 

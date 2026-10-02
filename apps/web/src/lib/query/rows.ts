@@ -1,6 +1,9 @@
 import type { Database } from "../database.types";
 
-export type CatalogueRow = Database["public"]["Views"]["catalogue_view"]["Row"] & {
+// The catalogue never shows last_rest_checked_at, and not selecting it lets
+// Postgres drop catalogue_view's join to private.product_rest_checks
+// (see CATALOGUE_SELECT in fetchCatalogue.ts).
+export type CatalogueRow = Omit<Database["public"]["Views"]["catalogue_view"]["Row"], "last_rest_checked_at"> & {
   release_price_p: number | null;
   anchor_status: string | null;
 };

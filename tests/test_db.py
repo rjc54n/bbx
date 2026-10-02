@@ -313,3 +313,32 @@ class TestArrayHelpers:
 
     def test_parse_none(self):
         assert _parse_array_column(None) == []
+
+
+def test_sqlite_bootstrap_seeds_rest_checks_from_frozen_products_column(tmp_path, monkeypatch):
+    import sqlite3
+    from core.db import bootstrap_schema
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    conn = sqlite3.connect(tmp_path / "store.db")
+    conn.row_factory = sqlite3.Row
+    bootstrap_schema(conn)
+    conn.execute(
+        "INSERT INTO scan_runs (id, scope, run_date, status, started_at) "
+        "VALUES ('run1', 'full_book', '2026-07-18', 'completed', '2026-07-18T02:00:00Z')"
+    )
+    conn.execute(
+        "INSERT INTO products (parent_sku, name, first_seen_run_id, first_seen_at, "
+        "last_seen_run_id, last_seen_at, last_rest_checked_at) VALUES "
+        "('SKU1', 'Checked', 'run1', '2026-07-18', 'run1', '2026-07-18', '2026-07-18T02:05:00Z'), "
+        "('SKU2', 'Never checked', 'run1', '2026-07-18', 'run1', '2026-07-18', NULL)"
+    )
+    conn.execute("DELETE FROM product_rest_checks")
+    conn.commit()
+
+    bootstrap_schema(conn)
+
+    rows = [tuple(r) for r in conn.execute(
+        "SELECT parent_sku, checked_at, published_at FROM product_rest_checks ORDER BY parent_sku"
+    )]
+    assert rows == [("SKU1", "2026-07-18T02:05:00Z", "2026-07-18T02:05:00Z")]

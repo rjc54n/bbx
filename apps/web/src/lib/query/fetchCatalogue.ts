@@ -44,7 +44,15 @@ export function mergeReleasePrices(
   });
 }
 
-type DatabaseCatalogueRow = Database["public"]["Views"]["catalogue_view"]["Row"];
+type DatabaseCatalogueRow = Omit<Database["public"]["Views"]["catalogue_view"]["Row"], "last_rest_checked_at">;
+
+// Every catalogue_view column except last_rest_checked_at. That column comes
+// from a join to private.product_rest_checks; Postgres removes the join when
+// the column isn't selected, and with it a hash join over the whole catalogue
+// on every page (measured ~4-5x slower per page with select("*"); see
+// docs/REST-CHECK-DECOUPLING-2026-10-02.md). Don't switch back to "*".
+// One literal string so the Supabase client can type the selected row.
+export const CATALOGUE_SELECT = "parent_sku,format_code,name,vintage,country,region,subregion,colour,producer,product_url,case_size,bottle_volume_ml,ask,market_price_p,last_transaction_p,highest_bid_p,next_lowest_price_p,qty_available,source_agreement,first_seen_at,last_seen_at,signal_type,price_vs_market_pct,price_vs_last_pct,price_vs_next_pct,price_per_bottle_p,price_per_litre_p,adjusted_guide_p,price_vs_adjusted_guide_pct,is_listed";
 
 export function paginationRange(page: number, pageSize: number = PAGE_SIZE): { from: number; to: number } {
   const from = page * pageSize;
@@ -57,7 +65,7 @@ export function paginationRange(page: number, pageSize: number = PAGE_SIZE): { f
 // bounds (including the signed price_vs_*_pct columns), or(ilike) for the
 // free-text search box.
 export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchResult<CatalogueRow>> {
-  let query = supabase.from("catalogue_view").select("*", { count: "exact" });
+  let query = supabase.from("catalogue_view").select(CATALOGUE_SELECT, { count: "exact" });
   query = applyFilters(query, state.filters as readonly AppliedFilter[]);
 
   // state.sort.field alone isn't unique (e.g. many SKUs share one

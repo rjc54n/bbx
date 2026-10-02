@@ -7,7 +7,7 @@ import pytest
 from core.db import bootstrap_schema
 from core.fetch_listings import FetchResult
 from core.models import _now_utc
-from core.store import load_current_offers, load_current_products, load_current_skus
+from core.store import load_current_offers, load_current_products, load_current_skus, load_rest_checks
 import core.sweep as sweep
 from core.sweep import (
     ROTATION_BUCKETS,
@@ -656,7 +656,7 @@ class TestRunDailySweep:
         }
         products = load_current_products(conn)
         assert all(
-            products[sku]["last_rest_checked_at"] is not None
+            load_rest_checks(conn).get(sku) is not None
             for sku in ("LEGACY-A", "LEGACY-B")
         )
 
@@ -691,7 +691,7 @@ class TestRunDailySweep:
             ).fetchone()
         )["status"] == "partial"
         assert (
-            load_current_products(conn)[listed_sku]["last_rest_checked_at"]
+            load_rest_checks(conn).get(listed_sku)
             is not None
         )
 
@@ -907,8 +907,8 @@ class TestRunDailySweep:
             ).fetchone()
         )
         assert run["status"] == "partial"
-        assert products["A"]["last_rest_checked_at"] is not None
-        assert products["B"]["last_rest_checked_at"] is None
+        assert load_rest_checks(conn).get("A") is not None
+        assert load_rest_checks(conn).get("B") is None
 
     def test_successful_rest_check_with_no_formats_records_freshness(
         self, conn, monkeypatch
@@ -932,7 +932,7 @@ class TestRunDailySweep:
         )
         assert run == {"status": "completed", "rest_skus_priced": 0}
         assert (
-            load_current_products(conn)[sku]["last_rest_checked_at"] is not None
+            load_rest_checks(conn).get(sku) is not None
         )
         assert not any(
             key.startswith(f"{sku}|") for key in load_current_skus(conn)
@@ -976,8 +976,8 @@ class TestRunDailySweep:
             ).fetchone()
         )["status"] == "partial"
         products = load_current_products(conn)
-        assert products[sku_a]["last_rest_checked_at"] is not None
-        assert products[sku_b]["last_rest_checked_at"] is None
+        assert load_rest_checks(conn).get(sku_a) is not None
+        assert load_rest_checks(conn).get(sku_b) is None
 
         retry_requests = []
         _patch_fetchers_strict(
@@ -1002,7 +1002,7 @@ class TestRunDailySweep:
                 "SELECT status FROM scan_runs WHERE id=?", (retry_run,)
             ).fetchone()
         )["status"] == "completed"
-        assert load_current_products(conn)[sku_b]["last_rest_checked_at"] is not None
+        assert load_rest_checks(conn).get(sku_b) is not None
 
         later_requests = []
         _patch_fetchers_strict(
@@ -1126,9 +1126,7 @@ class TestRunDailySweepWavePricing:
         skus = load_current_skus(conn)
         assert skus[f"{sku}|06-00750"]["least_listing_price_p"] == 25000
         assert bool(skus[f"{sku}|06-00750"]["is_listed"]) is True
-        first_rest_checked_at = load_current_products(conn)[sku][
-            "last_rest_checked_at"
-        ]
+        first_rest_checked_at = load_rest_checks(conn).get(sku)
 
         # Day 2: the listing is gone, and (checked explicitly) this SKU's
         # rotation bucket does NOT match today's -- wave pricing alone would
@@ -1147,7 +1145,7 @@ class TestRunDailySweepWavePricing:
         assert row["least_listing_price_p"] is None, "stale ask must be cleared, not left from day 1"
         assert bool(row["is_listed"]) is False
         assert (
-            load_current_products(conn)[sku]["last_rest_checked_at"]
+            load_rest_checks(conn).get(sku)
             == first_rest_checked_at
         )
 
@@ -1198,7 +1196,7 @@ class TestRunDailySweepWavePricing:
         products = load_current_products(conn)
         for sku in would_be_excluded:
             assert f"{sku}|06-00750" in skus, f"{sku} should have been backfilled on the first run"
-            assert products[sku]["last_rest_checked_at"] is not None
+            assert load_rest_checks(conn).get(sku) is not None
 
     def test_listed_wine_priced_regardless_of_rotation_bucket(self, conn, monkeypatch):
         # Anchor run first so this isn't confounded by first-run backfill,
@@ -1367,7 +1365,7 @@ class TestRunDailySweepWavePricing:
 
         assert requested == [{new_sku}]
         assert (
-            load_current_products(conn)[new_sku]["last_rest_checked_at"]
+            load_rest_checks(conn).get(new_sku)
             is not None
         )
 
@@ -1388,7 +1386,7 @@ class TestRunDailySweepWavePricing:
             run_date="2026-07-18",
         )
         conn.execute(
-            "UPDATE products SET last_rest_checked_at=? WHERE parent_sku=?",
+            "UPDATE product_rest_checks SET checked_at=? WHERE parent_sku=?",
             ("2026-06-01T02:00:00+00:00", sku),
         )
         conn.commit()
@@ -1409,7 +1407,7 @@ class TestRunDailySweepWavePricing:
 
         assert requested == [{sku}]
         assert (
-            load_current_products(conn)[sku]["last_rest_checked_at"]
+            load_rest_checks(conn).get(sku)
             != "2026-06-01T02:00:00+00:00"
         )
 
@@ -1668,7 +1666,7 @@ def test_identical_rerun_rewrites_no_rows_but_real_changes_still_land(conn, monk
     counts = _update_counts(conn)
     assert counts["skus"] == 0
     assert counts["offers"] == 0
-    assert counts["products"] == 2  # last_rest_checked_at only
+    assert counts["products"] == 0  # freshness stamps go to product_rest_checks
     names = {r[0]: r[1] for r in conn.execute("SELECT parent_sku, name FROM products").fetchall()}
     assert names == {"SKU1": "Test Wine", "SKU2": "Other Wine"}
 
@@ -1696,3 +1694,36 @@ def test_returning_row_is_reset_even_when_data_is_unchanged(conn, monkeypatch):
 
     row = dict(conn.execute("SELECT consecutive_misses, gone_since FROM products WHERE parent_sku='SKU1'").fetchone())
     assert row == {"consecutive_misses": 0, "gone_since": None}
+
+
+def _rest_check(conn, parent_sku):
+    row = conn.execute(
+        "SELECT checked_at, published_at FROM product_rest_checks WHERE parent_sku=?",
+        (parent_sku,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def test_check_time_is_published_only_after_caches_refresh(conn, monkeypatch):
+    from core.store import CatalogueCacheRefreshResult
+
+    sent = []
+    monkeypatch.setattr(sweep, "send_slack_message", lambda text: sent.append(text) or True)
+    _patch_fetchers(monkeypatch, [_hit("SKU1")], _rest_entries("SKU1"))
+    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+    first = _rest_check(conn, "SKU1")
+    assert first["checked_at"] is not None
+    assert first["published_at"] == first["checked_at"]
+
+    # The next run commits new prices and a new check time, but the cache
+    # refresh fails: the UI must keep the previous published time, which
+    # matches the cached prices still being shown.
+    monkeypatch.setattr(
+        sweep, "refresh_catalogue_caches",
+        lambda conn: CatalogueCacheRefreshResult(success=False, attempts=3, reason="boom"),
+    )
+    _patch_fetchers(monkeypatch, [_hit("SKU1")], _rest_entries("SKU1", price=199))
+    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
+    second = _rest_check(conn, "SKU1")
+    assert second["checked_at"] != first["checked_at"]
+    assert second["published_at"] == first["published_at"]

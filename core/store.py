@@ -207,6 +207,37 @@ def prune_observation_events(conn, cutoff: str) -> int:
     return deleted
 
 
+def load_rest_checks(conn) -> Dict[str, Any]:
+    """Internal REST freshness per parent_sku (checked_at), for wave selection."""
+    cur = conn.cursor()
+    cur.execute("SELECT parent_sku, checked_at FROM product_rest_checks")
+    rows = cur.fetchall()
+    cur.close()
+    return {dict(r)["parent_sku"]: dict(r)["checked_at"] for r in rows}
+
+
+def publish_rest_checks(conn) -> int:
+    """Expose new check times to the UI once the catalogue caches have refreshed.
+
+    catalogue_view shows published_at, so "Market checked" never runs ahead of
+    the cached prices beside it when a refresh fails.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE product_rest_checks SET published_at = checked_at "
+            "WHERE published_at IS DISTINCT FROM checked_at"
+        )
+        published = cur.rowcount
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+    return published
+
+
 def reset_query_statistics(conn) -> None:
     """Clear pg_stat_statements after a sweep (Postgres only).
 
@@ -516,10 +547,13 @@ def commit_sweep(
             batch_size = 400
             for offset in range(0, len(checked), batch_size):
                 batch = checked[offset:offset + batch_size]
+                values = ", ".join(f"({p}, {p})" for _ in batch)
+                params = [v for psku in batch for v in (psku, now)]
                 cur.execute(
-                    f"UPDATE products SET last_rest_checked_at = {p} "
-                    f"WHERE parent_sku IN ({placeholders(len(batch))})",
-                    (now, *batch),
+                    f"INSERT INTO product_rest_checks (parent_sku, checked_at) "
+                    f"VALUES {values} "
+                    f"ON CONFLICT (parent_sku) DO UPDATE SET checked_at = excluded.checked_at",
+                    params,
                 )
 
         # --- upsert skus ---

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAGE_SIZE, buildSearchOrFilter, mergeReleasePrices, paginationRange } from "./fetchCatalogue";
+import { CATALOGUE_SELECT, PAGE_SIZE, buildSearchOrFilter, mergeReleasePrices, paginationRange } from "./fetchCatalogue";
 
 describe("buildSearchOrFilter", () => {
   it("builds an ilike-across-name-and-producer clause", () => {
@@ -67,5 +67,15 @@ describe("mergeReleasePrices", () => {
     }]);
     expect(merged[0].release_price_p).toBe(9900);
     expect(merged[0].anchor_status).toBe("owner");
+  });
+});
+
+describe("CATALOGUE_SELECT", () => {
+  it("lists explicit columns and leaves out last_rest_checked_at, so Postgres can drop the join", () => {
+    const columns = CATALOGUE_SELECT.split(",");
+    expect(columns).not.toContain("*");
+    expect(columns).not.toContain("last_rest_checked_at");
+    expect(columns).toContain("market_price_p");
+    expect(new Set(columns).size).toBe(columns.length);
   });
 });

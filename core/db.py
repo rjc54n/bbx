@@ -253,6 +253,15 @@ CREATE TABLE IF NOT EXISTS offers (
     gone_since              TEXT
 );
 
+-- checked_at drives wave selection; published_at is what the UI shows and is
+-- set only after the catalogue caches refresh (docs/REST-CHECK-DECOUPLING-
+-- 2026-10-02.md). products.last_rest_checked_at is frozen.
+CREATE TABLE IF NOT EXISTS product_rest_checks (
+    parent_sku              TEXT PRIMARY KEY REFERENCES products(parent_sku),
+    checked_at              TEXT NOT NULL,
+    published_at            TEXT
+);
+
 CREATE TABLE IF NOT EXISTS observation_events (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_run_id             TEXT NOT NULL REFERENCES scan_runs(id),
@@ -291,6 +300,13 @@ def _bootstrap_sqlite(conn) -> None:
     }
     if "last_rest_checked_at" not in product_columns:
         conn.execute("ALTER TABLE products ADD COLUMN last_rest_checked_at TEXT")
+    # Mirror the Postgres backfill for an existing local store: the frozen
+    # products column seeds the freshness table once.
+    conn.execute(
+        "INSERT OR IGNORE INTO product_rest_checks (parent_sku, checked_at, published_at) "
+        "SELECT parent_sku, last_rest_checked_at, last_rest_checked_at FROM products "
+        "WHERE last_rest_checked_at IS NOT NULL"
+    )
 
     sku_columns = {
         row["name"] if isinstance(row, sqlite3.Row) else row[1]
