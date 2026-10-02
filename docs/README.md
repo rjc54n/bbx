@@ -166,3 +166,8 @@ open or still fixed without checking.
   Plan (revised after review the same day): proven offline backup, drop
   unused indexes, batched 30-day retention on `observation_events`, then
   resume the (currently disabled) sweep.
+- [SWEEP-WRITE-REDUCTION-2026-10-02.md](SWEEP-WRITE-REDUCTION-2026-10-02.md)
+  — proposed 2 October 2026 after the instance degraded again overnight on
+  the free plan (Nano, 0.5 GB). Make the sweep write only changed rows
+  instead of rewriting the whole ~52k-wine book daily, reset query
+  statistics after each run, and drop "Last seen" from the catalogue.
