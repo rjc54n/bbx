@@ -11,7 +11,11 @@ name: BBX Daily Sweep
 
 on:
   schedule:
-    - cron: "0 2 * * *"    # 02:00 UTC daily
+    # Every two days since 2 October 2026: the free-plan instance can't
+    # absorb a daily full-book sweep (docs/SWEEP-WRITE-REDUCTION-2026-10-02.md).
+    # Day-of-month */2 restarts on the 1st, so a 31-day month runs on both
+    # the 31st and the 1st.
+    - cron: "0 2 */2 * *"  # 02:00 UTC on odd days of the month
   workflow_dispatch:        # manual trigger
 
 concurrency:

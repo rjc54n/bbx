@@ -1,13 +1,14 @@
 # Sweep write reduction, 2 October 2026
 
-**Status:** built 2 October 2026 and committed to `main`. The sweep
-workflow is paused (disabled 2 October), so the sweep changes have no
-production effect yet. Owner decisions: stay on the free plan, keep the full
-biddable universe (about 52k wines), drop "Last seen", and a binary "currently
-listed" flag is enough. "Explore catalogue" now opens sorted by market price,
-lowest first. Still to do: verify the conditional upserts on Postgres against
-the local restore, confirm the new schedule ("bi-daily", read as every two
-days), then re-enable.
+**Status:** built and verified 2 October 2026. The conditional upserts are
+verified on local Postgres against the restored 1 October backup: feeding
+every stored row back unchanged rewrote only the 2 products, 253 SKUs and
+469 offers that carried a non-zero miss count (an intended reset). A second
+identical pass rewrote nothing beyond one deliberate price change and one
+returning wine. The schedule is now every two days (`0 2 */2 * *`) and was
+re-enabled on 2 October. Owner decisions: stay on the free plan, keep the
+full biddable universe, drop "Last seen", a binary listed flag is enough,
+Explore sorts by market price lowest first, sweep every two days.
 
 Follows on from [STORAGE-RETENTION-PLAN-2026-10-01.md](STORAGE-RETENTION-PLAN-2026-10-01.md).
 
