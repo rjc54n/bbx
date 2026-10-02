@@ -70,7 +70,6 @@ export interface FacetRanges {
   case_size: FacetRange<number>;
   bottle_volume_ml: FacetRange<number>;
   first_seen_at: FacetRange<string>;
-  last_seen_at: FacetRange<string>;
 }
 
 export function shapeFacetRanges(row: FacetRangesRow): FacetRanges {
@@ -80,7 +79,6 @@ export function shapeFacetRanges(row: FacetRangesRow): FacetRanges {
     case_size: { min: row.case_size_min, max: row.case_size_max },
     bottle_volume_ml: { min: row.bottle_volume_ml_min, max: row.bottle_volume_ml_max },
     first_seen_at: { min: row.first_seen_at_min, max: row.first_seen_at_max },
-    last_seen_at: { min: row.last_seen_at_min, max: row.last_seen_at_max },
   };
 }
 

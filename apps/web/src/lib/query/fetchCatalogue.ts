@@ -60,8 +60,8 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
   let query = supabase.from("catalogue_view").select("*", { count: "exact" });
   query = applyFilters(query, state.filters as readonly AppliedFilter[]);
 
-  // state.sort.field alone isn't unique (e.g. every row from the same scan
-  // run shares one last_seen_at) -- without a deterministic tiebreaker,
+  // state.sort.field alone isn't unique (e.g. many SKUs share one
+  // first_seen_at or market price) -- without a deterministic tiebreaker,
   // Postgres doesn't guarantee the same row order across two separate
   // range()-paginated queries, so consecutive pages can skip or repeat rows.
   // (parent_sku, format_code) is catalogue_view's primary key, so it's

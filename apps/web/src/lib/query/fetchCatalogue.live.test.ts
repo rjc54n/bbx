@@ -51,7 +51,7 @@ describe("fetchCatalogue (live)", () => {
     const result = await fetchCatalogue({
       mode: "explore",
       filters: [{ field: "colour", kind: "enum", value: [colour!] }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "first_seen_at", dir: "desc" },
       page: 0,
     });
     expect(result.rows.length).toBeGreaterThan(0);
@@ -75,13 +75,13 @@ describe("fetchCatalogue (live)", () => {
     const unfiltered = await fetchCatalogue({
       mode: "explore",
       filters: [],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "first_seen_at", dir: "desc" },
       page: 0,
     });
     const filtered = await fetchCatalogue({
       mode: "explore",
       filters: [{ field: "is_listed", kind: "boolean", value: true }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "first_seen_at", dir: "desc" },
       page: 0,
     });
     expect(filtered.rows.length).toBeGreaterThan(0);
@@ -93,7 +93,7 @@ describe("fetchCatalogue (live)", () => {
     const result = await fetchCatalogue({
       mode: "explore",
       filters: [{ field: "search", kind: "text", value: "e" }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "first_seen_at", dir: "desc" },
       page: 0,
     });
     expect(result.rows.length).toBeGreaterThan(0);
@@ -103,7 +103,7 @@ describe("fetchCatalogue (live)", () => {
     const state = {
       mode: "explore" as const,
       filters: [],
-      sort: { field: "last_seen_at" as const, dir: "desc" as const },
+      sort: { field: "first_seen_at" as const, dir: "desc" as const },
       page: 0,
     };
     const page0 = await fetchCatalogue(state);

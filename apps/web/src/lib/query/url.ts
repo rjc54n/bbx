@@ -187,7 +187,7 @@ export function serialize(state: QueryState): URLSearchParams {
 // then overlay only the URL values that validate against that mode's own
 // allowed sort fields/filter shapes. A bare `?mode=price-changes` (no sort
 // param) must fall back to price-changes' own default sort (observed_at),
-// never a catalogue field like last_seen_at -- see docs/PHASE2-catalogue-browser.md
+// never a catalogue field like market_price_p -- see docs/PHASE2-catalogue-browser.md
 // Phase B.
 export function parse(params: URLSearchParams): QueryState {
   const modeParam = params.get("mode");

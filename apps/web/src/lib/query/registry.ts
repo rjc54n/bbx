@@ -271,7 +271,6 @@ export const CATALOGUE_METRICS = {
   },
   is_listed: CATALOGUE_FILTERS.is_listed,
   first_seen_at: CATALOGUE_FILTERS.first_seen_at,
-  last_seen_at: { field: "last_seen_at", label: "Last seen", estimate: false, explanation: "When this SKU was last observed in the catalogue." },
   price_vs_market_pct: CATALOGUE_FILTERS.price_vs_market_pct,
   price_vs_last_pct: CATALOGUE_FILTERS.price_vs_last_pct,
   price_vs_next_pct: CATALOGUE_FILTERS.price_vs_next_pct,

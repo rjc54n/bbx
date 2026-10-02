@@ -40,6 +40,7 @@ from core.store import (
     prune_observation_events,
     refresh_catalogue_caches,
     refresh_facet_caches,
+    reset_query_statistics,
     start_run,
     update_run_discovery,
     update_run_rest,
@@ -863,6 +864,11 @@ def run_daily_sweep(
             )
 
         apply_observation_retention(conn, run_id, now)
+
+        try:
+            reset_query_statistics(conn)
+        except Exception:
+            log.exception("Query statistics reset failed after sweep %s", run_id)
 
         log.info(
             "Sweep %s finished as '%s' — %d events recorded",

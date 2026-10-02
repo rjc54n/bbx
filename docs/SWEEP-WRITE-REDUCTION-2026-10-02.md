@@ -1,10 +1,13 @@
 # Sweep write reduction, 2 October 2026
 
-**Status:** proposed 2 October 2026. Nothing below is built. Owner decisions
-taken: stay on the free plan, keep the full biddable universe (about 52k
-wines, not just the 16k listed), drop "Last seen" from the catalogue, and a
-binary "currently listed" flag is enough. Still open: sweep frequency, and
-whether to pause the schedule until this ships.
+**Status:** built 2 October 2026 and committed to `main`. The sweep
+workflow is paused (disabled 2 October), so the sweep changes have no
+production effect yet. Owner decisions: stay on the free plan, keep the full
+biddable universe (about 52k wines), drop "Last seen", and a binary "currently
+listed" flag is enough. "Explore catalogue" now opens sorted by market price,
+lowest first. Still to do: verify the conditional upserts on Postgres against
+the local restore, confirm the new schedule ("bi-daily", read as every two
+days), then re-enable.
 
 Follows on from [STORAGE-RETENTION-PLAN-2026-10-01.md](STORAGE-RETENTION-PLAN-2026-10-01.md).
 
@@ -114,8 +117,11 @@ In `apps/web`:
 - Remove the "Last seen" column (`components/catalogue/columns.tsx`), its
   registry entry (`lib/query/registry.ts`) and its facet range
   (`lib/query/facets.ts`).
-- The starting view that sorts by `last_seen_at desc`
-  (`lib/query/startingPoints.ts`) gets a new default sort; proposal: name.
+- "Explore catalogue" (`lib/query/startingPoints.ts`) sorted by
+  `last_seen_at desc`. Owner decision: market price, lowest first
+  (`market_price_p asc`). Old links sorted by `last_seen_at` fall back to that
+  default, because the URL parser ignores unknown sort fields. Saved scenarios
+  use their own field registry, which never included `last_seen_at`.
 - `fetchCatalogue.ts` mentions `last_seen_at` only in a comment. It already
   breaks ties on `(parent_sku, format_code)`, so ordering stays
   deterministic; just update the comment's example.

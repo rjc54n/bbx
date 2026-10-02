@@ -29,7 +29,7 @@ export const STARTING_POINTS: StartingPoint[] = [
     initialState: {
       mode: "explore",
       filters: [],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "market_price_p", dir: "asc" },
       page: 0,
     },
     suggestedFilters: [],

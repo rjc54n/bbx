@@ -41,7 +41,7 @@ describe("serialize/parse round-trip", () => {
     const state: QueryState = {
       mode: "explore",
       filters: [{ field: "first_seen_at", kind: "date", days: 14 }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "market_price_p", dir: "asc" },
       page: 0,
     };
     const params = serialize(state);
@@ -74,7 +74,7 @@ describe("mode-aware defaults (parse is mode-first)", () => {
   });
 
   it("rejects a catalogue sort field on a price-changes URL and falls back to observed_at", () => {
-    const state = parse(new URLSearchParams("mode=price-changes&sort=last_seen_at:desc"));
+    const state = parse(new URLSearchParams("mode=price-changes&sort=market_price_p:asc"));
     expect(state.sort.field).toBe("observed_at");
   });
 
@@ -86,7 +86,12 @@ describe("mode-aware defaults (parse is mode-first)", () => {
   it("rejects a price-changes sort field on a catalogue URL and falls back to that mode's default", () => {
     const state = parse(new URLSearchParams("mode=explore&sort=observed_at:desc"));
     expect(state.mode).toBe("explore");
-    expect(state.sort).toEqual({ field: "last_seen_at", dir: "desc" });
+    expect(state.sort).toEqual({ field: "market_price_p", dir: "asc" });
+  });
+
+  it("falls back to explore's default for an old link sorted by the removed last_seen_at", () => {
+    const state = parse(new URLSearchParams("mode=explore&sort=last_seen_at:desc"));
+    expect(state.sort).toEqual({ field: "market_price_p", dir: "asc" });
   });
 });
 
@@ -126,13 +131,13 @@ describe("codec robustness", () => {
     const a: QueryState = {
       mode: "explore",
       filters: [{ field: "region", kind: "enum", value: ["Burgundy", "Bordeaux", "Burgundy"] }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "market_price_p", dir: "asc" },
       page: 0,
     };
     const b: QueryState = {
       mode: "explore",
       filters: [{ field: "region", kind: "enum", value: ["Bordeaux", "Burgundy"] }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "market_price_p", dir: "asc" },
       page: 0,
     };
     expect(serialize(a).toString()).toBe(serialize(b).toString());
@@ -142,7 +147,7 @@ describe("codec robustness", () => {
     const state: QueryState = {
       mode: "explore",
       filters: [{ field: "region", kind: "enum", value: ["Rhône "] }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "market_price_p", dir: "asc" },
       page: 0,
     };
     expect(normalise(parse(serialize(state)))).toEqual(normalise(state));
@@ -156,7 +161,7 @@ describe("codec robustness", () => {
     const state: QueryState = {
       mode: "explore",
       filters,
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "market_price_p", dir: "asc" },
       page: 0,
     };
     const params = serialize(state);
@@ -185,7 +190,7 @@ describe("is_listed defaults to the whole biddable catalogue", () => {
     const state: QueryState = {
       mode: "explore",
       filters: [{ field: "is_listed", kind: "boolean", value: true }],
-      sort: { field: "last_seen_at", dir: "desc" },
+      sort: { field: "market_price_p", dir: "asc" },
       page: 0,
     };
     expect(parse(serialize(state))).toEqual(state);

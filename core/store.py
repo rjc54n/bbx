@@ -144,6 +144,24 @@ def mark_run_failed(conn, run_id: str, error_message: str) -> None:
     cur.close()
 
 
+def _changed_or_returning(table: str, columns: Tuple[str, ...]) -> str:
+    """WHERE clause for ON CONFLICT DO UPDATE: write only when data changed.
+
+    Unconditional upserts gave every present row a new version each run
+    (~115k rows against a few hundred real changes), which the free-plan
+    instance can't absorb (docs/SWEEP-WRITE-REDUCTION-2026-10-02.md). A row
+    that had gone missing and is back still gets its miss state reset, so
+    last_seen_* now means "last changed or returned".
+    """
+    changed = " OR ".join(
+        f"{table}.{col} IS DISTINCT FROM excluded.{col}" for col in columns
+    )
+    return (
+        f" WHERE {changed} OR {table}.consecutive_misses <> 0 "
+        f"OR {table}.gone_since IS NOT NULL"
+    )
+
+
 def prune_observation_events(conn, cutoff: str) -> int:
     """Delete observation events observed before `cutoff`; return the count.
 
@@ -164,6 +182,26 @@ def prune_observation_events(conn, cutoff: str) -> int:
     finally:
         cur.close()
     return deleted
+
+
+def reset_query_statistics(conn) -> None:
+    """Clear pg_stat_statements after a sweep (Postgres only).
+
+    Supabase's metrics exporter reads every stored statement text each
+    minute; the sweep's large batched statements made that read take 10-15 s
+    on the free-plan instance (docs/SWEEP-WRITE-REDUCTION-2026-10-02.md).
+    """
+    if not is_postgres():
+        return
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT extensions.pg_stat_statements_reset()")
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
 
 
 def mark_run_partial(conn, run_id: str, error_message: str) -> None:
@@ -420,7 +458,10 @@ def commit_sweep(
                 "producer=excluded.producer, grape_varieties=excluded.grape_varieties, "
                 "product_url=excluded.product_url, last_seen_run_id=excluded.last_seen_run_id, "
                 "last_seen_at=excluded.last_seen_at, consecutive_misses=0, gone_since=NULL"
-            )
+            ) + _changed_or_returning("products", (
+                "name", "vintage", "region", "subregion", "colour", "country",
+                "producer", "grape_varieties", "product_url",
+            ))
             if is_postgres():
                 execute_values(
                     cur,
@@ -481,7 +522,10 @@ def commit_sweep(
                 "last_seen_run_id=excluded.last_seen_run_id, "
                 "last_seen_at=excluded.last_seen_at, "
                 "consecutive_misses=0, gone_since=NULL"
-            )
+            ) + _changed_or_returning("skus", (
+                "least_listing_price_p", "market_price_p", "last_transaction_p",
+                "highest_bid_p", "qty_available", "source_agreement", "is_listed",
+            ))
             if is_postgres():
                 execute_values(
                     cur,
@@ -519,7 +563,9 @@ def commit_sweep(
                 "last_seen_run_id=excluded.last_seen_run_id, "
                 "last_seen_at=excluded.last_seen_at, "
                 "consecutive_misses=0, gone_since=NULL"
-            )
+            ) + _changed_or_returning("offers", (
+                "price_per_case_p", "format_code", "match_confidence",
+            ))
             if is_postgres():
                 execute_values(
                     cur,

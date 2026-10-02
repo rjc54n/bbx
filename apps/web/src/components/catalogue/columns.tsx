@@ -213,13 +213,6 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     sortField: "first_seen_at",
     render: (row) => formatDate(row.first_seen_at),
   },
-  {
-    id: "last_seen_at",
-    label: "Last seen",
-    align: "right",
-    sortField: "last_seen_at",
-    render: (row) => formatDate(row.last_seen_at),
-  },
 ];
 
 export const PRICE_CHANGE_COLUMNS: Column<PriceChangeRow, PriceChangeSortField>[] = [

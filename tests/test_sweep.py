@@ -1631,3 +1631,68 @@ def test_retention_alert_delivery_failure_is_logged_not_raised(conn, monkeypatch
     status = conn.execute("SELECT status FROM scan_runs WHERE id=?", (run_id,)).fetchone()[0]
     assert status == "completed"
     assert "Retention failure alert for sweep" in caplog.text
+
+
+def _count_updates(conn):
+    """Install AFTER UPDATE triggers that count row writes per table."""
+    conn.execute("CREATE TABLE IF NOT EXISTS _update_counts (tbl TEXT PRIMARY KEY, n INTEGER NOT NULL)")
+    for tbl in ("products", "skus", "offers"):
+        conn.execute("INSERT OR REPLACE INTO _update_counts VALUES (?, 0)", (tbl,))
+        conn.execute(
+            f"CREATE TRIGGER IF NOT EXISTS _count_{tbl} AFTER UPDATE ON {tbl} "
+            f"BEGIN UPDATE _update_counts SET n = n + 1 WHERE tbl = '{tbl}'; END"
+        )
+    conn.commit()
+
+
+def _update_counts(conn):
+    return {r[0]: r[1] for r in conn.execute("SELECT tbl, n FROM _update_counts").fetchall()}
+
+
+def _reset_update_counts(conn):
+    conn.execute("UPDATE _update_counts SET n = 0")
+    conn.commit()
+
+
+def test_identical_rerun_rewrites_no_rows_but_real_changes_still_land(conn, monkeypatch):
+    hits = [_hit("SKU1"), _hit("SKU2", name="Other Wine")]
+    rest = {**_rest_entries("SKU1"), **_rest_entries("SKU2")}
+    _patch_fetchers(monkeypatch, hits, rest)
+    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+    _count_updates(conn)
+
+    # Same data again: the upserts must not rewrite anything. (The only
+    # products writes allowed are the per-parent REST freshness stamps.)
+    _patch_fetchers(monkeypatch, hits, rest)
+    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
+    counts = _update_counts(conn)
+    assert counts["skus"] == 0
+    assert counts["offers"] == 0
+    assert counts["products"] == 2  # last_rest_checked_at only
+    names = {r[0]: r[1] for r in conn.execute("SELECT parent_sku, name FROM products").fetchall()}
+    assert names == {"SKU1": "Test Wine", "SKU2": "Other Wine"}
+
+    # A real price change on one SKU is still written, and only that row.
+    _reset_update_counts(conn)
+    changed = {**_rest_entries("SKU1", price=199), **_rest_entries("SKU2")}
+    _patch_fetchers(monkeypatch, hits, changed)
+    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-20")
+    assert _update_counts(conn)["skus"] == 1
+    price = conn.execute(
+        "SELECT least_listing_price_p FROM skus WHERE parent_sku='SKU1'"
+    ).fetchone()[0]
+    assert price == 19900
+
+
+def test_returning_row_is_reset_even_when_data_is_unchanged(conn, monkeypatch):
+    hits = [_hit("SKU1")]
+    _patch_fetchers(monkeypatch, hits, _rest_entries("SKU1"))
+    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
+    conn.execute("UPDATE products SET consecutive_misses = 2, gone_since = '2026-07-18T00:00:00+00:00'")
+    conn.commit()
+
+    _patch_fetchers(monkeypatch, hits, _rest_entries("SKU1"))
+    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
+
+    row = dict(conn.execute("SELECT consecutive_misses, gone_since FROM products WHERE parent_sku='SKU1'").fetchone())
+    assert row == {"consecutive_misses": 0, "gone_since": None}

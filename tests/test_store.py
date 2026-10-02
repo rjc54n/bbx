@@ -19,6 +19,7 @@ from core.store import (
     process_disappearances,
     refresh_facet_caches,
     refresh_catalogue_caches,
+    reset_query_statistics,
     start_run,
     update_run_discovery,
     update_run_rest,
@@ -614,3 +615,19 @@ def test_refresh_catalogue_caches_does_not_retry_ambiguous_transport_failure(mon
     assert result.success is False
     assert result.attempts == 1
     assert pauses == []
+
+
+def test_reset_query_statistics_is_noop_without_postgres(monkeypatch):
+    monkeypatch.setattr("core.store.is_postgres", lambda: False)
+    conn = MagicMock()
+    reset_query_statistics(conn)
+    conn.cursor.assert_not_called()
+
+
+def test_reset_query_statistics_calls_extension_function(monkeypatch):
+    monkeypatch.setattr("core.store.is_postgres", lambda: True)
+    conn = MagicMock()
+    cur = conn.cursor.return_value
+    reset_query_statistics(conn)
+    cur.execute.assert_called_once_with("SELECT extensions.pg_stat_statements_reset()")
+    conn.commit.assert_called_once()
