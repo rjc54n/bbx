@@ -1,10 +1,8 @@
 # REST-check timestamp decoupling, 2 October 2026
 
-**Status:** built and verified locally, 2 October 2026 (see "Local
-verification results"). **Not deployed.** The production cutover in Delivery
-needs the owner's go-ahead. The code is committed locally but not pushed,
-because the sweep pulls `main` at run time and the new code needs the
-migration in place first. Revised after review (see "Review changes").
+**Status:** deployed 2 October 2026 (cutover about 12:31–12:35 UTC, see
+"Production cutover"). The first sweep on the new code is due the night of 3
+October. Revised after review (see "Review changes").
 
 ---
 
@@ -283,6 +281,38 @@ few hundred holdings or a few dozen release prices, where the join is cheap
   through `catalogue_view` and `wine_card_format_view`, the frozen products
   column being ignored, and publish.
 - Web: typecheck, 359 tests and lint pass.
+
+## Production cutover (2 October 2026)
+
+1. 12:31 UTC: workflow disabled. No `in_progress` runs, no `running` rows
+   in `scan_runs` in the last 6 hours, no waiting locks, 317 MB, no slow or
+   timed-out statements in the logs since 11:30.
+2. Only `20261002120000` pending; `supabase db push --linked` (9 s; the SSL
+   certificate trace is the known harmless one). Verified on the server:
+   - migration recorded;
+   - 52,807 rows backfilled, equal to the products with a stamp, with 0
+     mismatches against `products.last_rest_checked_at`;
+   - `catalogue_view.last_rest_checked_at` equal to the cached value on all
+     69,901 rows;
+   - `anon` can select and `authenticated` can't insert;
+   - database 323 MB.
+3. Smoke plans on production:
+   - The catalogue page query with explicit columns has the join removed: a
+     parallel seq scan of `catalogue_mv` only, the same plan as before (352
+     ms cold on the free instance).
+   - The wine page reads `product_rest_checks` by primary key.
+4. `f2e9170` pushed. Vercel production deployment of `f2e9170` succeeded at
+   12:33 UTC.
+5. Workflow re-enabled.
+
+**Still to check after the first sweep (night of 3 October):**
+- `n_tup_upd` on `products` (expected about 0 beyond real changes);
+- `n_tup_ins`/`n_tup_del` on `catalogue_mv` (real changes only) and
+  `wine_market_summary_mv` (real changes plus the tie residual, up to about
+  2.5k);
+- `published` logged with about 16k rows;
+- refresh durations against 1 October's 16 s and 48 s;
+- overnight instance health.
 
 ## Not in scope
 
