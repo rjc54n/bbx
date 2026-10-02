@@ -13,9 +13,12 @@ if str(ROOT_DIR) not in sys.path:
 
 import logging
 import os
+from datetime import datetime, timezone
 
 from core.db import get_connection, placeholder
-from core.sweep import run_daily_sweep
+from core.store import load_recent_runs
+from core.sweep import BIDDABLE_FULL_BOOK_SCOPE, run_daily_sweep
+from core.sweep_window import in_sweep_window, recent_run_reason
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +43,22 @@ def main():
     # week.
     delta_enabled = os.environ.get("WAVE_PRICING_DELTA_ENABLED", "").strip().lower() == "true"
 
+    # Scheduled triggers fire hourly; only one per two days may sweep. Manual
+    # (workflow_dispatch) runs bypass this. See core/sweep_window.py.
+    scheduled = os.environ.get("SWEEP_SCHEDULED") == "1"
+
     with get_connection() as conn:
+        if scheduled:
+            now = datetime.now(timezone.utc)
+            if not in_sweep_window(now):
+                log.info("Outside the sweep window; skipping this scheduled trigger.")
+                return
+            reason = recent_run_reason(
+                load_recent_runs(conn, scope=BIDDABLE_FULL_BOOK_SCOPE), now,
+            )
+            if reason:
+                log.info("Skipping this scheduled trigger: %s.", reason)
+                return
         try:
             run_id = run_daily_sweep(
                 conn,

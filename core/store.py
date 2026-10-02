@@ -51,6 +51,29 @@ def start_run(conn, *, scope: str, run_date: str) -> Optional[str]:
     return run_id
 
 
+def load_recent_runs(conn, *, scope: str, limit: int = 5) -> List[Tuple[str, datetime]]:
+    """Latest (status, started_at) pairs for a scope, newest first, UTC-aware."""
+    p = placeholder()
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT status, started_at FROM scan_runs WHERE scope = {p} "
+        f"ORDER BY started_at DESC LIMIT {int(limit)}",
+        (scope,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    runs = []
+    for row in rows:
+        d = dict(row)
+        started = d["started_at"]
+        if isinstance(started, str):
+            started = datetime.fromisoformat(started)
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        runs.append((d["status"], started))
+    return runs
+
+
 def get_last_completed_run_finished_at(
     conn, *, scope: str
 ) -> Optional[Union[str, datetime]]:

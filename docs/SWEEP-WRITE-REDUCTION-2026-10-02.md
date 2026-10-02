@@ -1,14 +1,14 @@
 # Sweep write reduction, 2 October 2026
 
-**Status:** built and verified 2 October 2026. The conditional upserts are
-verified on local Postgres against the restored 1 October backup: feeding
-every stored row back unchanged rewrote only the 2 products, 253 SKUs and
-469 offers that carried a non-zero miss count (an intended reset). A second
-identical pass rewrote nothing beyond one deliberate price change and one
-returning wine. The schedule is now every two days (`0 2 */2 * *`) and was
-re-enabled on 2 October. Owner decisions: stay on the free plan, keep the
-full biddable universe, drop "Last seen", a binary listed flag is enough,
-Explore sorts by market price lowest first, sweep every two days.
+**Status:** built and verified 2 October 2026; the schedule is guarded
+(see "Schedule" below). The conditional upserts are verified on local
+Postgres against the restored 1 October backup: feeding every stored row back
+unchanged rewrote only the 2 products, 253 SKUs and 469 offers that carried a
+non-zero miss count (an intended reset). A second identical pass rewrote
+nothing beyond one deliberate price change and one returning wine. Owner
+decisions: stay on the free plan, keep the full biddable universe, drop "Last
+seen", a binary listed flag is enough, Explore sorts by market price lowest
+first, sweep every two days, overnight UK time only.
 
 Follows on from [STORAGE-RETENTION-PLAN-2026-10-01.md](STORAGE-RETENTION-PLAN-2026-10-01.md).
 
@@ -167,11 +167,37 @@ One code change, no migration, committed to `main`:
 
 ---
 
-## Open decisions
+## Schedule
 
-1. **Sweep frequency.** Daily, every two days, or every three. Fewer runs cut
-   the burst load proportionally. Prices are candidates for review, not
-   trades.
-2. **Pause until this ships?** Recommended. The next scheduled run is about
-   08:00 UTC on 3 October, and on today's code it would rewrite the whole
-   book again.
+**Constraints.** Every two days. Overnight in the UK, to keep the API-heavy
+discovery (Algolia about 11 minutes, REST about 2 minutes) out of BBX's
+shopping hours, which was the owner's requirement. Clear of the ~03:00 UTC
+backup.
+
+**Problem.** GitHub's scheduler is unreliable. Over the last 30 scheduled
+runs it started the 02:00 UTC trigger **4h40m to 6h25m late**, every time.
+The hourly arbitrage bot's evening triggers ran about 45–90 minutes late. A
+single fixed time can't meet both constraints.
+
+**Design** (`core/sweep_window.py`, `.github/workflows/daily_sweep.yml`):
+
+- Cron fires hourly from 16:07 to 00:07 UTC, every day, off the hour to avoid
+  GitHub's busiest queue.
+- **Window check, first, on the runner's own `python3` before any setup:**
+  run only between 22:00 and 01:00 Europe/London, so the window follows the
+  clocks when they change. Otherwise the job ends within seconds.
+- **Cadence check, in `run_sweep.py` after install:** skip if a
+  `biddable_full_book` sweep completed or went partial in the last 40 hours,
+  or if any sweep started in the last 12 hours. That covers the two-day
+  cadence and a second trigger on the same night, and makes a failed run
+  wait for the next night instead of retrying straight away.
+- Manual runs (`workflow_dispatch`) bypass both checks.
+- If GitHub is late enough to miss the whole window, that night is skipped,
+  not run at a bad time. The repo is public, so the extra short jobs cost
+  nothing.
+
+## Decisions taken
+
+1. **Sweep frequency:** every two days.
+2. **Paused until this shipped:** yes, from 2 October until the guarded
+   schedule was in place.

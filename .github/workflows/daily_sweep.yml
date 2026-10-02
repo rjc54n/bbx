@@ -1,6 +1,7 @@
 # .github/workflows/daily_sweep.yml
 # ----------------------------------------------------------------
-# Daily full-book sweep: fetches the entire biddable universe
+# Full-book sweep, every two days (name kept for continuity): fetches
+# the entire biddable universe
 # (prod_biddable, Phase 4 -- ~52k wines, not just BBX-listed ones)
 # via Algolia, tiers REST pricing (listed always, unlisted via wave
 # pricing), diffs against the persistent scan store, and records
@@ -11,11 +12,14 @@ name: BBX Daily Sweep
 
 on:
   schedule:
-    # Every two days since 2 October 2026: the free-plan instance can't
-    # absorb a daily full-book sweep (docs/SWEEP-WRITE-REDUCTION-2026-10-02.md).
-    # Day-of-month */2 restarts on the 1st, so a 31-day month runs on both
-    # the 31st and the 1st.
-    - cron: "0 2 */2 * *"  # 02:00 UTC on odd days of the month
+    # Hourly from 16:07 to 00:07 UTC, every day. Each trigger checks for
+    # itself and exits within seconds unless it is 22:00-01:00 UK time and no
+    # sweep has run in the last two days (core/sweep_window.py). GitHub has
+    # started scheduled runs up to 6.5 h late, so firing hourly through the
+    # evening lets one land in the window, wherever the delay falls. Off the
+    # hour (:07) to avoid GitHub's busiest top-of-hour queue.
+    - cron: "7 16-23 * * *"
+    - cron: "7 0 * * *"
   workflow_dispatch:        # manual trigger
 
 concurrency:
@@ -44,24 +48,37 @@ jobs:
       # index_last_update has been compared against real observed price
       # changes on the listed book for at least a week.
       WAVE_PRICING_DELTA_ENABLED: ${{ vars.WAVE_PRICING_DELTA_ENABLED }}
+      # Scheduled triggers apply the window and cadence guard; manual runs don't.
+      SWEEP_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '' }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # Runner's own python3, before any setup, so out-of-window triggers
+      # finish in seconds.
+      - name: Check sweep window
+        id: window
+        if: github.event_name == 'schedule'
+        run: python3 -m core.sweep_window
+
       - name: Set up Python
+        if: github.event_name != 'schedule' || steps.window.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
+        if: github.event_name != 'schedule' || steps.window.outputs.run == 'true'
         run: pip install -r requirements-dev.txt
 
       - name: Run unit tests
+        if: github.event_name != 'schedule' || steps.window.outputs.run == 'true'
         run: python -m pytest tests/ -q
 
       - name: Run daily sweep
+        if: github.event_name != 'schedule' || steps.window.outputs.run == 'true'
         run: python apps/daily_sweep/run_sweep.py
 
       - name: Notify Slack on failure
