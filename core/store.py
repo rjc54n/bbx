@@ -730,12 +730,10 @@ def refresh_facet_caches(conn) -> None:
         conn.autocommit = previous_autocommit
 
 
-# The catalogue read model (catalogue_mv) and the per-wine aggregate built on it
-# (wine_market_summary_mv). Same reasoning as the facet caches above: a sweep is
+# The catalogue read model and its per-wine and scenario market caches. A sweep is
 # the only thing that changes private.skus/products/offers, so a cache refreshed
-# here is never staler than the data. Order matters -- wine_market_summary_mv is
-# built from catalogue_mv, so catalogue_mv must be current first.
-CATALOGUE_CACHE_MVIEWS = ("catalogue_mv", "wine_market_summary_mv")
+# here is never staler than the data. Both downstream caches read catalogue_mv.
+CATALOGUE_CACHE_MVIEWS = ("catalogue_mv", "wine_market_summary_mv", "wine_scenario_mv")
 
 
 @dataclass(frozen=True)

@@ -26,9 +26,9 @@ TESTS = sorted(
 MUTATION = re.compile(
     r"^\s*(?:INSERT INTO|UPDATE|DELETE FROM)\s+private\.(?:products|skus|offers)\b"
 )
-# Views that resolve through catalogue_mv or wine_market_summary_mv.
+# Views that resolve through a catalogue-derived materialised cache.
 CACHED_READ = re.compile(
-    r"public\.(?:catalogue_view|wine_card_format_view|wine_scenario_view"
+    r"public\.(?:catalogue_view|wine_card_format_view|wine_scenario_view|wine_scenario_reference_view"
     r"|bbr_cellar_market_view|current_cellartracker_records|favourite_wine_view"
     r"|release_price_market_view)\b"
 )

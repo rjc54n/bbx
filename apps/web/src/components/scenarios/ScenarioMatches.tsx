@@ -14,6 +14,7 @@ export function ScenarioMatches({
   query,
   from,
   heading = "Matches",
+  legacy = false,
 }: {
   rows: ScenarioResultRow[];
   page: number;
@@ -22,6 +23,7 @@ export function ScenarioMatches({
   query?: Record<string, string>;
   from: string;
   heading?: string;
+  legacy?: boolean;
 }) {
   return (
     <section className="rounded-lg border border-border bg-background">
@@ -33,8 +35,8 @@ export function ScenarioMatches({
           <thead className="text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               <th className="px-5 py-2">Wine</th><th className="px-3 py-2">Format</th>
-              <th className="px-3 py-2 text-right">Ask / 75cl</th><th className="px-3 py-2 text-right">Release / 75cl</th>
-              <th className="px-3 py-2 text-right">Ask vs release</th><th className="px-3 py-2">Anchor</th>
+              <th className="px-3 py-2 text-right">Ask / 75 cl</th><th className="px-3 py-2 text-right">{legacy ? "Legacy release / 75 cl" : "Reference / 75 cl"}</th>
+              <th className="px-3 py-2 text-right">{legacy ? "Ask vs legacy release" : "Ask vs reference"}</th><th className="px-3 py-2">{legacy ? "Legacy anchor" : "Reference"}</th>
             </tr>
           </thead>
           <tbody>
@@ -48,9 +50,9 @@ export function ScenarioMatches({
                 </td>
                 <td className="px-3 py-2">{formatFormat(row.case_size, row.bottle_volume_ml)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatPence(row.lowest_ask_per_75cl_p)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPence(row.release_price_per_75cl_p)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatSignedPct(row.ask_vs_release_pct)}</td>
-                <td className="px-3 py-2 text-xs text-ink-muted">{row.anchor_status ?? "–"}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatPence(row.reference_price_per_75cl_p)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatSignedPct(row.ask_vs_reference_pct)}</td>
+                <td className="px-3 py-2 text-xs text-ink-muted">{row.reference_resolution_kind ?? "–"}{row.reference_needs_review ? " · review" : ""}</td>
               </tr>)}
           </tbody>
         </table>

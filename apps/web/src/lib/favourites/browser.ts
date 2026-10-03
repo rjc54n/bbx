@@ -19,13 +19,11 @@ export type FavouriteWineRow = {
   listed_format_count: number | null;
   lowest_ask_per_bottle_p: number | null;
   highest_bid_per_bottle_p: number | null;
-  guide_per_bottle_p: number | null;
-  adjusted_guide_per_bottle_p: number | null;
-  latest_release_offer_date: string | null;
-  latest_release_price_per_bottle_p: number | null;
-  anchor_status: string | null;
-  ask_vs_release_pct: number | null;
-  bid_vs_release_pct: number | null;
+  reference_price_per_bottle_p: number | null;
+  reference_source_kind: string | null;
+  reference_date: string | null;
+  reference_needs_review: boolean;
+  ask_vs_reference_pct: number | null;
   cellartracker_bottles_home: number | null;
   cellartracker_bottles_bbr: number | null;
   cellartracker_paid_per_bottle_p: number | null;
@@ -56,8 +54,8 @@ export type FavouriteSortField =
   | "held"
   | "lowest_ask_per_bottle_p"
   | "highest_bid_per_bottle_p"
-  | "latest_release_price_per_bottle_p"
-  | "ask_vs_release_pct";
+  | "reference_price_per_bottle_p"
+  | "ask_vs_reference_pct";
 
 export type FavouriteQuery = {
   search: string;
@@ -70,7 +68,7 @@ export type FavouriteQuery = {
 
 const sortFields = new Set<FavouriteSortField>([
   "favourited_at", "wine", "vintage", "held", "lowest_ask_per_bottle_p",
-  "highest_bid_per_bottle_p", "latest_release_price_per_bottle_p", "ask_vs_release_pct",
+  "highest_bid_per_bottle_p", "reference_price_per_bottle_p", "ask_vs_reference_pct",
 ]);
 
 /**
@@ -100,6 +98,43 @@ export function perBottleP(
 ): number | null {
   if (amountP === null || !caseSize || !bottleVolumeMl) return null;
   return Math.round((amountP * 750) / (caseSize * bottleVolumeMl));
+}
+
+export function mergeFavouriteReferences(
+  wines: Omit<FavouriteWineRow, "reference_price_per_bottle_p" | "reference_source_kind" | "reference_date" | "reference_needs_review" | "ask_vs_reference_pct">[],
+  market: { parent_sku: string | null; case_size: number | null; bottle_volume_ml: number | null; ask: number | null; highest_bid_p: number | null; is_listed: boolean | null }[],
+  references: { parent_sku: string | null; price_per_75cl_p: number | null; source_kind: string | null; reference_date: string | null; needs_review: boolean | null }[],
+): FavouriteWineRow[] {
+  const marketByWine = new Map<string, { ask: number | null; bid: number | null; listed: number }>();
+  for (const row of market) {
+    if (!row.parent_sku || row.bottle_volume_ml !== 750 || !row.case_size || row.case_size <= 0) continue;
+    const current = marketByWine.get(row.parent_sku) ?? { ask: null, bid: null, listed: 0 };
+    const ask = row.ask == null ? null : Math.round(row.ask / row.case_size);
+    const bid = row.highest_bid_p == null ? null : Math.round(row.highest_bid_p / row.case_size);
+    if (ask != null) current.ask = current.ask == null ? ask : Math.min(current.ask, ask);
+    if (bid != null) current.bid = current.bid == null ? bid : Math.max(current.bid, bid);
+    if (row.is_listed) current.listed += 1;
+    marketByWine.set(row.parent_sku, current);
+  }
+  const referenceByWine = new Map(references.filter((row) => row.parent_sku).map((row) => [row.parent_sku, row]));
+  return wines.map((wine) => {
+    const marketPrice = marketByWine.get(wine.parent_sku);
+    const reference = referenceByWine.get(wine.parent_sku);
+    const ask = marketPrice?.ask ?? null;
+    const referencePrice = reference?.price_per_75cl_p ?? null;
+    return {
+      ...wine,
+      lowest_ask_per_bottle_p: ask,
+      highest_bid_per_bottle_p: marketPrice?.bid ?? null,
+      listed_format_count: marketPrice?.listed ?? 0,
+      reference_price_per_bottle_p: referencePrice,
+      reference_source_kind: reference?.source_kind ?? null,
+      reference_date: reference?.reference_date ?? null,
+      reference_needs_review: reference?.needs_review ?? false,
+      ask_vs_reference_pct: ask != null && referencePrice != null && referencePrice > 0
+        ? (ask / referencePrice - 1) * 100 : null,
+    };
+  });
 }
 
 export function parseFavouriteQuery(params: URLSearchParams): FavouriteQuery {
@@ -180,7 +215,7 @@ export function filterAndSortFavourites(
 export function sourceChips(row: FavouriteWineRow): string[] {
   const chips: string[] = [];
   if (row.in_tracked_catalogue) chips.push("Catalogue");
-  if ((row.release_offer_record_count ?? 0) > 0) chips.push("Release");
+  if ((row.release_offer_record_count ?? 0) > 0) chips.push("Historic offer");
   if ((row.cellartracker_record_count ?? 0) > 0) chips.push("CellarTracker");
   if ((row.bbr_cellar_holding_count ?? 0) > 0) chips.push("BBR cellar");
   return chips;

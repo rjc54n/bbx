@@ -26,8 +26,8 @@ const columns: { field: FavouriteSortField; label: string; align?: "right" }[] =
   { field: "held", label: "Held", align: "right" },
   { field: "lowest_ask_per_bottle_p", label: "Lowest ask", align: "right" },
   { field: "highest_bid_per_bottle_p", label: "Highest bid", align: "right" },
-  { field: "latest_release_price_per_bottle_p", label: "Release", align: "right" },
-  { field: "ask_vs_release_pct", label: "Ask vs release", align: "right" },
+  { field: "reference_price_per_bottle_p", label: "Reference", align: "right" },
+  { field: "ask_vs_reference_pct", label: "Ask vs reference", align: "right" },
   { field: "favourited_at", label: "Favourited" },
 ];
 
@@ -78,7 +78,7 @@ export function FavouritesBrowser({ wines, pending }: {
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Favourites</p>
           <h1 className="mt-1 text-2xl font-semibold">Wines I care about</h1>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-            All figures are 75cl bottle equivalents. Held counts home bottles plus whichever
+            Prices use only 75 cl bottles across all case sizes. Held counts home bottles plus whichever
             source reports more at BBR, so bottles known to both are not counted twice.
           </p>
         </div>
@@ -170,10 +170,11 @@ export function FavouritesBrowser({ wines, pending }: {
               <td className="px-3 py-2 text-right align-top tabular-nums">{formatPence(row.lowest_ask_per_bottle_p)}</td>
               <td className="px-3 py-2 text-right align-top tabular-nums">{formatPence(row.highest_bid_per_bottle_p)}</td>
               <td className="px-3 py-2 text-right align-top tabular-nums">
-                {formatPence(row.latest_release_price_per_bottle_p)}
-                {row.latest_release_offer_date && <span className="block text-xs text-ink-muted">{formatDate(row.latest_release_offer_date)}</span>}
+                {formatPence(row.reference_price_per_bottle_p)}
+                {row.reference_date && <span className="block text-xs text-ink-muted">{formatDate(row.reference_date)}</span>}
+                {row.reference_needs_review && <span className="block text-xs text-accent">Review evidence</span>}
               </td>
-              <td className="px-3 py-2 text-right align-top tabular-nums">{formatSignedPct(row.ask_vs_release_pct)}</td>
+              <td className="px-3 py-2 text-right align-top tabular-nums">{formatSignedPct(row.ask_vs_reference_pct)}</td>
               <td className="px-3 py-2 align-top tabular-nums">{formatDate(row.favourited_at)}</td>
               <td className="px-3 py-2 text-center align-top">
                 <FavouriteStar

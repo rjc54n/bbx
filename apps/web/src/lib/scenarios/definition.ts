@@ -3,6 +3,7 @@ import {
   SCENARIO_ANCHOR_STATUSES,
   SCENARIO_FILTERS,
   SCENARIO_SORT_FIELDS,
+  LEGACY_SCENARIO_FIELDS,
   type ScenarioFilterField,
   type ScenarioSortField,
 } from "./registry";
@@ -14,8 +15,13 @@ export interface ScenarioDefinition {
   sort: { field: ScenarioSortField; dir: SortDir };
 }
 
+export function usesLegacyReleaseFields(definition: ScenarioDefinition): boolean {
+  return LEGACY_SCENARIO_FIELDS.has(definition.sort.field)
+    || definition.filters.some((filter) => LEGACY_SCENARIO_FIELDS.has(filter.field));
+}
+
 export const DEFAULT_SCENARIO_SORT: { field: ScenarioSortField; dir: SortDir } = {
-  field: "ask_vs_release_pct",
+  field: "ask_vs_reference_pct",
   dir: "asc",
 };
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseScenarioDefinition } from "./definition";
+import { parseScenarioDefinition, usesLegacyReleaseFields } from "./definition";
 
 describe("parseScenarioDefinition", () => {
   it("keeps a valid range filter and defaults the sort", () => {
@@ -7,7 +7,7 @@ describe("parseScenarioDefinition", () => {
       filters: [{ field: "ask_vs_release_pct", kind: "range", max: 10 }],
     });
     expect(parsed.filters).toEqual([{ kind: "range", field: "ask_vs_release_pct", min: undefined, max: 10 }]);
-    expect(parsed.sort).toEqual({ field: "ask_vs_release_pct", dir: "asc" });
+    expect(parsed.sort).toEqual({ field: "ask_vs_reference_pct", dir: "asc" });
   });
 
   it("keeps includeNulls on a range only when it is exactly true", () => {
@@ -53,7 +53,7 @@ describe("parseScenarioDefinition", () => {
     expect(parseScenarioDefinition({ sort: { field: "lowest_ask_per_75cl_p", dir: "desc" } }).sort)
       .toEqual({ field: "lowest_ask_per_75cl_p", dir: "desc" });
     expect(parseScenarioDefinition({ sort: { field: "hacker", dir: "sideways" } }).sort)
-      .toEqual({ field: "ask_vs_release_pct", dir: "asc" });
+      .toEqual({ field: "ask_vs_reference_pct", dir: "asc" });
   });
 
   it("drops the retired pre-Phase-1 per-case money filters", () => {
@@ -65,11 +65,22 @@ describe("parseScenarioDefinition", () => {
     }).filters).toEqual([]);
     // A legacy sort on one of them falls back to the default.
     expect(parseScenarioDefinition({ sort: { field: "release_price_p", dir: "asc" } }).sort)
-      .toEqual({ field: "ask_vs_release_pct", dir: "asc" });
+      .toEqual({ field: "ask_vs_reference_pct", dir: "asc" });
   });
 
   it("survives entirely malformed input", () => {
-    expect(parseScenarioDefinition(null)).toEqual({ filters: [], sort: { field: "ask_vs_release_pct", dir: "asc" } });
-    expect(parseScenarioDefinition("nope")).toEqual({ filters: [], sort: { field: "ask_vs_release_pct", dir: "asc" } });
+    expect(parseScenarioDefinition(null)).toEqual({ filters: [], sort: { field: "ask_vs_reference_pct", dir: "asc" } });
+    expect(parseScenarioDefinition("nope")).toEqual({ filters: [], sort: { field: "ask_vs_reference_pct", dir: "asc" } });
+  });
+
+  it("keeps old saved definitions on the legacy evaluator during conversion", () => {
+    expect(usesLegacyReleaseFields(parseScenarioDefinition({
+      filters: [{ field: "bid_vs_release_pct", kind: "range", max: 10 }],
+      sort: { field: "ask_vs_release_pct", dir: "asc" },
+    }))).toBe(true);
+    expect(usesLegacyReleaseFields(parseScenarioDefinition({
+      filters: [{ field: "bid_vs_reference_pct", kind: "range", max: 10 }],
+      sort: { field: "ask_vs_reference_pct", dir: "asc" },
+    }))).toBe(false);
   });
 });

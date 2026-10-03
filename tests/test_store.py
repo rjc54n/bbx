@@ -573,7 +573,7 @@ def test_refresh_facet_caches_refreshes_each_view_concurrently(monkeypatch):
     assert conn.autocommit is False
 
 
-def test_refresh_catalogue_caches_retries_then_refreshes_both_views(monkeypatch):
+def test_refresh_catalogue_caches_retries_then_refreshes_all_views(monkeypatch):
     monkeypatch.setattr("core.store.is_postgres", lambda: True)
     conn = MagicMock()
     conn.autocommit = False
@@ -595,6 +595,8 @@ def test_refresh_catalogue_caches_retries_then_refreshes_both_views(monkeypatch)
         "SELECT count(*) AS row_count FROM public.catalogue_mv",
         "REFRESH MATERIALIZED VIEW CONCURRENTLY public.wine_market_summary_mv",
         "SELECT count(*) AS row_count FROM public.wine_market_summary_mv",
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.wine_scenario_mv",
+        "SELECT count(*) AS row_count FROM public.wine_scenario_mv",
     ]
     assert conn.autocommit is False
 

@@ -9,6 +9,7 @@ import { perBottleP } from "@/lib/favourites/browser";
 import { formatDate, formatDateTime, formatFormat, formatPence, formatSignedPct } from "@/lib/format";
 import { bbrWineDestination, wineSearcherUrl } from "@/lib/listingLinks";
 import { timeProtectedQuery } from "@/lib/observability/routeTiming";
+import { clearReferencePrice, setReferencePrice } from "./referenceActions";
 
 export const dynamic = "force-dynamic";
 
@@ -163,10 +164,12 @@ function Card({ title, children, note }: { title: string; children: React.ReactN
   </section>;
 }
 
-export default async function WinePage({ params }: {
+export default async function WinePage({ params, searchParams }: {
   params: Promise<{ parentSku: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { parentSku } = await params;
+  const query = await searchParams;
   if (!/^\d{5,30}$/.test(parentSku)) notFound();
   const owner = await requireOwner();
   const { supabase } = owner;
@@ -383,6 +386,9 @@ export default async function WinePage({ params }: {
         title="Historic reference"
         note="One in-bond price per 75 cl bottle for this wine. It is a benchmark from the available historic evidence, not a claim about the original release price."
       >
+        {query.reference_saved && <p role="status" className="mt-3 text-sm text-green-800">Reference saved.</p>}
+        {query.reference_cleared && <p role="status" className="mt-3 text-sm text-green-800">Owner reference cleared. The automatic price is shown below when evidence is available.</p>}
+        {query.reference_error && <p role="alert" className="mt-3 text-sm text-red-800">The reference could not be changed. Check the price, date and note, then try again.</p>}
         {reference ? <div className="mt-3 space-y-2 text-sm">
           <p><strong className="text-lg tabular-nums">{formatPence(reference.price_per_75cl_p)}</strong> / 75 cl · {reference.resolution_kind === "owner" ? "Owner-set" : `Automatic from ${reference.source_kind}`}</p>
           <p className="text-ink-muted">{reference.reference_date ? `${reference.date_meaning ?? "Reference date"}: ${formatDate(reference.reference_date)}` : reference.date_meaning ?? "Date not recorded"}</p>
@@ -405,6 +411,27 @@ export default async function WinePage({ params }: {
             </tr>)}</tbody>
           </table>
         </div>}
+        <form action={setReferencePrice.bind(null, parentSku)} className="mt-5 flex flex-wrap items-end gap-3 border-t border-border pt-4 text-sm">
+          <label className="grid gap-1">Owner reference, £ per 75 cl
+            <input name="price" type="number" min="0.01" max="21474836.47" step="0.01" required
+              defaultValue={reference?.resolution_kind === "owner" ? (reference.price_per_75cl_p / 100).toFixed(2) : ""}
+              className="w-40 rounded border border-border px-2 py-1.5" />
+          </label>
+          <label className="grid gap-1">Date, if known
+            <input name="reference_date" type="date"
+              defaultValue={reference?.resolution_kind === "owner" ? reference.reference_date ?? "" : ""}
+              className="rounded border border-border px-2 py-1.5" />
+          </label>
+          <label className="grid min-w-48 flex-1 gap-1">Note, including what the date means
+            <input name="note" type="text" maxLength={1000}
+              defaultValue={reference?.resolution_kind === "owner" ? reference.source_wine ?? "" : ""}
+              className="rounded border border-border px-2 py-1.5" />
+          </label>
+          <button type="submit" className="rounded bg-accent px-3 py-2 font-medium text-accent-ink">Save reference</button>
+        </form>
+        {reference?.resolution_kind === "owner" && <form action={clearReferencePrice.bind(null, parentSku)} className="mt-2">
+          <button type="submit" className="text-sm text-accent underline-offset-2 hover:underline">Clear owner reference</button>
+        </form>}
       </Card>
 
       {tastingNote?.tasting_notes && <Card

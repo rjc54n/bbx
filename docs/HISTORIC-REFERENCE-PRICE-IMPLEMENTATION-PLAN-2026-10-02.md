@@ -1,6 +1,6 @@
 # Historic reference price: implementation plan
 
-Status: Slice 1 applied to production on 3 October 2026; Slices 2 and 3 in progress locally. Owner price edits are paused until the Slice 2 owner-value comparison passes.
+Status: Slices 1 and 2 deployed on 3 October 2026. The Slice 3 scenario migration is also live; its app consumers and saved-scenario conversion remain in progress. The four copied owner values matched the legacy entries before the Slice 2 cutover. Owner price edits remain paused until the new consumers are deployed and checked.
 
 This plan implements the [historic reference price design](HISTORIC-REFERENCE-PRICE-DESIGN-REVIEW-2026-10-02.md). That document owns the price meaning, source precedence and evidence counts. This plan records the work order and release checks. The reference is one in-bond GBP price per 75 cl bottle and `parent_sku`; all 75 cl case sizes use it. Other bottle volumes do not receive a reference comparison.
 

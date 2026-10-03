@@ -242,6 +242,20 @@ export type Database = {
             foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
             columns: ["parent_sku", "format_code"]
             isOneToOne: false
+            referencedRelation: "wine_scenario_mv"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
+            referencedRelation: "wine_scenario_reference_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "cellar_import_rows_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: false
             referencedRelation: "wine_scenario_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
@@ -1513,6 +1527,20 @@ export type Database = {
             columns: ["parent_sku", "format_code"]
             isOneToOne: true
             referencedRelation: "wine_card_format_view"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
+            referencedRelation: "wine_scenario_mv"
+            referencedColumns: ["parent_sku", "format_code"]
+          },
+          {
+            foreignKeyName: "release_price_anchor_overrides_parent_sku_format_code_fkey"
+            columns: ["parent_sku", "format_code"]
+            isOneToOne: true
+            referencedRelation: "wine_scenario_reference_view"
             referencedColumns: ["parent_sku", "format_code"]
           },
           {
@@ -3076,6 +3104,104 @@ export type Database = {
           was_biddable_at_observation: boolean | null
         }
         Relationships: []
+      }
+      wine_scenario_mv: {
+        Row: {
+          adjusted_guide_p: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          format_code: string | null
+          highest_bid_p: number | null
+          highest_bid_per_75cl_p: number | null
+          is_biddable: boolean | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          last_transaction_p: number | null
+          lowest_ask_p: number | null
+          lowest_ask_per_75cl_p: number | null
+          market_price_p: number | null
+          market_price_per_75cl_p: number | null
+          name: string | null
+          parent_sku: string | null
+          price_vs_last_pct: number | null
+          price_vs_market_pct: number | null
+          producer: string | null
+          region: string | null
+          subregion: string | null
+          vintage: number | null
+          wine_ref: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "wine_card_view"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
+      }
+      wine_scenario_reference_view: {
+        Row: {
+          adjusted_guide_p: number | null
+          ask_vs_reference_pct: number | null
+          bid_vs_reference_pct: number | null
+          bottle_volume_ml: number | null
+          case_size: number | null
+          colour: string | null
+          country: string | null
+          format_code: string | null
+          highest_bid_p: number | null
+          highest_bid_per_75cl_p: number | null
+          is_biddable: boolean | null
+          is_listed: boolean | null
+          last_rest_checked_at: string | null
+          last_transaction_p: number | null
+          lowest_ask_p: number | null
+          lowest_ask_per_75cl_p: number | null
+          market_price_p: number | null
+          market_price_per_75cl_p: number | null
+          name: string | null
+          parent_sku: string | null
+          price_vs_last_pct: number | null
+          price_vs_market_pct: number | null
+          producer: string | null
+          reference_date: string | null
+          reference_has_competing_evidence: boolean | null
+          reference_needs_review: boolean | null
+          reference_price_per_75cl_p: number | null
+          reference_resolution_kind: string | null
+          reference_source_kind: string | null
+          region: string | null
+          subregion: string | null
+          vintage: number | null
+          wine_ref: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "product_detail_view"
+            referencedColumns: ["parent_sku"]
+          },
+          {
+            foreignKeyName: "skus_parent_sku_fkey"
+            columns: ["parent_sku"]
+            isOneToOne: false
+            referencedRelation: "wine_card_view"
+            referencedColumns: ["parent_sku"]
+          },
+        ]
       }
       wine_scenario_view: {
         Row: {

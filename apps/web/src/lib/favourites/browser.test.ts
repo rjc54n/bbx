@@ -3,6 +3,7 @@ import {
   filterAndSortFavourites,
   heldBottles,
   isOrphan,
+  mergeFavouriteReferences,
   parseFavouriteQuery,
   perBottleP,
   serializeFavouriteQuery,
@@ -27,13 +28,11 @@ function row(overrides: Partial<FavouriteWineRow> = {}): FavouriteWineRow {
     listed_format_count: 1,
     lowest_ask_per_bottle_p: 5_000,
     highest_bid_per_bottle_p: 4_000,
-    guide_per_bottle_p: 4_500,
-    adjusted_guide_per_bottle_p: 4_500,
-    latest_release_offer_date: "2026-01-15",
-    latest_release_price_per_bottle_p: 3_000,
-    anchor_status: "provisional",
-    ask_vs_release_pct: 66.7,
-    bid_vs_release_pct: 33.3,
+    reference_price_per_bottle_p: 3_000,
+    reference_source_kind: "offer",
+    reference_date: "2026-01-15",
+    reference_needs_review: false,
+    ask_vs_reference_pct: 66.7,
     cellartracker_bottles_home: 6,
     cellartracker_bottles_bbr: 0,
     cellartracker_paid_per_bottle_p: 2_900,
@@ -44,6 +43,26 @@ function row(overrides: Partial<FavouriteWineRow> = {}): FavouriteWineRow {
     ...overrides,
   };
 }
+
+describe("75 cl favourite comparison", () => {
+  it("uses 75 cl asks and bids across case sizes, excluding a cheaper magnum", () => {
+    const [result] = mergeFavouriteReferences(
+      [row({ lowest_ask_per_bottle_p: 999, highest_bid_per_bottle_p: 999 })],
+      [
+        { parent_sku: "20100000001", case_size: 6, bottle_volume_ml: 750, ask: 12_000, highest_bid_p: 9_000, is_listed: true },
+        { parent_sku: "20100000001", case_size: 12, bottle_volume_ml: 750, ask: 30_000, highest_bid_p: 24_000, is_listed: true },
+        { parent_sku: "20100000001", case_size: 1, bottle_volume_ml: 1500, ask: 100, highest_bid_p: 50_000, is_listed: true },
+      ],
+      [{ parent_sku: "20100000001", price_per_75cl_p: 1_750, source_kind: "bbr", reference_date: "2020-02-01", needs_review: true }],
+    );
+    expect(result.lowest_ask_per_bottle_p).toBe(2_000);
+    expect(result.highest_bid_per_bottle_p).toBe(2_000);
+    expect(result.listed_format_count).toBe(2);
+    expect(result.reference_price_per_bottle_p).toBe(1_750);
+    expect(result.ask_vs_reference_pct).toBeCloseTo(14.2857, 3);
+    expect(result.reference_needs_review).toBe(true);
+  });
+});
 
 describe("heldBottles", () => {
   it("adds home bottles to bottles at BBR", () => {
@@ -223,7 +242,7 @@ describe("sourceChips", () => {
       release_offer_record_count: 2,
       cellartracker_record_count: 1,
       bbr_cellar_holding_count: 3,
-    }))).toEqual(["Catalogue", "Release", "CellarTracker", "BBR cellar"]);
+    }))).toEqual(["Catalogue", "Historic offer", "CellarTracker", "BBR cellar"]);
   });
 
   it("omits sources with no records", () => {

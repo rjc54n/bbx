@@ -6,6 +6,7 @@ import { evaluateScenario } from "@/lib/scenarios/evaluate";
 import { decodeScenarioPreview, encodeScenarioPreview, PREVIEW_PARAM, scenarioPreviewHref } from "@/lib/scenarios/preview";
 import { ScenarioEditor } from "@/components/scenarios/ScenarioEditor";
 import { ScenarioMatches } from "@/components/scenarios/ScenarioMatches";
+import { usesLegacyReleaseFields } from "@/lib/scenarios/definition";
 import { createScenario } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,7 @@ export default async function NewScenarioPage({
       </section>
 
       {previewDefinition && <ScenarioMatches
+        legacy={usesLegacyReleaseFields(previewDefinition)}
         rows={rows}
         page={page}
         hasNext={hasNext}

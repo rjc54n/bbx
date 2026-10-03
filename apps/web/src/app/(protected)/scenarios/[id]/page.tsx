@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth/owner";
-import { parseScenarioDefinition } from "@/lib/scenarios/definition";
+import { parseScenarioDefinition, usesLegacyReleaseFields } from "@/lib/scenarios/definition";
 import { parsePage } from "@/lib/scenarios/browser";
 import { evaluateScenario } from "@/lib/scenarios/evaluate";
 import { decodeScenarioPreview, encodeScenarioPreview, PREVIEW_PARAM, scenarioPreviewHref } from "@/lib/scenarios/preview";
@@ -99,6 +99,7 @@ export default async function ScenarioDetailPage({
       </section>
 
       {canRun ? <ScenarioMatches
+        legacy={usesLegacyReleaseFields(definition)}
         rows={rows}
         page={page}
         hasNext={hasNext}

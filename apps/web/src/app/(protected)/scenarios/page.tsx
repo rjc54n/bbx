@@ -50,9 +50,9 @@ export default async function ScenariosPage({
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Scenarios</p>
           <h1 className="mt-1 text-2xl font-semibold">Saved scenarios</h1>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-            Named filters over every format, evaluated live against the wine card metrics
-            (ask, bid, release, market). Add the <strong>Biddable</strong> filter to limit one to
-            biddable wines. Open one to run it and see the wines it matches.
+            Named filters over current market prices and the historic reference.
+            New scenarios use 75 cl formats. Older release comparisons remain labelled
+            as legacy until they are converted.
           </p>
         </div>
         <Link href="/scenarios/new" className="rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink">New scenario</Link>
@@ -66,7 +66,7 @@ export default async function ScenariosPage({
 
     <div className="min-h-0 flex-1 overflow-auto p-5">
       {scenarios.length === 0
-        ? <p className="text-sm text-ink-muted">No saved scenarios yet. <Link href="/scenarios/new" className="text-accent underline-offset-2 hover:underline">Create one</Link> — for example, ask within 10% of release.</p>
+        ? <p className="text-sm text-ink-muted">No saved scenarios yet. <Link href="/scenarios/new" className="text-accent underline-offset-2 hover:underline">Create one</Link> with an ask within 10% of the reference.</p>
         : <ul className="grid gap-3 lg:grid-cols-2">
           {scenarios.map((scenario) => <li key={scenario.id}>
             <Link href={`/scenarios/${scenario.id}`} className="block rounded-lg border border-border bg-background p-4 hover:border-accent">

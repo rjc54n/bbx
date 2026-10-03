@@ -11,6 +11,7 @@ import { fromInputValue, toInputValue } from "@/lib/scenarios/units";
 import {
   SCENARIO_ANCHOR_STATUSES,
   SCENARIO_FILTERS,
+  LEGACY_SCENARIO_FIELDS,
   SCENARIO_SORT_FIELDS,
   SCENARIO_SORT_LABELS,
   type ScenarioFilterField,
@@ -35,7 +36,7 @@ export function ScenarioEditor({
   previewBasePath,
   initialName = "",
   initialFilters = [],
-  initialSort = { field: "ask_vs_release_pct", dir: "asc" },
+  initialSort = { field: "ask_vs_reference_pct", dir: "asc" },
 }: {
   action: (formData: FormData) => void | Promise<void>;
   submitLabel: string;
@@ -52,7 +53,7 @@ export function ScenarioEditor({
   const [sort, setSort] = useState(initialSort);
 
   const used = new Set(filters.map((filter) => filter.field));
-  const addable = FIELD_ORDER.filter((field) => !used.has(field));
+  const addable = FIELD_ORDER.filter((field) => !used.has(field) && !LEGACY_SCENARIO_FIELDS.has(field));
 
   const definition = useMemo(() => JSON.stringify({ filters, sort }), [filters, sort]);
   const hasValidFilter = useMemo(
@@ -71,7 +72,7 @@ export function ScenarioEditor({
     <form action={action} className="space-y-4">
       <input type="hidden" name="definition" value={definition} />
       <label className="grid max-w-md gap-1 text-xs text-ink-muted">Scenario name
-        <input name="name" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Biddable, ask within 10% of release" className="rounded border border-border px-3 py-2 text-sm text-ink" />
+        <input name="name" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Biddable, ask within 10% of reference" className="rounded border border-border px-3 py-2 text-sm text-ink" />
       </label>
 
       <div className="space-y-2">
@@ -98,7 +99,7 @@ export function ScenarioEditor({
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1 text-xs text-ink-muted">Sort by
           <select value={sort.field} onChange={(event) => setSort((s) => ({ ...s, field: event.target.value as ScenarioSortField }))} className="rounded border border-border px-2 py-2 text-sm text-ink">
-            {SCENARIO_SORT_FIELDS.map((field) => <option key={field} value={field}>{SCENARIO_SORT_LABELS[field]}</option>)}
+            {SCENARIO_SORT_FIELDS.filter((field) => !LEGACY_SCENARIO_FIELDS.has(field) || field === sort.field).map((field) => <option key={field} value={field}>{SCENARIO_SORT_LABELS[field]}</option>)}
           </select>
         </label>
         <label className="grid gap-1 text-xs text-ink-muted">Direction
