@@ -168,6 +168,14 @@ function inferFormat(fragment: string): {
   ));
   let caseSize = numberWord(explicit?.[1]);
 
+  // Some older BBR exports say "per bottle 6 case" for a six-bottle case
+  // amount. Resolve the trailing case size before the generic "per bottle"
+  // fallback treats the entire case amount as one bottle.
+  if (caseSize === null && bottleVolumeMl === 750) {
+    const trailingCase = lower.match(/\bper\s+bottles?\s+(6|12)\s+cases?\b/);
+    caseSize = trailingCase ? Number(trailingCase[1]) : null;
+  }
+
   if (caseSize === null) {
     const nounQuantity = lower.match(new RegExp(
       `\\bper\\s+${quantityPattern}[- ]+(?:half[- ]?)?(?:bottles?|bts?|magnums?)\\b`,

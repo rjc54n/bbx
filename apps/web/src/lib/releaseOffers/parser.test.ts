@@ -76,6 +76,16 @@ describe("release-offer CSV parser", () => {
     ]);
   });
 
+  it("reads an older 'per bottle 6 case' amount as a six-bottle case", () => {
+    const [row] = parseReleaseOfferCsv(csv(csvRow({
+      "Case Price": "£204 per bottle 6 case in bond; £213 per 12 half bottle case in bond",
+    })));
+    expect(row.prices[0]).toMatchObject({
+      amount_p: 20400, case_size: 6, bottle_volume_ml: 750,
+      format_code: "06-00750", tax_basis: "in_bond", parse_status: "valid",
+    });
+  });
+
   it("keeps incomplete price text as unresolved evidence", () => {
     const [row] = parseReleaseOfferCsv(csv(csvRow({
       "Case Price": "£444 per",
