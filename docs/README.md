@@ -33,6 +33,11 @@ against the current migrations/code for anything load-bearing.
   (`wine_ref` + owner facts) design. The Parent-SKU wine card, CellarTracker
   search, owner release anchors and saved scenarios are implemented;
   source-neutral `wine_locals` identity remains deferred.
+- [HISTORIC-REFERENCE-PRICE-DESIGN-REVIEW-2026-10-02.md](HISTORIC-REFERENCE-PRICE-DESIGN-REVIEW-2026-10-02.md):
+  proposed owner-only reference per 75 cl bottle across BBR, offers, manual
+  entries and CellarTracker, with a live conflict profile and source rules.
+- [HISTORIC-REFERENCE-PRICE-IMPLEMENTATION-PLAN-2026-10-02.md](HISTORIC-REFERENCE-PRICE-IMPLEMENTATION-PLAN-2026-10-02.md):
+  migration, app cutover and release checks for the historic reference price.
 - [FAVOURITES-SPEC.md](FAVOURITES-SPEC.md) — favourites functional spec.
   Marked "built and pushed" with the landing commits listed.
 - [IMPORT-SOURCE-PROFILES.md](IMPORT-SOURCE-PROFILES.md) — observed CSV

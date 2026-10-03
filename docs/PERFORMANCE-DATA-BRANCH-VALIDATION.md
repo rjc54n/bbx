@@ -1,7 +1,23 @@
 # Performance validation on a Supabase data branch
 
-This is the only approved place for row-equivalence or timing checks that need
-production-like data. Do not point these checks at production.
+Use a Supabase data branch for row-equivalence or timing checks that need
+production-like data. Do not point these checks at production. On the Free
+plan, where no data branch is available, a restricted local extract is the
+approved substitute under the conditions below.
+
+## Free-plan local extract
+
+Use this only after confirming that no Supabase data branch is available.
+
+1. Export only the source and market rows needed for the change, with the
+   table scope and row counts recorded in the change review. Keep the extract
+   outside Git and restrict it to the owner machine.
+2. Run the migration and both-direction result comparison locally. For query
+   cost, compare `EXPLAIN (ANALYZE, BUFFERS)` plan shape and buffer counts
+   against the current read path.
+3. Remove the extract when validation ends. Local elapsed time is not evidence
+   of production latency. Production verification remains limited to bounded
+   read-only aggregates and signed-in smoke checks.
 
 ## Owner setup
 
