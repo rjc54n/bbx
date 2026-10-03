@@ -43,10 +43,32 @@ type WineCardFormat = {
   last_transaction_p: number | null;
   price_vs_last_pct: number | null;
   last_rest_checked_at: string | null;
-  release_price_p: number | null;
-  anchor_status: string | null;
-  release_offer_date: string | null;
-  ask_vs_release_pct: number | null;
+};
+
+type ReferencePrice = {
+  price_per_75cl_p: number;
+  resolution_kind: string;
+  source_kind: string;
+  reference_date: string | null;
+  date_meaning: string | null;
+  source_wine: string | null;
+  evidence_min_p: number | null;
+  evidence_max_p: number | null;
+  evidence_candidate_count: number;
+  has_competing_evidence: boolean;
+  needs_review: boolean;
+  has_current_support: boolean;
+};
+
+type ReferenceCandidate = {
+  source_kind: string;
+  source_price_p: number;
+  price_per_75cl_p: number;
+  source_format_code: string | null;
+  source_case_size: number | null;
+  reference_date: string | null;
+  date_meaning: string | null;
+  source_wine: string | null;
 };
 
 type ReleaseRecord = {
@@ -111,8 +133,15 @@ function methodLabel(value: string | null): string {
   return value ? labels[value] ?? value.replaceAll("_", " ") : "unknown method";
 }
 
+function askVsReference(askP: number | null, caseSize: number | null,
+  bottleVolumeMl: number | null, referenceP: number | null): number | null {
+  if (bottleVolumeMl !== 750 || referenceP == null || referenceP <= 0) return null;
+  const askPerBottle = perBottleP(askP, caseSize, bottleVolumeMl);
+  return askPerBottle == null ? null : (askPerBottle / referenceP - 1) * 100;
+}
+
 // One labelled figure in the at-a-glance status band. `sub` carries the small
-// supporting line (a release price under a percentage, a holdings breakdown).
+// supporting line (a reference price under a percentage, a holdings breakdown).
 function Stat({ label, value, sub, tone }: {
   label: string;
   value: React.ReactNode;
@@ -142,13 +171,19 @@ export default async function WinePage({ params }: {
   const owner = await requireOwner();
   const { supabase } = owner;
 
-  const [wineCard, formatRows, releases, cellartracker, holdings, suggestion, favourited] = await timeProtectedQuery("/wine/parent/[parentSku]", "wine_page_data", () => Promise.all([
+  const [wineCard, formatRows, referenceResult, candidatesResult, releases, cellartracker, holdings, suggestion, favourited] = await timeProtectedQuery("/wine/parent/[parentSku]", "wine_page_data", () => Promise.all([
     supabase.from("wine_card_view")
       .select("wine_ref,parent_sku,name,vintage,producer,country,region,subregion,colour,product_url,is_biddable")
       .eq("parent_sku", parentSku).maybeSingle(),
     supabase.from("wine_card_format_view")
-      .select("format_code,case_size,bottle_volume_ml,is_listed,lowest_ask_p,highest_bid_p,market_price_p,adjusted_guide_p,last_transaction_p,price_vs_last_pct,last_rest_checked_at,release_price_p,anchor_status,release_offer_date,ask_vs_release_pct")
+      .select("format_code,case_size,bottle_volume_ml,is_listed,lowest_ask_p,highest_bid_p,market_price_p,adjusted_guide_p,last_transaction_p,price_vs_last_pct,last_rest_checked_at")
       .eq("parent_sku", parentSku).order("bottle_volume_ml").order("case_size"),
+    supabase.from("resolved_reference_price_view")
+      .select("price_per_75cl_p,resolution_kind,source_kind,reference_date,date_meaning,source_wine,evidence_min_p,evidence_max_p,evidence_candidate_count,has_competing_evidence,needs_review,has_current_support")
+      .eq("parent_sku", parentSku).maybeSingle(),
+    supabase.from("historic_reference_candidate_view")
+      .select("source_kind,source_price_p,price_per_75cl_p,source_format_code,source_case_size,reference_date,date_meaning,source_wine")
+      .eq("parent_sku", parentSku).order("reference_date", { ascending: true }),
     supabase.from("release_offer_evidence_view")
       .select("import_id,source_row_number,offer_date,source_wine,format_code,release_price_p,case_size,bottle_volume_ml,match_method,source_product_url,tasting_notes")
       .eq("parent_sku", parentSku).order("offer_date", { ascending: false }),
@@ -166,7 +201,8 @@ export default async function WinePage({ params }: {
   ]));
 
   for (const [what, result] of [
-    ["Wine", wineCard], ["Catalogue formats", formatRows], ["Release anchors", formatRows],
+    ["Wine", wineCard], ["Catalogue formats", formatRows],
+    ["Reference price", referenceResult], ["Reference evidence", candidatesResult],
     ["Release history", releases], ["CellarTracker records", cellartracker], ["BBR holdings", holdings],
   ] as const) {
     if (result.error) throw new Error(`${what} could not be loaded: ${result.error.message} (${result.error.code})`);
@@ -174,12 +210,14 @@ export default async function WinePage({ params }: {
 
   const wine = (wineCard.data ?? null) as WineCard | null;
   const formats = (formatRows.data ?? []) as WineCardFormat[];
+  const reference = (referenceResult.data ?? null) as ReferencePrice | null;
+  const referenceCandidates = (candidatesResult.data ?? []) as ReferenceCandidate[];
   const releaseRecords = (releases.data ?? []) as ReleaseRecord[];
   const cellarRecords = (cellartracker.data ?? []) as CellarTrackerRecord[];
   const bbrHoldings = (holdings.data ?? []) as BbrHolding[];
   const fallback = (suggestion.data ?? null) as Suggestion | null;
 
-  const known = wine !== null || formats.length > 0 || releaseRecords.length > 0
+  const known = wine !== null || formats.length > 0 || reference !== null || releaseRecords.length > 0
     || cellarRecords.length > 0 || bbrHoldings.length > 0 || fallback !== null;
   if (!known) notFound();
 
@@ -203,7 +241,6 @@ export default async function WinePage({ params }: {
     ],
   });
   const wineSearcher = wineSearcherUrl(identity.name, identity.vintage);
-  const anchorByFormat = new Map(formats.map((row) => [row.format_code, row]));
 
   // The most recent release offer that carried a tasting note. Release records
   // arrive newest-first, so the first non-empty note is the freshest.
@@ -211,10 +248,10 @@ export default async function WinePage({ params }: {
 
   // The status-band glance headlines one format so every figure agrees: the
   // keenest live ask per 75cl, else the 750ml single-bottle reference, else the
-  // first format. Percentages (vs release / vs last / vs market) are already
+  // first format. The reference comparison only applies to 75 cl formats.
   // per-format, so a single headline keeps them coherent.
   const askable = formats
-    .filter((f) => perBottleP(f.lowest_ask_p, f.case_size, f.bottle_volume_ml) !== null)
+    .filter((f) => f.bottle_volume_ml === 750 && perBottleP(f.lowest_ask_p, f.case_size, f.bottle_volume_ml) !== null)
     .sort((a, b) =>
       (perBottleP(a.lowest_ask_p, a.case_size, a.bottle_volume_ml) ?? Infinity)
       - (perBottleP(b.lowest_ask_p, b.case_size, b.bottle_volume_ml) ?? Infinity));
@@ -275,11 +312,11 @@ export default async function WinePage({ params }: {
           <Stat label="Bid" value={formatPence(perBottleP(headline?.highest_bid_p ?? null, headline?.case_size ?? null, headline?.bottle_volume_ml ?? null))} />
           <Stat label="Guide" value={formatPence(perBottleP(headline?.market_price_p ?? null, headline?.case_size ?? null, headline?.bottle_volume_ml ?? null))} />
           <Stat
-            label="Ask vs release"
-            value={formatSignedPct(headline?.ask_vs_release_pct ?? null)}
-            sub={headline?.release_price_p != null
-              ? `rel. ${formatPence(perBottleP(headline.release_price_p, headline.case_size, headline.bottle_volume_ml))}${headline.anchor_status === "owner" ? " · owner-set" : ""}`
-              : "no anchor"}
+            label="Ask vs reference"
+            value={formatSignedPct(askVsReference(headline?.lowest_ask_p ?? null, headline?.case_size ?? null, headline?.bottle_volume_ml ?? null, reference?.price_per_75cl_p ?? null))}
+            sub={reference && headline?.bottle_volume_ml === 750
+              ? `${formatPence(reference.price_per_75cl_p)} / 75 cl · ${reference.resolution_kind === "owner" ? "owner-set" : reference.source_kind}`
+              : "no 75 cl reference"}
           />
           <Stat
             label="Ask vs last tx"
@@ -303,7 +340,7 @@ export default async function WinePage({ params }: {
 
       {formats.length > 0 && <Card
         title="Market now"
-        note="All prices are 75cl bottle equivalents. 'Last tx' is the most recent trade; 'vs release' and 'vs last' are the arbitrage signal. The guide reads flat across formats because it is a constant £/litre per wine; the trailing 'adjusted' column applies BBR's release-offer format premiums and is kept only for reference."
+        note="Market prices are shown per 75 cl equivalent. The historic reference and its comparison apply only to 75 cl bottles. 'Last tx' is the most recent trade. The adjusted guide includes source offer format premiums."
       >
         <div className="mt-4 overflow-auto">
           <table className="w-full min-w-max text-left text-sm">
@@ -312,7 +349,7 @@ export default async function WinePage({ params }: {
                 <th className="py-2 pr-3">Format</th><th className="py-2 pr-3">Listing</th>
                 <th className="py-2 pr-3 text-right">Ask / 75cl</th><th className="py-2 pr-3 text-right">Bid / 75cl</th>
                 <th className="py-2 pr-3 text-right">Guide / 75cl</th><th className="py-2 pr-3 text-right">Last tx / 75cl</th>
-                <th className="py-2 pr-3 text-right">Ask vs release</th><th className="py-2 pr-3 text-right">Ask vs last</th>
+                <th className="py-2 pr-3 text-right">Reference / 75 cl</th><th className="py-2 pr-3 text-right">Ask vs reference</th><th className="py-2 pr-3 text-right">Ask vs last</th>
                 <th className="py-2 pr-3 text-right font-normal normal-case text-ink-muted/70">Adjusted / 75cl</th><th className="py-2">Checked</th>
               </tr>
             </thead>
@@ -325,10 +362,11 @@ export default async function WinePage({ params }: {
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.highest_bid_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.market_price_p, format.case_size, format.bottle_volume_ml))}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(format.last_transaction_p, format.case_size, format.bottle_volume_ml))}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{format.bottle_volume_ml === 750 ? formatPence(reference?.price_per_75cl_p ?? null) : "–"}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">
-                    {formatSignedPct(format.ask_vs_release_pct)}
+                    {formatSignedPct(askVsReference(format.lowest_ask_p, format.case_size, format.bottle_volume_ml, reference?.price_per_75cl_p ?? null))}
                     <Link href={`/release-prices/${parentSku}/${format.format_code}`} className="block text-xs font-normal text-accent underline-offset-2 hover:underline">
-                      {format.release_price_p == null ? "Set release price →" : format.anchor_status === "owner" ? "Owner-set ✎" : "Release history ↗"}
+                      Historic offers ↗
                     </Link>
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums">{formatSignedPct(format.price_vs_last_pct)}</td>
@@ -340,6 +378,34 @@ export default async function WinePage({ params }: {
           </table>
         </div>
       </Card>}
+
+      <Card
+        title="Historic reference"
+        note="One in-bond price per 75 cl bottle for this wine. It is a benchmark from the available historic evidence, not a claim about the original release price."
+      >
+        {reference ? <div className="mt-3 space-y-2 text-sm">
+          <p><strong className="text-lg tabular-nums">{formatPence(reference.price_per_75cl_p)}</strong> / 75 cl · {reference.resolution_kind === "owner" ? "Owner-set" : `Automatic from ${reference.source_kind}`}</p>
+          <p className="text-ink-muted">{reference.reference_date ? `${reference.date_meaning ?? "Reference date"}: ${formatDate(reference.reference_date)}` : reference.date_meaning ?? "Date not recorded"}</p>
+          {reference.source_wine && <p className="text-ink-muted">{reference.source_wine}</p>}
+          {reference.has_competing_evidence && <p className="text-ink-muted">Competing prices: {formatPence(reference.evidence_min_p)} to {formatPence(reference.evidence_max_p)} per 75 cl.</p>}
+          {reference.needs_review && <p className="text-accent">Purchase evidence needs review.</p>}
+          {reference.resolution_kind === "owner" && !reference.has_current_support && <p className="text-ink-muted">No current corroboration for this owner-set value.</p>}
+        </div> : <p className="mt-3 text-sm text-ink-muted">No historic reference price is available.</p>}
+        {referenceCandidates.length > 0 && <div className="mt-4 overflow-auto">
+          <table className="w-full min-w-max text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-ink-muted"><tr>
+              <th className="py-2 pr-3">Source</th><th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Original price</th><th className="py-2 pr-3 text-right">Per 75 cl</th><th className="py-2">Evidence</th>
+            </tr></thead>
+            <tbody>{referenceCandidates.map((candidate, index) => <tr key={index} className="border-t border-border">
+              <td className="py-2 pr-3">{candidate.source_kind === "bbr" ? "BBR holding" : candidate.source_kind === "cellartracker" ? "CellarTracker" : "Historic offer"}</td>
+              <td className="py-2 pr-3">{candidate.reference_date ? formatDate(candidate.reference_date) : "–"}</td>
+              <td className="py-2 pr-3 tabular-nums">{formatPence(candidate.source_price_p)}{candidate.source_case_size ? ` / ${candidate.source_case_size} bottles` : " / bottle"}</td>
+              <td className="py-2 pr-3 text-right tabular-nums">{formatPence(candidate.price_per_75cl_p)}</td>
+              <td className="py-2 text-ink-muted">{reference && Math.abs(candidate.price_per_75cl_p - reference.price_per_75cl_p) <= 1 ? "Supports reference" : "Competing"}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
+      </Card>
 
       {tastingNote?.tasting_notes && <Card
         title="Tasting note"
@@ -363,20 +429,16 @@ export default async function WinePage({ params }: {
               <thead className="text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="py-2 pr-3">Offer date</th><th className="py-2 pr-3">Format</th>
-                  <th className="py-2 pr-3 text-right">Release / 75cl</th><th className="py-2 pr-3">Anchor</th>
+                  <th className="py-2 pr-3 text-right">Offer / 75 cl</th>
                   <th className="py-2 pr-3">Matched by</th><th className="py-2">Record</th>
                 </tr>
               </thead>
               <tbody>
                 {releaseRecords.map((record) => {
-                  const anchor = anchorByFormat.get(record.format_code);
-                  const isAnchor = anchor?.release_offer_date === record.offer_date
-                    && anchor?.release_price_p === record.release_price_p;
                   return <tr key={`${record.import_id}-${record.source_row_number}-${record.format_code}`} className="border-t border-border">
                     <td className="py-2 pr-3 whitespace-nowrap">{formatDate(record.offer_date)}</td>
                     <td className="py-2 pr-3">{formatFormat(record.case_size, record.bottle_volume_ml)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{formatPence(perBottleP(record.release_price_p, record.case_size, record.bottle_volume_ml))}</td>
-                    <td className="py-2 pr-3 text-xs">{isAnchor ? (anchor?.anchor_status === "confirmed" ? "Confirmed anchor" : "Provisional anchor") : "–"}</td>
                     <td className="py-2 pr-3 text-xs text-ink-muted">{methodLabel(record.match_method)}</td>
                     <td className="py-2">
                       <Link href={`/release-prices/offers/${record.import_id}/${record.source_row_number}`} className="text-sm text-accent underline-offset-2 hover:underline">Open</Link>

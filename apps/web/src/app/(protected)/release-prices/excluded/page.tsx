@@ -34,12 +34,12 @@ export default async function ExcludedReleaseOfferRecordsPage({
     <header className="border-b border-border bg-accent-soft px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Release prices</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Historic offers</p>
           <h1 className="mt-1 text-2xl font-semibold">Excluded records</h1>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
             Offer records you have taken out of the evidence. Each is matched on its own
             content, so a later file repeating the same offer is filtered out rather than
-            reintroducing it. Restoring one puts it back into the release-price anchor.
+            reintroducing it. Restoring one makes it available as historic reference evidence again.
           </p>
         </div>
         <Link href="/release-prices" className="rounded border border-accent px-3 py-2 text-sm font-medium text-accent hover:bg-background">

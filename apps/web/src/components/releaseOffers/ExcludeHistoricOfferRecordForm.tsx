@@ -11,7 +11,7 @@ export function ExcludeHistoricOfferRecordForm({
 }) {
   const action = excludeHistoricOfferRecord.bind(null, importId, sourceRowNumber);
   return <form action={action} onSubmit={(event) => {
-    if (!window.confirm("Exclude this release-offer record? It stops supplying release prices, and a later file repeating it is filtered out, until you restore it.")) {
+    if (!window.confirm("Exclude this historic offer record? It stops contributing to the reference, and a later file repeating it is filtered out until you restore it.")) {
       event.preventDefault();
     }
   }}>

@@ -62,8 +62,8 @@ export function AcceptedOfferBrowser({
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Release offers</p>
           <h1 className="mt-1 text-2xl font-semibold">Accepted offer records</h1>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-            Each record proves a wine was offered at the stated price. Linking one to a
-            Parent ID is what lets it anchor a release-price comparison.
+            Each record shows a historic offer at the stated price. Linking it to a
+            Parent ID lets it contribute to the wine&apos;s historic reference.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

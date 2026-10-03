@@ -211,7 +211,7 @@ export default async function ReleaseOfferDetailPage({
 
       <section aria-labelledby="exclude-record" className="rounded-lg border border-border bg-background p-5">
         <h2 id="exclude-record" className="text-lg font-semibold">Exclude record</h2>
-        <p className="mt-1 text-sm text-ink-muted">Use this when the source row itself is wrong. It removes this evidence from release prices everywhere, and from future imports — a later file repeating this offer is filtered out. Other records in the same match group are retained. Restore it from <Link href="/release-prices/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
+        <p className="mt-1 text-sm text-ink-muted">Use this when the source row itself is wrong. It removes this offer from the historic reference evidence and filters out later imports of the same offer. Other records in the match group remain. Restore it from <Link href="/release-prices/excluded" className="text-accent underline-offset-2 hover:underline">excluded records</Link>.</p>
         <div className="mt-4"><ExcludeHistoricOfferRecordForm importId={importId} sourceRowNumber={rowNumber} /></div>
       </section>
 

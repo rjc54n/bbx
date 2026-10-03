@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_SELECT, PAGE_SIZE, buildSearchOrFilter, mergeReleasePrices, paginationRange } from "./fetchCatalogue";
+import { CATALOGUE_SELECT, PAGE_SIZE, buildSearchOrFilter, mergeReferencePrices, paginationRange } from "./fetchCatalogue";
 
 describe("buildSearchOrFilter", () => {
   it("builds an ilike-across-name-and-producer clause", () => {
@@ -41,32 +41,30 @@ describe("paginationRange", () => {
   });
 });
 
-describe("mergeReleasePrices", () => {
-  it("adds an exact Parent SKU and format release-price anchor to a catalogue row", () => {
-    const rows = [{ parent_sku: "12345678901", format_code: "06-00750", name: "Test wine" }];
-    const merged = mergeReleasePrices(rows as never, [{
-      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500, anchor_status: "confirmed",
+describe("mergeReferencePrices", () => {
+  it("scales a per-bottle reference to a 75cl catalogue case", () => {
+    const rows = [{ parent_sku: "12345678901", format_code: "06-00750", case_size: 6, bottle_volume_ml: 750, name: "Test wine" }];
+    const merged = mergeReferencePrices(rows as never, [{
+      parent_sku: "12345678901", price_per_75cl_p: 12500, resolution_kind: "automatic", source_kind: "bbr", reference_date: "2020-01-01", date_meaning: "BBR snapshot observation date", needs_review: false, has_competing_evidence: false,
     }]);
-    expect(merged[0].release_price_p).toBe(12500);
-    expect(merged[0].anchor_status).toBe("confirmed");
+    expect(merged[0].reference_price_p).toBe(75000);
+    expect(merged[0].reference_source).toBe("bbr");
   });
 
-  it("does not apply an anchor from another format", () => {
-    const rows = [{ parent_sku: "12345678901", format_code: "12-00750", name: "Test wine" }];
-    const merged = mergeReleasePrices(rows as never, [{
-      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 12500, anchor_status: "confirmed",
+  it("uses the same reference for another 75cl case size", () => {
+    const rows = [{ parent_sku: "12345678901", format_code: "12-00750", case_size: 12, bottle_volume_ml: 750, name: "Test wine" }];
+    const merged = mergeReferencePrices(rows as never, [{
+      parent_sku: "12345678901", price_per_75cl_p: 12500, resolution_kind: "automatic", source_kind: "bbr", reference_date: null, date_meaning: "BBR snapshot observation date", needs_review: false, has_competing_evidence: false,
     }]);
-    expect(merged[0].release_price_p).toBeNull();
-    expect(merged[0].anchor_status).toBeNull();
+    expect(merged[0].reference_price_p).toBe(150000);
   });
 
-  it("carries an owner anchor status through so the catalogue can mark it", () => {
-    const rows = [{ parent_sku: "12345678901", format_code: "06-00750", name: "Test wine" }];
-    const merged = mergeReleasePrices(rows as never, [{
-      parent_sku: "12345678901", format_code: "06-00750", release_price_p: 9900, anchor_status: "owner",
+  it("does not apply a 75cl reference to another bottle volume", () => {
+    const rows = [{ parent_sku: "12345678901", format_code: "01-01500", case_size: 1, bottle_volume_ml: 1500, name: "Test wine" }];
+    const merged = mergeReferencePrices(rows as never, [{
+      parent_sku: "12345678901", price_per_75cl_p: 9900, resolution_kind: "owner", source_kind: "owner", reference_date: null, date_meaning: "Owner-entered reference date", needs_review: false, has_competing_evidence: false,
     }]);
-    expect(merged[0].release_price_p).toBe(9900);
-    expect(merged[0].anchor_status).toBe("owner");
+    expect(merged[0].reference_price_p).toBeNull();
   });
 });
 

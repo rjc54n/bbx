@@ -14,32 +14,41 @@ export interface FetchResult<Row> {
   count: number;
 }
 
-type ReleasePriceAnchorRow = {
+type ReferencePriceRow = {
   parent_sku: string | null;
-  format_code: string | null;
-  release_price_p: number | null;
-  anchor_status: string | null;
+  price_per_75cl_p: number | null;
+  resolution_kind: string | null;
+  source_kind: string | null;
+  reference_date: string | null;
+  date_meaning: string | null;
+  needs_review: boolean | null;
+  has_competing_evidence: boolean | null;
 };
 
-export function mergeReleasePrices(
+export function mergeReferencePrices(
   rows: DatabaseCatalogueRow[],
-  anchors: ReleasePriceAnchorRow[],
+  references: ReferencePriceRow[],
 ): CatalogueRow[] {
-  const anchorByKey = new Map(
-    anchors
-      .filter((anchor): anchor is ReleasePriceAnchorRow & { parent_sku: string; format_code: string } =>
-        anchor.parent_sku !== null && anchor.format_code !== null,
+  const referenceByParent = new Map(
+    references
+      .filter((reference): reference is ReferencePriceRow & { parent_sku: string; price_per_75cl_p: number } =>
+        reference.parent_sku !== null && reference.price_per_75cl_p !== null,
       )
-      .map((anchor) => [`${anchor.parent_sku}|${anchor.format_code}`, anchor]),
+      .map((reference) => [reference.parent_sku, reference]),
   );
   return rows.map((row) => {
-    const anchor = anchorByKey.get(`${row.parent_sku}|${row.format_code}`);
+    const reference = row.parent_sku && row.bottle_volume_ml === 750 && (row.case_size ?? 0) > 0
+      ? referenceByParent.get(row.parent_sku)
+      : undefined;
     return {
       ...row,
-      release_price_p: anchor?.release_price_p ?? null,
-      // anchor_status lets the catalogue mark an owner-set price the same way the
-      // wine card and scenarios do.
-      anchor_status: anchor?.anchor_status ?? null,
+      reference_price_p: reference ? reference.price_per_75cl_p * (row.case_size ?? 0) : null,
+      reference_kind: reference?.resolution_kind ?? null,
+      reference_source: reference?.source_kind ?? null,
+      reference_date: reference?.reference_date ?? null,
+      reference_date_meaning: reference?.date_meaning ?? null,
+      reference_needs_review: reference?.needs_review ?? false,
+      reference_has_competing_evidence: reference?.has_competing_evidence ?? false,
     };
   });
 }
@@ -86,20 +95,15 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
   if (error) throw error;
   const rows = (data ?? []) as DatabaseCatalogueRow[];
   const parentSkus = [...new Set(rows.flatMap((row) => row.parent_sku ? [row.parent_sku] : []))];
-  if (parentSkus.length === 0) return { rows: mergeReleasePrices(rows, []), count: count ?? 0 };
-  const { data: anchorData, error: anchorError } = await supabase
-    // resolved_release_anchor_view ranks an owner-set price above the imported
-    // anchor; release_price_anchor_view (imported only) would hide owner prices
-    // from the catalogue while every other surface already shows them.
-    .from("resolved_release_anchor_view")
-    .select("parent_sku, format_code, release_price_p, anchor_status")
+  if (parentSkus.length === 0) return { rows: mergeReferencePrices(rows, []), count: count ?? 0 };
+  const { data: referenceData, error: referenceError } = await supabase
+    .from("resolved_reference_price_view")
+    .select("parent_sku,price_per_75cl_p,resolution_kind,source_kind,reference_date,date_meaning,needs_review,has_competing_evidence")
     .in("parent_sku", parentSkus);
-  // Release evidence enriches the catalogue, but it must never suppress the
-  // primary result set if the secondary read is unavailable or its RLS session
-  // has not refreshed yet in the browser.
-  if (anchorError) return { rows: mergeReleasePrices(rows, []), count: count ?? 0 };
+  // Private reference enrichment never suppresses the public catalogue result.
+  if (referenceError) return { rows: mergeReferencePrices(rows, []), count: count ?? 0 };
   return {
-    rows: mergeReleasePrices(rows, (anchorData ?? []) as ReleasePriceAnchorRow[]),
+    rows: mergeReferencePrices(rows, (referenceData ?? []) as ReferencePriceRow[]),
     count: count ?? 0,
   };
 }

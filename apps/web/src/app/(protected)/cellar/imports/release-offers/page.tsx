@@ -29,7 +29,7 @@ export default async function ReleaseOfferImportsPage() {
             Back to imports
           </Link>
           <Link href="/release-prices" className="text-accent underline-offset-2 hover:underline">
-            Release prices
+            Historic offers
           </Link>
         </nav>
         <header>

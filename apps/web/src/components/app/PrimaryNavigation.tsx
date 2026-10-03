@@ -22,7 +22,7 @@ const tabs = [
   { id: "cellartracker", label: "My CellarTracker", href: "/cellartracker" },
   {
     id: "release-prices",
-    label: "Release prices",
+    label: "Historic offers",
     href: "/release-prices",
   },
   { id: "matching", label: "Matching", href: "/matches" },

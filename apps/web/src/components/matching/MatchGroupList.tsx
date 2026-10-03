@@ -157,7 +157,7 @@ function displayMethod(value: string | null) {
 function ReleaseOfferPanelView({ panel }: { panel: ReleaseOfferPanel }) {
   if (panel.records.length === 0) return null;
   return <details className="mt-3 rounded border border-border bg-accent-soft/30 p-3 text-xs">
-    <summary className="cursor-pointer font-medium text-ink">Release info</summary>
+    <summary className="cursor-pointer font-medium text-ink">Historic offer info</summary>
     <div className="mt-2 space-y-3">
       {panel.records.map((record) => <div key={`${record.import_id}-${record.source_row_number}`} className="space-y-1">
         {panel.records.length > 1 && <p className="text-ink-muted">Offer {record.offer_date ?? "date unknown"}</p>}
@@ -238,10 +238,9 @@ export function MatchGroupList({
         {/* The one hazard that survives into the high-coverage tiers: the source
             and the top candidate disagree about a second wine. Confirming links
             a second wine to a grand vin's Parent ID or the reverse, and
-            release_price_anchor_view anchors on the earliest offer, so a single
-            wrong confirm poisons that wine's anchor from then on. */}
+            A wrong link can put this offer in the wrong wine's reference evidence. */}
         {group.second_wine_conflict && group.unresolved_row_count > 0 && <p role="alert" className="mt-3 rounded border border-accent bg-accent-soft/50 p-3 text-xs">
-          <strong className="font-medium">Second-wine mismatch.</strong> The source name and the top candidate disagree on a second-wine marker — Les Forts, Pavillon, Carruades, Clos du Marquis and the like. One of them is the grand vin and the other is not. Check the candidate by name before confirming; a wrong link here corrupts that wine&rsquo;s release-price anchor. If nothing in the list is the right wine, record it as no suitable match.
+          <strong className="font-medium">Second-wine mismatch.</strong> The source name and the top candidate disagree on a second-wine marker such as Les Forts, Pavillon, Carruades or Clos du Marquis. Check the candidate by name before confirming; a wrong link puts this price against the wrong wine. If nothing in the list is right, record no suitable match.
         </p>}
         {group.panel.kind === "release_offer"
           ? <ReleaseOfferPanelView panel={group.panel} />

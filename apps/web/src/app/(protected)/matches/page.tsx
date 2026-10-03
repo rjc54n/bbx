@@ -365,7 +365,7 @@ export default async function MatchesPage({
       () => supabase.from("release_offer_review_view")
         .select("import_id,source_row_number,offer_date,source_price_text,source_product_url,source_product_id,tasting_notes,description,match_group_key")
         .in("match_group_key", releaseKeys).order("offer_date", { ascending: false }),
-      "Release info",
+      "Historic offer info",
     ),
     rows<SuggestionRow>(
       releaseKeys,

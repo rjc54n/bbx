@@ -144,18 +144,17 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     render: (row) => formatPence(row.highest_bid_p),
   },
   {
-    id: "release_price_p",
-    label: "Release price",
+    id: "reference_price_p",
+    label: "Reference",
     align: "right",
-    render: (row) =>
-      row.release_price_p != null && row.anchor_status === "owner" ? (
-        <span className="inline-flex items-center gap-1">
-          {formatPence(row.release_price_p)}
-          <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-ink">owner</span>
-        </span>
-      ) : (
-        formatPence(row.release_price_p)
-      ),
+    render: (row) => row.reference_price_p == null ? "–" : (
+      <span className="inline-flex items-center gap-1" title={[row.reference_source, row.reference_date_meaning, row.reference_date].filter(Boolean).join(" · ")}>
+        {formatPence(row.reference_price_p)}
+        {row.reference_kind === "owner" && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-ink">owner</span>}
+        {row.reference_needs_review && <span className="text-xs text-accent">review</span>}
+        {row.reference_has_competing_evidence && <span className="text-xs text-ink-muted">competing</span>}
+      </span>
+    ),
   },
   {
     id: "market_price_p",
