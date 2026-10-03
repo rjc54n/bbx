@@ -15,10 +15,10 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from core.db import get_connection, placeholder
+from core.db import get_connection
 from core.store import load_recent_runs
 from core.sweep import BIDDABLE_FULL_BOOK_SCOPE, run_daily_sweep
-from core.sweep_window import in_sweep_window, recent_run_reason
+from core.sweep_window import has_backup_headroom, in_sweep_window, recent_run_reason
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +28,9 @@ log = logging.getLogger(__name__)
 
 
 def main():
+    if not has_backup_headroom(datetime.now(timezone.utc)):
+        log.error("Sweep cannot start: the full 90-minute budget must fit before 02:00 UTC, outside 02:00-05:00 UTC")
+        sys.exit(1)
     algolia_app_id = os.environ.get("ALGOLIA_APP_ID")
     algolia_api_key = os.environ.get("ALGOLIA_API_KEY")
 

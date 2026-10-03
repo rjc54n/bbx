@@ -9,9 +9,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from core.db import is_postgres, placeholder, placeholders, _adapt_array_param, _parse_array_column
 from core.models import ObservationEvent, Offer, Product, Sku, _now_utc, _uuid
@@ -51,12 +50,12 @@ def start_run(conn, *, scope: str, run_date: str) -> Optional[str]:
     return run_id
 
 
-def load_recent_runs(conn, *, scope: str, limit: int = 5) -> List[Tuple[str, datetime]]:
-    """Latest (status, started_at) pairs for a scope, newest first, UTC-aware."""
+def load_recent_runs(conn, *, scope: str, limit: int = 5) -> List[Tuple[str, datetime, Any]]:
+    """Latest (status, started_at, published_at) rows, newest first."""
     p = placeholder()
     cur = conn.cursor()
     cur.execute(
-        f"SELECT status, started_at FROM scan_runs WHERE scope = {p} "
+        f"SELECT status, started_at, published_at FROM scan_runs WHERE scope = {p} "
         f"ORDER BY started_at DESC LIMIT {int(limit)}",
         (scope,),
     )
@@ -70,7 +69,7 @@ def load_recent_runs(conn, *, scope: str, limit: int = 5) -> List[Tuple[str, dat
             started = datetime.fromisoformat(started)
         if started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
-        runs.append((d["status"], started))
+        runs.append((d["status"], started, d["published_at"]))
     return runs
 
 
@@ -159,7 +158,7 @@ def mark_run_failed(conn, run_id: str, error_message: str) -> None:
     p = placeholder()
     cur = conn.cursor()
     cur.execute(
-        f"UPDATE scan_runs SET status='failed', finished_at={p}, error_message={p} "
+        f"UPDATE scan_runs SET status='failed', finished_at={p}, error_message=COALESCE(error_message, {p}) "
         f"WHERE id={p}",
         (_now_utc(), error_message, run_id),
     )
@@ -185,26 +184,76 @@ def _changed_or_returning(table: str, columns: Tuple[str, ...]) -> str:
     )
 
 
-def prune_observation_events(conn, cutoff: str) -> int:
-    """Delete observation events observed before `cutoff`; return the count.
+def prune_observation_events(conn, cutoff: str, *, batch_rows=1000,
+                             max_rows=10000, max_seconds=20.0,
+                             clock=time.monotonic) -> dict:
+    """Commit bounded batches using the existing primary-key access path.
 
-    Runs in its own transaction after the sweep's commit, so a failure here
-    can never roll back a day's source data. Nothing reads old events back:
-    the full history lives in an offline backup (see
-    docs/STORAGE-RETENTION-PLAN-2026-10-01.md).
+    Walk forwards within this invocation instead of repeatedly scanning the
+    surviving prefix. A bounded backlog count reports a lower bound when large.
+    Every statement also has a timeout within the remaining wall-time budget.
     """
+    if min(batch_rows, max_rows, max_seconds) <= 0:
+        raise ValueError("Retention budgets must be positive")
     p = placeholder()
     cur = conn.cursor()
+    started = clock()
+    deleted = batches = last_id = 0
+    remaining = None
+    exact = False
     try:
-        cur.execute(f"DELETE FROM observation_events WHERE observed_at < {p}", (cutoff,))
-        deleted = cur.rowcount
-        conn.commit()
-    except BaseException:
+        while deleted < max_rows and clock() - started < max_seconds:
+            if is_postgres():
+                timeout_ms = max(1, min(5000, int((max_seconds - (clock() - started)) * 1000)))
+                cur.execute("SELECT set_config('statement_timeout', %s, true)", (f"{timeout_ms}ms",))
+            limit = min(batch_rows, max_rows - deleted)
+            cur.execute(
+                f"SELECT id FROM observation_events WHERE id > {p} AND observed_at < {p} "
+                f"ORDER BY id LIMIT {p}", (last_id, cutoff, limit),
+            )
+            ids = [dict(row)["id"] for row in cur.fetchall()]
+            if not ids:
+                conn.commit()
+                remaining, exact = 0, True
+                break
+            if clock() - started >= max_seconds:
+                conn.rollback()
+                break
+            if is_postgres():
+                timeout_ms = max(1, min(5000, int((max_seconds - (clock() - started)) * 1000)))
+                cur.execute("SELECT set_config('statement_timeout', %s, true)", (f"{timeout_ms}ms",))
+            cur.execute(f"DELETE FROM observation_events WHERE id IN ({placeholders(len(ids))})", ids)
+            count = cur.rowcount
+            conn.commit()
+            deleted += count
+            batches += 1
+            last_id = ids[-1]
+            log.info("Retention batch committed: rows=%d total_deleted=%d seconds=%.3f", count, deleted, clock() - started)
+        # Reserve no extra unbounded work after the time budget expires.
+        if remaining is None and clock() - started < max_seconds:
+            if is_postgres():
+                timeout_ms = max(1, min(5000, int((max_seconds - (clock() - started)) * 1000)))
+                cur.execute("SELECT set_config('statement_timeout', %s, true)", (f"{timeout_ms}ms",))
+            cur.execute(
+                f"SELECT count(*) AS remaining FROM (SELECT id FROM observation_events "
+                f"WHERE observed_at < {p} LIMIT {p}) backlog", (cutoff, max_rows + 1),
+            )
+            remaining = dict(cur.fetchone())["remaining"]
+            exact = remaining <= max_rows
+            conn.commit()
+    except BaseException as exc:
         conn.rollback()
+        progress = {"deleted": deleted, "batches": batches,
+                    "seconds": round(clock() - started, 3), "remaining": None,
+                    "remaining_exact": False, "budget_exhausted": True, "cutoff": cutoff}
+        exc.retention_progress = progress
+        log.warning("Retention stopped before backlog could be established: %s", progress)
         raise
     finally:
         cur.close()
-    return deleted
+    return {"deleted": deleted, "batches": batches, "seconds": round(clock() - started, 3),
+            "remaining": remaining, "remaining_exact": exact,
+            "budget_exhausted": remaining != 0, "cutoff": cutoff}
 
 
 def load_rest_checks(conn) -> Dict[str, Any]:
@@ -485,9 +534,10 @@ def commit_sweep(
     final_status: str,
     now: str,
     rest_checked_parent_skus: Set[str] = frozenset(),
-) -> None:
+) -> dict:
     p = placeholder()
     cur = conn.cursor()
+    started = time.monotonic()
 
     log.info(
         "commit_sweep starting: %d products, %d skus, %d offers, %d events",
@@ -682,15 +732,28 @@ def commit_sweep(
                     event_rows,
                 )
 
-        # --- finish run ---
-        finished_at = _now_utc()
+        # These are actual writes in this transaction, not submitted rows.
+        changed_rows = {}
+        if is_postgres():
+            cur.execute(
+                "SELECT relname, n_tup_ins AS inserted, n_tup_upd AS updated, n_tup_del AS deleted "
+                "FROM pg_stat_xact_user_tables WHERE schemaname = 'private' "
+                "AND relname IN ('products', 'skus', 'offers', 'observation_events', 'product_rest_checks')"
+            )
+            changed_rows = {row["relname"]: {k: row[k] for k in ("inserted", "updated", "deleted")}
+                            for row in cur.fetchall()}
+        # Source quality is not terminal publication status.
+        committed_at = _now_utc()
         cur.execute(
-            f"UPDATE scan_runs SET status={p}, finished_at={p} WHERE id={p}",
-            (final_status, finished_at, run_id),
+            f"UPDATE scan_runs SET source_status={p}, source_committed_at={p} WHERE id={p}",
+            (final_status, committed_at, run_id),
         )
 
         conn.commit()
-        log.info("commit_sweep committed as '%s'", final_status)
+        result = {"status": "completed", "quality": final_status,
+                  "seconds": round(time.monotonic() - started, 3), "changed_rows": changed_rows}
+        log.info("Source committed: %s", json.dumps(result))
+        return result
     except BaseException:
         conn.rollback()
         raise
@@ -705,103 +768,18 @@ def commit_sweep(
 FACET_CACHE_MVIEWS = ("facet_values_mv", "facet_ranges_mv", "format_options_mv")
 
 
-def refresh_facet_caches(conn) -> None:
-    """Refresh the catalogue facet materialized views after a sweep commits.
-
-    REFRESH ... CONCURRENTLY cannot run inside a transaction block, so it runs in
-    autocommit mode and never blocks catalogue readers. Postgres only -- SQLite
-    has no materialized views. The caller treats a failure as non-fatal: a stale
-    facet cache must never fail an otherwise-successful sweep.
-    """
-    if not is_postgres():
-        return
-    conn.commit()  # ensure no open transaction before switching to autocommit
-    previous_autocommit = conn.autocommit
-    conn.autocommit = True
-    try:
-        cur = conn.cursor()
-        try:
-            for mview in FACET_CACHE_MVIEWS:
-                cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY public.{mview}")
-        finally:
-            cur.close()
-        log.info("Refreshed facet caches: %s", ", ".join(FACET_CACHE_MVIEWS))
-    finally:
-        conn.autocommit = previous_autocommit
-
-
-# The catalogue read model and its per-wine and scenario market caches. A sweep is
-# the only thing that changes private.skus/products/offers, so a cache refreshed
-# here is never staler than the data. Both downstream caches read catalogue_mv.
 CATALOGUE_CACHE_MVIEWS = ("catalogue_mv", "wine_market_summary_mv", "wine_scenario_mv")
-
-
-@dataclass(frozen=True)
-class CatalogueCacheRefreshResult:
-    success: bool
-    attempts: int
-    reason: Optional[str] = None
 
 
 def _is_ambiguous_transport_failure(exc: Exception) -> bool:
     """A lost database connection does not prove the REFRESH did not run."""
+    # A server SQLSTATE confirms a response. 57014, for example, means the
+    # statement was cancelled, although psycopg2 classes it as OperationalError.
+    code = getattr(exc, "pgcode", None)
+    if code and not code.startswith("08") and code not in ("57P01", "57P02", "57P03"):
+        return False
     name = type(exc).__name__.lower()
     return any(token in name for token in ("operationalerror", "interfaceerror", "connection", "timeout"))
-
-
-def refresh_catalogue_caches(
-    conn,
-    *,
-    max_attempts: int = 3,
-    sleep: Callable[[float], None] = time.sleep,
-) -> CatalogueCacheRefreshResult:
-    """Refresh the catalogue read-model materialized views after a sweep commits.
-
-    Same mechanics and the same non-fatal contract as refresh_facet_caches:
-    REFRESH ... CONCURRENTLY cannot run inside a transaction block, so it runs in
-    autocommit mode and never blocks readers. Row counts are logged because a
-    refresh that silently produces an empty cache would otherwise look identical
-    to a successful one, and every catalogue surface reads through these.
-    """
-    if not is_postgres():
-        return CatalogueCacheRefreshResult(success=True, attempts=0)
-    conn.commit()  # ensure no open transaction before switching to autocommit
-    previous_autocommit = conn.autocommit
-    conn.autocommit = True
-    try:
-        attempts = max(1, max_attempts)
-        for attempt in range(1, attempts + 1):
-            cur = conn.cursor()
-            try:
-                for mview in CATALOGUE_CACHE_MVIEWS:
-                    cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY public.{mview}")
-                    cur.execute(f"SELECT count(*) AS row_count FROM public.{mview}")
-                    rows = dict(cur.fetchone())["row_count"]
-                    log.info("Refreshed %s: %d rows", mview, rows)
-                    if rows == 0:
-                        log.warning(
-                            "%s refreshed to zero rows -- every catalogue surface "
-                            "reads through it and will now be empty", mview,
-                        )
-                return CatalogueCacheRefreshResult(success=True, attempts=attempt)
-            except Exception as exc:
-                reason = f"catalogue cache refresh failed ({type(exc).__name__})"
-                ambiguous = _is_ambiguous_transport_failure(exc)
-                if attempt == attempts or ambiguous:
-                    log.exception(
-                        "Catalogue cache refresh failed after %d attempt%s%s",
-                        attempt,
-                        "" if attempt == 1 else "s",
-                        "; not retrying after an ambiguous transport failure" if ambiguous else "",
-                    )
-                    return CatalogueCacheRefreshResult(success=False, attempts=attempt, reason=reason)
-                delay = (1.0, 3.0)[min(attempt - 1, 1)]
-                log.warning("Catalogue cache refresh attempt %d/%d failed; retrying in %.0fs", attempt, attempts, delay, exc_info=True)
-                sleep(delay)
-            finally:
-                cur.close()
-    finally:
-        conn.autocommit = previous_autocommit
 
 
 def _apply_disappearances(

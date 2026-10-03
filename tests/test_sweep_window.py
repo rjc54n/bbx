@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from core.sweep_window import in_sweep_window, recent_run_reason
+from core.sweep_window import has_backup_headroom, in_sweep_window, recent_run_reason
 
 
 def utc(*args):
@@ -20,7 +20,8 @@ def utc(*args):
     # GMT after 25 October: window is 22:00-01:00 UTC.
     (utc(2026, 11, 2, 21, 30), False),
     (utc(2026, 11, 2, 22, 0), True),
-    (utc(2026, 11, 3, 0, 59), True),
+    (utc(2026, 11, 3, 0, 30), True),
+    (utc(2026, 11, 3, 0, 31), False),
     (utc(2026, 11, 3, 1, 0), False),
 ])
 def test_window_follows_uk_time(now, expected):
@@ -31,24 +32,36 @@ NOW = utc(2026, 10, 4, 21, 30)
 
 
 def test_runs_when_last_sweep_was_two_days_ago():
-    assert recent_run_reason([("completed", NOW - timedelta(hours=47))], NOW) is None
+    assert recent_run_reason([("completed", NOW - timedelta(hours=47), NOW - timedelta(hours=46))], NOW) is None
 
 
 @pytest.mark.parametrize("status", ["completed", "partial"])
 def test_skips_within_two_day_cadence(status):
-    assert recent_run_reason([(status, NOW - timedelta(hours=30))], NOW)
+    assert recent_run_reason([(status, NOW - timedelta(hours=30), NOW - timedelta(hours=29))], NOW)
 
 
 def test_skips_second_trigger_on_the_same_night():
-    assert recent_run_reason([("completed", NOW - timedelta(minutes=40))], NOW)
+    assert recent_run_reason([("completed", NOW - timedelta(minutes=40), NOW - timedelta(minutes=20))], NOW)
 
 
 def test_failed_run_waits_for_next_night_then_retries():
-    tonight = [("failed", NOW - timedelta(hours=1))]
-    last_night = [("failed", NOW - timedelta(hours=24))]
+    tonight = [("failed", NOW - timedelta(hours=1), None)]
+    last_night = [("failed", NOW - timedelta(hours=24), None)]
     assert recent_run_reason(tonight, NOW)
     assert recent_run_reason(last_night, NOW) is None
 
 
 def test_no_history_runs():
     assert recent_run_reason([], NOW) is None
+
+
+@pytest.mark.parametrize("now, expected", [
+    (utc(2026, 10, 3, 0, 30), True),
+    (utc(2026, 10, 3, 0, 31), False),
+    (utc(2026, 10, 3, 2, 0), False),
+    (utc(2026, 10, 3, 4, 59), False),
+    (utc(2026, 10, 3, 5, 0), True),
+    (utc(2026, 10, 3, 12, 0), True),
+])
+def test_manual_job_keeps_backup_headroom(now, expected):
+    assert has_backup_headroom(now) is expected

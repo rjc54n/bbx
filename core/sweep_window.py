@@ -8,12 +8,13 @@ the afternoon and evening and each trigger decides for itself whether to run
 - Only between 22:00 and 01:00 UK time, to keep the API-heavy discovery out
   of BBX's shopping hours and the database work clear of the ~03:00 UTC
   backup. Europe/London, so the window follows the clocks.
-- Not if a sweep completed or partly completed in the last 40 hours (the
+- Only when the full 90-minute job fits before 02:00 UTC.
+- Not if a sweep published in the last 40 hours (the
   two-day cadence, and a second trigger in the same night), nor if any sweep
   started in the last 12 hours (a failed run waits for the next night).
 
-Stdlib only: the workflow calls this before installing dependencies, so an
-out-of-window trigger costs seconds.
+Stdlib only: the workflow calls this before installing sweep dependencies.
+A skipped trigger still checks publication age through a small database read.
 """
 from __future__ import annotations
 
@@ -27,22 +28,34 @@ WINDOW_START_HOUR = 22  # 22:00 UK time
 WINDOW_END_HOUR = 1     # until 01:00 UK time
 COMPLETED_GAP = timedelta(hours=40)
 ANY_RUN_GAP = timedelta(hours=12)
+MAX_SWEEP_DURATION = timedelta(minutes=90)
+
+
+def has_backup_headroom(now_utc: datetime) -> bool:
+    """Allow the full job budget before 02:00 UTC; never start at 02:00-05:00."""
+    now = now_utc.astimezone(timezone.utc)
+    if 2 <= now.hour < 5:
+        return False
+    backup = now.replace(hour=2, minute=0, second=0, microsecond=0)
+    if now >= backup:
+        backup += timedelta(days=1)
+    return now + MAX_SWEEP_DURATION <= backup
 
 
 def in_sweep_window(now_utc: datetime) -> bool:
     local = now_utc.astimezone(LONDON)
-    return local.hour >= WINDOW_START_HOUR or local.hour < WINDOW_END_HOUR
+    return (local.hour >= WINDOW_START_HOUR or local.hour < WINDOW_END_HOUR) and has_backup_headroom(now_utc)
 
 
 def recent_run_reason(runs, now_utc: datetime) -> str | None:
-    """Why a scheduled sweep should skip, given recent (status, started_at) rows.
+    """Why a scheduled sweep should skip, given status/start/publication rows.
 
     started_at must be timezone-aware. Returns None when the sweep may run.
     """
-    for status, started_at in runs:
+    for status, started_at, published_at in runs:
         age = now_utc - started_at
-        if status in ("completed", "partial") and age < COMPLETED_GAP:
-            return f"a {status} sweep started {age} ago (two-day cadence)"
+        if published_at is not None and age < COMPLETED_GAP:
+            return f"a published {status} sweep started {age} ago (two-day cadence)"
         if age < ANY_RUN_GAP:
             return f"a {status} sweep started {age} ago (one attempt per night)"
     return None
@@ -52,7 +65,7 @@ def main() -> int:
     now = datetime.now(timezone.utc)
     allowed = in_sweep_window(now)
     local = now.astimezone(LONDON).strftime("%H:%M %Z")
-    print(f"UK time {local}: {'inside' if allowed else 'outside'} the 22:00-01:00 sweep window")
+    print(f"UK time {local}: {'allowed' if allowed else 'skipped'} by the sweep window and backup headroom")
     output = os.environ.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a") as fh:

@@ -2890,6 +2890,10 @@ export type Database = {
           duration_seconds: number | null
           error_message: string | null
           finished_at: string | null
+          source_committed_at: string | null
+          source_status: string | null
+          published_at: string | null
+          publication_stages: Json | null
           rest_failed_skus: string[] | null
           rest_skus_expected: number | null
           rest_skus_failed: number | null
@@ -2907,6 +2911,10 @@ export type Database = {
           duration_seconds?: never
           error_message?: string | null
           finished_at?: string | null
+          source_committed_at?: string | null
+          source_status?: string | null
+          published_at?: string | null
+          publication_stages?: Json | null
           rest_failed_skus?: string[] | null
           rest_skus_expected?: number | null
           rest_skus_failed?: number | null
@@ -2924,6 +2932,10 @@ export type Database = {
           duration_seconds?: never
           error_message?: string | null
           finished_at?: string | null
+          source_committed_at?: string | null
+          source_status?: string | null
+          published_at?: string | null
+          publication_stages?: Json | null
           rest_failed_skus?: string[] | null
           rest_skus_expected?: number | null
           rest_skus_failed?: number | null

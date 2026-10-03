@@ -8,6 +8,9 @@ means checking against current code, not just the doc.
 
 ## Start here
 
+- [TRANCHE-1-HANDOVER-2026-10-03.md](TRANCHE-1-HANDOVER-2026-10-03.md):
+  publication state, recovery commands, validation evidence and the production
+  checkpoint for the first priority tranche.
 - [DOCUMENTATION-AUDIT-2026-09-05.md](DOCUMENTATION-AUDIT-2026-09-05.md):
   repository-wide audit of all tracked Markdown: current authority, stale
   status claims, historical records and the product decisions that remain.
