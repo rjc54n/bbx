@@ -7,31 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       app_owners: {
@@ -923,6 +898,33 @@ export type Database = {
         }
         Relationships: []
       }
+      reference_price_decisions: {
+        Row: {
+          decided_at: string
+          decided_by: string | null
+          note: string | null
+          parent_sku: string
+          price_per_75cl_p: number
+          reference_date: string | null
+        }
+        Insert: {
+          decided_at?: string
+          decided_by?: string | null
+          note?: string | null
+          parent_sku: string
+          price_per_75cl_p: number
+          reference_date?: string | null
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string | null
+          note?: string | null
+          parent_sku?: string
+          price_per_75cl_p?: number
+          reference_date?: string | null
+        }
+        Relationships: []
+      }
       release_offer_imports: {
         Row: {
           accepted_at: string | null
@@ -1578,6 +1580,78 @@ export type Database = {
           created_at?: string
           parent_sku?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      wine_match_group_evidence: {
+        Row: {
+          algorithm_version: string | null
+          coverage_tier: string
+          evidence_score: number | null
+          impact_band: string | null
+          last_error_at: string | null
+          last_run_status: string | null
+          match_group_key: string
+          match_reasons: string[]
+          review_band: string | null
+          review_priority: number | null
+          risk_flags: string[]
+          score_margin: number | null
+          second_wine_conflict: boolean
+          source: string
+          suggestion_count: number
+          suggestions_observed_at: string | null
+          token_coverage: number | null
+          top_candidate_parent_sku: string | null
+          top_candidate_was_biddable_at_observation: boolean | null
+          top_match_score: number | null
+          updated_at: string
+        }
+        Insert: {
+          algorithm_version?: string | null
+          coverage_tier?: string
+          evidence_score?: number | null
+          impact_band?: string | null
+          last_error_at?: string | null
+          last_run_status?: string | null
+          match_group_key: string
+          match_reasons?: string[]
+          review_band?: string | null
+          review_priority?: number | null
+          risk_flags?: string[]
+          score_margin?: number | null
+          second_wine_conflict?: boolean
+          source: string
+          suggestion_count?: number
+          suggestions_observed_at?: string | null
+          token_coverage?: number | null
+          top_candidate_parent_sku?: string | null
+          top_candidate_was_biddable_at_observation?: boolean | null
+          top_match_score?: number | null
+          updated_at?: string
+        }
+        Update: {
+          algorithm_version?: string | null
+          coverage_tier?: string
+          evidence_score?: number | null
+          impact_band?: string | null
+          last_error_at?: string | null
+          last_run_status?: string | null
+          match_group_key?: string
+          match_reasons?: string[]
+          review_band?: string | null
+          review_priority?: number | null
+          risk_flags?: string[]
+          score_margin?: number | null
+          second_wine_conflict?: boolean
+          source?: string
+          suggestion_count?: number
+          suggestions_observed_at?: string | null
+          token_coverage?: number | null
+          top_candidate_parent_sku?: string | null
+          top_candidate_was_biddable_at_observation?: boolean | null
+          top_match_score?: number | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2335,6 +2409,22 @@ export type Database = {
         }
         Relationships: []
       }
+      historic_reference_candidate_view: {
+        Row: {
+          date_meaning: string | null
+          parent_sku: string | null
+          price_per_75cl_p: number | null
+          reference_date: string | null
+          release_offer_price_id: number | null
+          source_case_size: number | null
+          source_format_code: string | null
+          source_import_id: string | null
+          source_kind: string | null
+          source_row_number: number | null
+          source_wine: string | null
+        }
+        Relationships: []
+      }
       pending_favourite_view: {
         Row: {
           bottles: number | null
@@ -2726,6 +2816,30 @@ export type Database = {
         }
         Relationships: []
       }
+      resolved_reference_price_view: {
+        Row: {
+          date_meaning: string | null
+          decided_at: string | null
+          evidence_candidate_count: number | null
+          evidence_max_p: number | null
+          evidence_min_p: number | null
+          has_competing_evidence: boolean | null
+          has_current_support: boolean | null
+          needs_review: boolean | null
+          parent_sku: string | null
+          price_per_75cl_p: number | null
+          reference_date: string | null
+          release_offer_price_id: number | null
+          resolution_kind: string | null
+          source_case_size: number | null
+          source_format_code: string | null
+          source_import_id: string | null
+          source_kind: string | null
+          source_row_number: number | null
+          source_wine: string | null
+        }
+        Relationships: []
+      }
       resolved_release_anchor_view: {
         Row: {
           anchor_status: string | null
@@ -3048,6 +3162,7 @@ export type Database = {
         Args: { p_format_code: string; p_parent_sku: string }
         Returns: Json
       }
+      clear_reference_price: { Args: { p_parent_sku: string }; Returns: Json }
       clear_release_offer_product_resolution: {
         Args: { p_import_id: string; p_source_row_number: number }
         Returns: Json
@@ -3221,6 +3336,15 @@ export type Database = {
           p_release_price_p: number
           p_source_note?: string
           p_tax_basis?: string
+        }
+        Returns: Json
+      }
+      set_reference_price: {
+        Args: {
+          p_note?: string
+          p_parent_sku: string
+          p_price_per_75cl_p: number
+          p_reference_date?: string
         }
         Returns: Json
       }
@@ -3438,9 +3562,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

@@ -189,9 +189,9 @@ utility to them.
 
 **Decisions (2026-08-29):**
 
-1. **Split.** Ship 2a (`wine_scenario_mv`, pure perf, no behaviour change)
-   first and verify it against the 2026-08-20 numbers. Then 2b (the engine) on
-   the fast foundation.
+1. **Split.** Ship 2a (`wine_scenario_mv`, market-read performance with a live
+   private reference join) first and verify it against the 2026-08-20 numbers.
+   Then 2b (the engine) on the fast foundation.
 2. **Hybrid builder, not a tree editor.** Keep today's flat AND-list of filter
    rows. Add exactly two capabilities: a "compare to" right-hand side on range
    rows (another field ± an amount or a percent), and OR-within-a-group for the
@@ -204,20 +204,27 @@ This section is the plan of record for both sub-phases. Pick up at 2a.
 
 ### Phase 2a — `wine_scenario_mv`
 
-**Goal:** collapse the live 5-level view stack
+**Goal:** collapse the market portion of the live 5-level view stack
 (`wine_scenario_view → wine_card_format_view → resolved_release_anchor_view →
 release_price_anchor_view → release_offer_evidence_view`; measured 1.4 s warm
 filtered, 6.7 s unfiltered, ~648k buffers for 50 rows on 2026-08-20) to a
-nightly refresh. **No column changes, no behaviour changes** — `SELECT * FROM
-wine_scenario_view` returns byte-identical rows before and after, just faster.
+nightly refresh. Market fields retain their current values. Historic reference
+fields remain live and owner-only, so they can change between cache refreshes.
 
 **Migration** `NNNNNNNNNNNNNN_wine_scenario_mv.sql`:
 
-- `CREATE MATERIALIZED VIEW public.wine_scenario_mv AS SELECT <the current
-  wine_scenario_view body>` — the exact projection from
-  `20260817150000` + the four `*_per_75cl_p` columns from
-  `20260829120000`. Copy the SELECT verbatim; do not add or rename columns
-  here (derived columns are a 2b concern).
+- `CREATE MATERIALIZED VIEW public.wine_scenario_mv AS SELECT <market and
+  identity projection>` — use the current scenario projection without owner
+  release-anchor fields or any other private price evidence. The materialised
+  view may be readable by authenticated users because it contains market data
+  only.
+- `CREATE OR REPLACE VIEW public.wine_scenario_view WITH (security_invoker =
+  TRUE) AS SELECT <market projection>, <live reference metrics> FROM
+  public.wine_scenario_mv LEFT JOIN public.resolved_reference_price_view ...`
+  — join the owner-only per-75cl reference live, scale it only for 75 cl
+  formats, and derive the reference comparison metrics in this view. Do not
+  materialise private reference prices or rely on the daily cache refresh after
+  an owner edit or accepted import.
 - `CREATE UNIQUE INDEX wine_scenario_mv_key ON public.wine_scenario_mv
   (parent_sku, format_code)` — required for `REFRESH ... CONCURRENTLY`, and the
   pagination tiebreaker every scenario query already appends.
@@ -229,13 +236,9 @@ wine_scenario_view` returns byte-identical rows before and after, just faster.
   before.
 - Consider `name`/`producer` trgm GIN indexes only if the hybrid builder gains
   a free-text row (it does not in the first cut) — defer.
-- `CREATE OR REPLACE VIEW public.wine_scenario_view WITH (security_invoker =
-  TRUE) AS SELECT <same column list> FROM public.wine_scenario_mv` — keeps the
-  view name, its grants, and `evaluate.ts` / the pgTAP suite unchanged.
-  `REVOKE ALL ... FROM anon; GRANT SELECT ON public.wine_scenario_mv TO
-  authenticated` (match the current view's grants; the data is not
-  per-user, single-owner app, no RLS on an MV needed — same pattern as
-  `catalogue_view → catalogue_mv`).
+- Keep `wine_scenario_view` owner-only because the live join reads private
+  reference evidence. Revoke direct access to it from anon. The market-only
+  materialisation is not a route to historic reference prices.
 - `COMMENT ON MATERIALIZED VIEW` mirroring `catalogue_mv`'s.
 
 **Refresh wiring** (`core/store.py`):
@@ -269,8 +272,8 @@ MV. Shape it like `facet_ranges_view`; fetch it like `fetchFacetRanges`.
 - Re-run the 2026-08-20 measurements: the filtered-first-50 and the
   no-filter-first-50 scenario queries, warm, as the `authenticated` owner.
   Record them in `PERFORMANCE-REVIEW`-style. Target: both well under 300 ms.
-- Diff a `SELECT *` sample (first 500 rows by the key) view-vs-MV — must be
-  identical.
+- Diff a first-500-row sample of the materialised market columns against their
+  pre-materialisation projection. Check the live reference columns separately.
 - Watch the first nightly sweep's log for the `Refreshed wine_scenario_mv: N
   rows` line and no zero-row warning.
 
