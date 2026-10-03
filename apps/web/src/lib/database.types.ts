@@ -2420,6 +2420,7 @@ export type Database = {
           source_format_code: string | null
           source_import_id: string | null
           source_kind: string | null
+          source_price_p: number | null
           source_row_number: number | null
           source_wine: string | null
         }

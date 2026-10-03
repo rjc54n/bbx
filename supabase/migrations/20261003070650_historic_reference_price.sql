@@ -14,6 +14,7 @@ SELECT
         observation.purchase_price_per_case_p::NUMERIC
         / NULLIF(observation.case_size, 0)
     )::INT AS price_per_75cl_p,
+    observation.purchase_price_per_case_p AS source_price_p,
     'bbr'::TEXT AS source_kind,
     observation.import_id::TEXT AS source_import_id,
     observation.source_row_number,
@@ -37,6 +38,7 @@ SELECT
         offer.release_price_p::NUMERIC
         / NULLIF(split_part(offer.format_code, '-', 1)::INT, 0)
     )::INT AS price_per_75cl_p,
+    offer.release_price_p AS source_price_p,
     'offer'::TEXT AS source_kind,
     offer.import_id::TEXT AS source_import_id,
     offer.source_row_number,
@@ -57,6 +59,7 @@ UNION ALL
 SELECT
     record.parent_sku,
     record.purchase_price_per_bottle_p AS price_per_75cl_p,
+    record.purchase_price_per_bottle_p AS source_price_p,
     'cellartracker'::TEXT AS source_kind,
     record.import_id::TEXT AS source_import_id,
     record.source_row_number,
@@ -194,58 +197,17 @@ WITH (security_invoker = TRUE)
 AS
 WITH candidates AS MATERIALIZED (
     SELECT * FROM public.historic_reference_candidate_view
-), wine_candidates AS (
-    SELECT DISTINCT parent_sku FROM candidates
-), bbr_choice AS (
-    SELECT DISTINCT ON (parent_sku)
-        parent_sku, price_per_75cl_p, source_kind, source_import_id,
-        source_row_number, source_format_code, source_case_size,
-        reference_date, date_meaning, source_wine, release_offer_price_id
-    FROM candidates
-    WHERE source_kind = 'bbr'
-    ORDER BY parent_sku, reference_date, price_per_75cl_p,
-        source_import_id, source_row_number
-), cellartracker_choice AS (
-    SELECT DISTINCT ON (parent_sku)
-        parent_sku, price_per_75cl_p, source_kind, source_import_id,
-        source_row_number, source_format_code, source_case_size,
-        reference_date, date_meaning, source_wine, release_offer_price_id
-    FROM candidates
-    WHERE source_kind = 'cellartracker'
-    ORDER BY parent_sku, price_per_75cl_p, source_import_id, source_row_number
-), offer_choice AS (
-    SELECT DISTINCT ON (parent_sku)
-        parent_sku, price_per_75cl_p, source_kind, source_import_id,
-        source_row_number, source_format_code, source_case_size,
-        reference_date, date_meaning, source_wine, release_offer_price_id
-    FROM candidates
-    WHERE source_kind = 'offer'
-    ORDER BY parent_sku, reference_date, price_per_75cl_p,
-        release_offer_price_id
 ), automatic_choice AS (
-    SELECT
-        wines.parent_sku,
-        coalesce(bbr.price_per_75cl_p, cellartracker.price_per_75cl_p, offer.price_per_75cl_p)
-            AS price_per_75cl_p,
-        coalesce(bbr.source_kind, cellartracker.source_kind, offer.source_kind) AS source_kind,
-        coalesce(bbr.source_import_id, cellartracker.source_import_id, offer.source_import_id)
-            AS source_import_id,
-        coalesce(bbr.source_row_number, cellartracker.source_row_number, offer.source_row_number)
-            AS source_row_number,
-        coalesce(bbr.source_format_code, cellartracker.source_format_code, offer.source_format_code)
-            AS source_format_code,
-        coalesce(bbr.source_case_size, cellartracker.source_case_size, offer.source_case_size)
-            AS source_case_size,
-        coalesce(bbr.reference_date, cellartracker.reference_date, offer.reference_date)
-            AS reference_date,
-        coalesce(bbr.date_meaning, cellartracker.date_meaning, offer.date_meaning) AS date_meaning,
-        coalesce(bbr.source_wine, cellartracker.source_wine, offer.source_wine) AS source_wine,
-        coalesce(bbr.release_offer_price_id, cellartracker.release_offer_price_id, offer.release_offer_price_id)
-            AS release_offer_price_id
-    FROM wine_candidates wines
-    LEFT JOIN bbr_choice bbr ON bbr.parent_sku = wines.parent_sku
-    LEFT JOIN cellartracker_choice cellartracker ON cellartracker.parent_sku = wines.parent_sku
-    LEFT JOIN offer_choice offer ON offer.parent_sku = wines.parent_sku
+    SELECT DISTINCT ON (parent_sku)
+        parent_sku, price_per_75cl_p, source_kind, source_import_id,
+        source_row_number, source_format_code, source_case_size,
+        reference_date, date_meaning, source_wine, release_offer_price_id
+    FROM candidates
+    ORDER BY parent_sku,
+        CASE source_kind WHEN 'bbr' THEN 1 WHEN 'cellartracker' THEN 2 ELSE 3 END,
+        reference_date NULLS LAST, price_per_75cl_p,
+        CASE WHEN source_kind = 'offer' THEN release_offer_price_id END,
+        source_import_id, source_row_number
 ), selected AS (
     SELECT
         decision.parent_sku,
@@ -292,21 +254,24 @@ WITH candidates AS MATERIALIZED (
         max(price_per_75cl_p) AS evidence_max_p,
         count(*)::INT AS evidence_candidate_count,
         max(price_per_75cl_p) FILTER (WHERE source_kind = 'bbr')
-            - min(price_per_75cl_p) FILTER (WHERE source_kind = 'bbr') AS bbr_range_p
+            - min(price_per_75cl_p) FILTER (WHERE source_kind = 'bbr') AS bbr_range_p,
+        min(price_per_75cl_p) FILTER (WHERE source_kind = 'cellartracker')
+            AS cellartracker_min_p,
+        max(price_per_75cl_p) FILTER (WHERE source_kind = 'cellartracker')
+            AS cellartracker_max_p,
+        (array_agg(price_per_75cl_p ORDER BY reference_date,
+            price_per_75cl_p, source_import_id, source_row_number)
+            FILTER (WHERE source_kind = 'bbr'))[1] AS bbr_choice_p
     FROM candidates
     GROUP BY parent_sku
-), selected_bbr AS (
-    SELECT parent_sku, price_per_75cl_p FROM bbr_choice
-), cellartracker_disagreement AS (
+), candidate_support AS (
     SELECT
-        bbr.parent_sku,
-        bool_or(abs(candidate.price_per_75cl_p - bbr.price_per_75cl_p) > 1)
-            AS cellartracker_disagrees
-    FROM selected_bbr bbr
-    JOIN candidates candidate
-      ON candidate.parent_sku = bbr.parent_sku
-     AND candidate.source_kind = 'cellartracker'
-    GROUP BY bbr.parent_sku
+        selected.parent_sku,
+        bool_or(abs(candidate.price_per_75cl_p - selected.price_per_75cl_p) <= 1)
+            AS has_current_support
+    FROM selected
+    JOIN candidates candidate ON candidate.parent_sku = selected.parent_sku
+    GROUP BY selected.parent_sku
 )
 SELECT
     selected.parent_sku,
@@ -328,17 +293,16 @@ SELECT
     coalesce(stats.evidence_max_p - stats.evidence_min_p > 1, FALSE)
         AS has_competing_evidence,
     coalesce(stats.bbr_range_p > 1, FALSE)
-        OR coalesce(disagreement.cellartracker_disagrees, FALSE)
+        OR coalesce(
+            stats.cellartracker_min_p < stats.bbr_choice_p - 1
+            OR stats.cellartracker_max_p > stats.bbr_choice_p + 1,
+            FALSE
+        )
         AS needs_review,
-    EXISTS (
-        SELECT 1
-        FROM candidates candidate
-        WHERE candidate.parent_sku = selected.parent_sku
-          AND abs(candidate.price_per_75cl_p - selected.price_per_75cl_p) <= 1
-    ) AS has_current_support
+    coalesce(support.has_current_support, FALSE) AS has_current_support
 FROM selected
 LEFT JOIN evidence_stats stats ON stats.parent_sku = selected.parent_sku
-LEFT JOIN cellartracker_disagreement disagreement ON disagreement.parent_sku = selected.parent_sku;
+LEFT JOIN candidate_support support ON support.parent_sku = selected.parent_sku;
 
 REVOKE ALL ON public.resolved_reference_price_view
     FROM PUBLIC, anon, authenticated;

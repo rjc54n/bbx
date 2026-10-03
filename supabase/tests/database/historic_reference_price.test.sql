@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(14);
+SELECT plan(21);
 
 INSERT INTO auth.users (id) VALUES
     ('71000000-0000-0000-0000-000000000001'),
@@ -134,6 +134,11 @@ SELECT is(
      WHERE parent_sku = '20108123480' AND source_kind = 'bbr'),
     1750, 'Poujeaux BBR case price is converted to GBP 17.50 per bottle'
 );
+SELECT is(
+    (SELECT source_price_p FROM public.historic_reference_candidate_view
+     WHERE parent_sku = '20108123480' AND source_kind = 'bbr'),
+    21000, 'the candidate retains its original case price'
+);
 SELECT results_eq(
     $$ SELECT price_per_75cl_p, source_kind, needs_review, has_competing_evidence
        FROM public.resolved_reference_price_view WHERE parent_sku = '20108123480' $$,
@@ -178,6 +183,63 @@ SELECT is(
     1750, 'clearing restores the automatic BBR reference'
 );
 
+RESET ROLE;
+UPDATE public.cellartracker_evidence
+SET purchase_price_per_bottle_p = 1600
+WHERE import_id = '73000000-0000-0000-0000-000000000001'
+  AND source_row_number = 2;
+SET LOCAL ROLE authenticated;
+SELECT is(
+    (SELECT price_per_75cl_p FROM public.resolved_reference_price_view
+     WHERE parent_sku = '20110000002'),
+    1600, 'a corrected CellarTracker price reaches the resolver'
+);
+
+RESET ROLE;
+UPDATE public.cellartracker_product_resolutions
+SET parent_sku = '20110000004'
+WHERE import_id = '73000000-0000-0000-0000-000000000001'
+  AND source_row_number = 2;
+SET LOCAL ROLE authenticated;
+SELECT is(
+    (SELECT count(*)::INT FROM public.resolved_reference_price_view
+     WHERE parent_sku = '20110000002'),
+    0, 'a relink removes the former wine reference'
+);
+SELECT is(
+    (SELECT price_per_75cl_p FROM public.resolved_reference_price_view
+     WHERE parent_sku = '20110000004'),
+    1600, 'a relink moves the corrected price to the new wine'
+);
+
+RESET ROLE;
+INSERT INTO public.cellartracker_record_decisions (
+    match_group_key, source_wine, is_excluded, excluded_at
+) VALUES (
+    '2011|ct only', 'CellarTracker only wine', TRUE, now()
+)
+ON CONFLICT (match_group_key, source_wine) DO UPDATE
+SET is_excluded = TRUE, excluded_at = now();
+SET LOCAL ROLE authenticated;
+SELECT is(
+    (SELECT count(*)::INT FROM public.resolved_reference_price_view
+     WHERE parent_sku = '20110000004'),
+    0, 'excluding the CellarTracker record removes the reference'
+);
+
+SELECT is(
+    (SELECT count(*)::INT
+     FROM pg_attribute a
+     JOIN pg_class c ON c.oid = a.attrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname IN ('catalogue_view', 'catalogue_mv')
+       AND a.attnum > 0 AND NOT a.attisdropped
+       AND a.attname IN ('reference_price_p', 'release_price_p',
+                         'purchase_price_per_bottle_p')),
+    0, 'public catalogue read models contain no private reference price'
+);
+
 SELECT set_config(
     'request.jwt.claims',
     '{"sub":"71000000-0000-0000-0000-000000000002","role":"authenticated"}',
@@ -190,6 +252,10 @@ SELECT throws_ok(
 SELECT is(
     (SELECT count(*)::INT FROM public.resolved_reference_price_view), 0,
     'a non-owner cannot read resolved private references'
+);
+SELECT is(
+    (SELECT count(*)::INT FROM public.historic_reference_candidate_view), 0,
+    'a non-owner cannot read source candidates'
 );
 
 RESET ROLE;
