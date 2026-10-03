@@ -93,6 +93,11 @@ describe("mode-aware defaults (parse is mode-first)", () => {
     const state = parse(new URLSearchParams("mode=explore&sort=last_seen_at:desc"));
     expect(state.sort).toEqual({ field: "market_price_p", dir: "asc" });
   });
+
+  it("accepts Wine's name sort on catalogue URLs", () => {
+    const state = parse(new URLSearchParams("mode=explore&sort=name:asc"));
+    expect(state.sort).toEqual({ field: "name", dir: "asc" });
+  });
 });
 
 describe("codec robustness", () => {

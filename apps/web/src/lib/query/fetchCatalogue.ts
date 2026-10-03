@@ -1,11 +1,11 @@
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
-import { applyFilters, buildSearchOrFilter, type AppliedFilter } from "./applyFilters";
+import { applyFilters, buildSearchFilter, buildSearchOrFilter, type AppliedFilter } from "./applyFilters";
 import type { CatalogueQueryState, PriceChangeQueryState } from "./types";
 import type { CatalogueRow, PriceChangeRow } from "./rows";
 
 // Re-exported so existing importers (and their tests) keep their path.
-export { buildSearchOrFilter };
+export { buildSearchFilter, buildSearchOrFilter };
 
 export const PAGE_SIZE = 25;
 

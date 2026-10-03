@@ -108,6 +108,7 @@ export const CATALOGUE_COLUMNS: Column<CatalogueRow, CatalogueMetricField>[] = [
     id: "wine",
     label: "Wine",
     align: "left",
+    sortField: "name",
     render: (row) => <WineCell name={row.name} producer={row.producer} parentSku={row.parent_sku} />,
   },
   {

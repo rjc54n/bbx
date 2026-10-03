@@ -25,10 +25,10 @@ export function SearchBar({ value, onCommit }: SearchBarProps) {
       <input
         type="search"
         className="min-w-0 flex-1 rounded border border-border bg-background px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        placeholder="Search wine name or producer"
+        placeholder="Search wine, producer or vintage"
         value={text}
         onChange={(event) => setText(event.target.value)}
-        aria-label="Search wine name or producer"
+        aria-label="Search wine, producer or vintage"
       />
       <button
         type="submit"

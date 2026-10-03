@@ -50,9 +50,10 @@ export interface MetricMeta {
 // of its own yet.
 //
 // "search" and "producer" are both text-shaped but resolve differently:
-// search is a partial ilike across name+producer with no backing RPC; producer
-// is an exact match, chosen from the search_producers typeahead (Phase A) --
-// hence its own "typeahead" kind rather than reusing "text".
+// search is a partial, word-based match across name+producer with no backing
+// RPC; one standalone vintage-looking year becomes an exact vintage filter.
+// producer is an exact match, chosen from the search_producers typeahead
+// (Phase A) -- hence its own "typeahead" kind rather than reusing "text".
 export const CATALOGUE_FILTERS = {
   search: {
     field: "search",
@@ -60,7 +61,7 @@ export const CATALOGUE_FILTERS = {
     group: "Wine",
     kind: "text",
     estimate: false,
-    explanation: "Matches wine name or producer (partial, case-insensitive).",
+    explanation: "Matches words across wine name and producer (partial, case-insensitive). A standalone year filters vintage.",
   },
   producer: {
     field: "producer",

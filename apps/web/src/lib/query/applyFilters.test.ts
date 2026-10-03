@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyFilters, buildSearchOrFilter, type AppliedFilter } from "./applyFilters";
+import { applyFilters, buildSearchFilter, parseCatalogueSearch, type AppliedFilter } from "./applyFilters";
 
 type Call = { method: string; args: unknown[] };
 
@@ -27,7 +27,7 @@ describe("applyFilters", () => {
       { method: "lte", args: ["ask_vs_release_pct", 10] },
       { method: "in", args: ["region", ["Bordeaux", "Burgundy"]] },
       { method: "eq", args: ["is_listed", true] },
-      { method: "or", args: [buildSearchOrFilter("Lafite")] },
+      { method: "or", args: [buildSearchFilter("Lafite")] },
     ]);
   });
 
@@ -55,5 +55,39 @@ describe("applyFilters", () => {
   it("returns the same builder it was given", () => {
     const { builder } = makeBuilder();
     expect(applyFilters(builder, [])).toBe(builder);
+  });
+
+  it("uses one standalone year as the vintage and searches the remaining wine text", () => {
+    const { builder, calls } = makeBuilder();
+    applyFilters(builder, [{ kind: "text", field: "search", value: "2020  Batailley" }]);
+    expect(calls).toEqual([
+      { method: "eq", args: ["vintage", "2020"] },
+      { method: "or", args: [buildSearchFilter("Batailley")] },
+    ]);
+  });
+
+  it("searches by vintage when the year is the whole query", () => {
+    const { builder, calls } = makeBuilder();
+    applyFilters(builder, [{ kind: "text", field: "search", value: "2020" }]);
+    expect(calls).toEqual([{ method: "eq", args: ["vintage", "2020"] }]);
+  });
+});
+
+describe("parseCatalogueSearch", () => {
+  it("accepts the vintage at either end of the query", () => {
+    expect(parseCatalogueSearch("Batailley 2020")).toEqual({ text: "Batailley", vintage: "2020" });
+    expect(parseCatalogueSearch("2020 Batailley")).toEqual({ text: "Batailley", vintage: "2020" });
+  });
+
+  it("does not guess how to combine multiple years", () => {
+    expect(parseCatalogueSearch("2019 2020 Batailley")).toEqual({ text: "2019 2020 Batailley" });
+  });
+});
+
+describe("buildSearchFilter", () => {
+  it("requires each word while allowing words to match in different columns", () => {
+    expect(buildSearchFilter("lafarge bourgogne")).toBe(
+      "and(or(name.ilike.%lafarge%,producer.ilike.%lafarge%),or(name.ilike.%bourgogne%,producer.ilike.%bourgogne%))",
+    );
   });
 });

@@ -99,6 +99,35 @@ describe("fetchCatalogue (live)", () => {
     expect(result.rows.length).toBeGreaterThan(0);
   });
 
+  it("combines a standalone vintage with wine-name search", async () => {
+    const result = await fetchCatalogue({
+      mode: "explore",
+      filters: [{ field: "search", kind: "text", value: "2020 batailley" }],
+      sort: { field: "name", dir: "asc" },
+      page: 0,
+    });
+    expect(result.rows.length).toBeGreaterThan(0);
+    for (const row of result.rows) {
+      expect(row.vintage).toBe(2020);
+      expect(`${row.name ?? ""} ${row.producer ?? ""}`.toLowerCase()).toContain("batailley");
+    }
+  });
+
+  it("matches words that span the producer and wine-name fields", async () => {
+    const result = await fetchCatalogue({
+      mode: "explore",
+      filters: [{ field: "search", kind: "text", value: "lafarge bourgogne" }],
+      sort: { field: "name", dir: "asc" },
+      page: 0,
+    });
+    expect(result.rows.length).toBeGreaterThan(0);
+    for (const row of result.rows) {
+      const searchable = `${row.name ?? ""} ${row.producer ?? ""}`.toLowerCase();
+      expect(searchable).toContain("lafarge");
+      expect(searchable).toContain("bourgogne");
+    }
+  });
+
   it("pagination doesn't repeat rows across consecutive pages", async () => {
     const state = {
       mode: "explore" as const,

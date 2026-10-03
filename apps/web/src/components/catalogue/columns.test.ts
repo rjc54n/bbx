@@ -9,6 +9,10 @@ it("shows Bid and Reference instead of Listed and Per litre", () => {
   expect(ids).not.toContain("price_per_litre_p");
 });
 
+it("allows Wine to be sorted by its catalogue name", () => {
+  expect(CATALOGUE_COLUMNS.find((column) => column.id === "wine")?.sortField).toBe("name");
+});
+
 describe("withFormatAdjustedColumns", () => {
   it("hides adjusted_guide_p and price_vs_adjusted_guide_pct by default", () => {
     const ids = withFormatAdjustedColumns(CATALOGUE_COLUMNS, false).map((c) => c.id);

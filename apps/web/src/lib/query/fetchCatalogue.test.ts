@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_SELECT, PAGE_SIZE, buildSearchOrFilter, mergeReferencePrices, paginationRange } from "./fetchCatalogue";
+import { CATALOGUE_SELECT, PAGE_SIZE, buildSearchFilter, buildSearchOrFilter, mergeReferencePrices, paginationRange } from "./fetchCatalogue";
 
 describe("buildSearchOrFilter", () => {
   it("builds an ilike-across-name-and-producer clause", () => {
@@ -21,6 +21,13 @@ describe("buildSearchOrFilter", () => {
 
   it("leaves an ordinary term unquoted", () => {
     expect(buildSearchOrFilter("Bordeaux")).not.toContain('"');
+  });
+});
+
+describe("buildSearchFilter", () => {
+  it("combines several terms so they can match between wine name and producer", () => {
+    expect(buildSearchFilter("lafarge bourgogne")).toContain("and(or(name.ilike.%lafarge%");
+    expect(buildSearchFilter("lafarge bourgogne")).toContain("or(name.ilike.%bourgogne%");
   });
 });
 

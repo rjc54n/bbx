@@ -17,11 +17,48 @@ export type AppliedFilter =
 // Quote-wrap when a reserved character is present, mirroring how postgrest-js
 // escapes values for .in().
 const OR_FILTER_RESERVED_CHARS = /[,()]/;
+const VINTAGE_TOKEN = /^(?:1[5-9]\d{2}|20\d{2})$/;
+
+export interface CatalogueSearch {
+  text: string;
+  vintage?: string;
+}
+
+// Treat one standalone vintage-looking year as the catalogue's explicit
+// vintage field, rather than requiring the stored wine name to contain it.
+// The remaining text keeps the existing partial name-or-producer match, so
+// both "2020 Batailley" and "Batailley 2020" produce the same query.
+// Multiple years remain free text: a catalogue row has one vintage, and
+// guessing whether the user meant an AND or an OR would make the result less
+// predictable.
+export function parseCatalogueSearch(value: string): CatalogueSearch {
+  const tokens = value.trim().split(/\s+/).filter(Boolean);
+  const vintageIndexes = tokens
+    .map((token, index) => VINTAGE_TOKEN.test(token) ? index : -1)
+    .filter((index) => index >= 0);
+  if (vintageIndexes.length !== 1) return { text: tokens.join(" ") };
+
+  const [vintageIndex] = vintageIndexes;
+  return {
+    text: tokens.filter((_, index) => index !== vintageIndex).join(" "),
+    vintage: tokens[vintageIndex],
+  };
+}
 
 export function buildSearchOrFilter(term: string): string {
   const pattern = `%${term}%`;
   const value = OR_FILTER_RESERVED_CHARS.test(pattern) ? `"${pattern}"` : pattern;
   return `name.ilike.${value},producer.ilike.${value}`;
+}
+
+// A phrase can span the separate wine-name and producer columns. Require every
+// word, but let each word match either column: "lafarge bourgogne" can match a
+// Lafarge producer and a Bourgogne wine name. PostgREST combines the nested
+// OR groups with AND inside the single raw .or() expression.
+export function buildSearchFilter(text: string): string {
+  const terms = text.split(/\s+/).filter(Boolean);
+  if (terms.length <= 1) return buildSearchOrFilter(terms[0] ?? "");
+  return `and(${terms.map((term) => `or(${buildSearchOrFilter(term)})`).join(",")})`;
 }
 
 // Applies each filter to the query in place and returns the same builder type.
@@ -63,7 +100,11 @@ export function applyFilters<Q>(query: Q, filters: readonly AppliedFilter[]): Q 
         if (filter.max !== undefined) q = q.lte(filter.field, filter.max);
         break;
       case "text":
-        if (filter.value) q = q.or(buildSearchOrFilter(filter.value));
+        if (filter.value) {
+          const search = parseCatalogueSearch(filter.value);
+          if (search.vintage) q = q.eq("vintage", search.vintage);
+          if (search.text) q = q.or(buildSearchFilter(search.text));
+        }
         break;
       case "typeahead":
         if (filter.value) q = q.eq(filter.field, filter.value);
