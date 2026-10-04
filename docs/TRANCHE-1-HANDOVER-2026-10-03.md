@@ -1,6 +1,6 @@
 # Tranche 1: publication reliability
 
-Status: implementation accepted by the owner on 4 October 2026 on `codex/tranche-1-publication`, [PR #15](https://github.com/rjc54n/bbx/pull/15). Release plan updated after review. The exact one-off backfill and revised cutover await the owner's explicit approval. No production data, schema or schedule was changed during preparation.
+Status: released 4 October 2026 through [PR #15](https://github.com/rjc54n/bbx/pull/15). Migration `20261003201743` and the owner's exact one-off backfill are live. The signed-in banner and publication-age check passed. Five real sweeps at the operating cadence remain the sustained-health gate.
 
 ## Agreed behaviour
 
@@ -26,7 +26,7 @@ Thirty-day event retention commits batches of at most 1,000 rows, with limits of
 
 Job output and a 30-day GitHub artifact retain source changes, stage timings, coverage, relation sizes, WAL and temporary-byte deltas, compact query statistics without query text, and the statistics-reset time. WAL counters are cluster-wide; temporary bytes are database-wide and include concurrent work. Counter resets invalidate the affected delta. Fatal source/publication failures also reach the evidence/reset path when the connection is usable. An uncertain connection is left for inspection.
 
-Window-only jobs now check publication age. A skipped trigger is not publication evidence. Historical terminal statuses alone do not establish publication. The migration leaves all historical publication fields unset. The separately approved one-off SQL below records only run `7b864bb1-e593-428d-ab8b-8585c695f95b`, whose log proves each required stage succeeded. Every other historical run remains unbackfilled.
+Window-only jobs now check publication age. A skipped trigger is not publication evidence. Historical terminal statuses alone do not establish publication. The migration left all historical publication fields unset. The separately approved one-off SQL below recorded only run `7b864bb1-e593-428d-ab8b-8585c695f95b`, whose log proves each required stage succeeded. Every other historical run remains unbackfilled.
 
 ## Operator commands
 
@@ -72,13 +72,13 @@ No production data was copied. An initial schema-only copy of the existing local
 
 Local schema lint found no errors. It retained the existing unused-parameter warning in `public.accept_bbr_import`. The web production build and lint passed. Component rendering tests cover the banner; an authenticated browser journey against the deployed change remains open.
 
-The baseline above establishes successful publication and approximate stage costs on the previous code. Actual changed-row counters, WAL/temporary I/O evidence and peak I/O remain to be captured by the new protocol and normal health observations. The local throwaway test databases have been removed. No migration or backfill was applied to production, no manual sweep was dispatched and sustained recovery is not claimed.
+The baseline above establishes successful publication and approximate stage costs on the previous code. Actual changed-row counters, WAL/temporary I/O evidence and peak I/O remain to be captured by the new protocol and normal health observations. The local throwaway test databases have been removed. No manual sweep was dispatched and sustained recovery is not claimed.
 
 The focused regression `test_log_backfill_satisfies_publication_age_and_preserves_start_based_spacing` stores a legacy completed run, then supplies its log-backed publication evidence. It checks the publication-age helper used by `check_publication.py` and the cadence guard using `load_recent_runs()`: the following night is skipped, spacing expires exactly 40 hours after the original start, the next scheduled window is eligible, and the age check passes through 60 hours after publication but fails beyond that boundary.
 
-## Proposed one-off backfill
+## Approved one-off backfill
 
-This is an operational correction for one independently verified production run, so it belongs here rather than in a migration applied to every environment. Run it only after migration `20261003201743` is confirmed and `scan_health_view` is smoke-tested, and before the code merge. Obtain an explicit yes to this exact statement first.
+This operational correction applied to one independently verified production run, so it remains here rather than in a migration applied to every environment. The owner explicitly approved this exact statement. It was run after migration `20261003201743` and the authenticated `scan_health_view` smoke test, and before the code merge.
 
 ```sql
 UPDATE private.scan_runs
@@ -110,20 +110,20 @@ RETURNING id, started_at, source_committed_at, source_status,
           published_at, publication_stages;
 ```
 
-Expect exactly one returned row. The statement preserves `started_at`, `finished_at`, `status` and `rotation_bucket`. Facet row counts and individual durations were not logged and are deliberately omitted. The evidence marker applies to all listed stage outcomes. A zero-row result requires inspection, not weaker guards or a blind retry. After an ambiguous failure, inspect server activity and the target row before deciding whether any further action is needed.
+The statement returned exactly one row. It preserved `started_at`, `finished_at`, `status` and `rotation_bucket`. Facet row counts and individual durations were not logged and are deliberately omitted. The evidence marker applies to all listed stage outcomes. A zero-row result would have required inspection, not weaker guards or a blind retry. After an ambiguous failure, inspect server activity and the target row before deciding whether any further action is needed.
 
 This backfill gives the banner a verified publication and prevents repeated missing-publication alerts. Publication age uses 23:07:50.051 UTC; the 40-hour guard still uses the original sweep start near 22:49 UTC. Without another publication, the age check first becomes stale after 11:07:50.051 UTC on 6 October.
 
-## Release sequence
+## Release record and next checks
 
-1. Obtain the owner's explicit approval for the exact backfill above and this revised cutover. Confirm CI for the final branch revision and account for intervening commits. The implementation review was accepted on 4 October.
-2. Outside 02:00-05:00 UTC, prevent new sweep starts for the cutover and confirm no sweep or manual publisher is active. Check GitHub runs and server activity, including older code that does not take the new lock. Check query responsiveness, recent checkpoint/error logs and dashboard disk I/O before proceeding. A healthy project status alone is insufficient.
-3. Run `supabase migration list --linked` and `supabase db push --linked --dry-run`. Proceed only if `20261003201743_sweep_publication_state` is the sole pending migration. Run `supabase db push --linked`, then confirm that version in the remote column of `supabase migration list --linked`. Stop if any other migration would be applied.
-4. Smoke-test the new fields in `public.scan_health_view` for the target run, including access through the authenticated reader. Do not refresh caches or replay a sweep as part of this check.
-5. Execute the separately approved one-off SQL above. Verify exactly one returned row and the expected values through `scan_health_view`. Every other historical run remains unbackfilled.
-6. Merge PR #15. Confirm the successful production Vercel deployment for the merge revision and the updated `BBX Daily Sweep` workflow on `main`. Restore the prior scheduling state once cutover is complete. Do not dispatch a manual sweep.
-7. Run `python apps/daily_sweep/check_publication.py` once by hand using the existing session-pooler connection, outside 02:00-05:00 UTC. Expect exit 0 and `Latest catalogue publication is within 60 hours`. If cutover is delayed past the 60-hour threshold, stop and reassess rather than altering the evidence timestamp. Verify the banner while signed in: the 3 October publication is shown without a stale warning, and the older 2 October failure is not presented as a later attempt.
-8. Observe the next normal scheduled sweep, due after about 14:49 UTC on 5 October and expected that night. Save its logs and evidence artifact. Check source commit, required stage results, coverage, actual changed rows and retention backlog. Inspect any failure before considering recovery. Verify the catalogue, scenarios and wine readers while signed in.
-9. After 05:00 UTC, inspect ordinary workload and backup-window logs/metrics retrospectively. Record query responsiveness, checkpoint sync behaviour and dashboard disk I/O. Do not run diagnostic work in the protected window or treat job success/database size as recovery proof. Collect five real sweeps at the operating cadence for sustained health. Tranche 2 local preparation can proceed; its production checkpoint remains separate.
+The owner approved the exact SQL and revised sequence on 4 October. The final branch revision passed Python, web, Vercel preview and database migration validation. During cutover outside 02:00-05:00 UTC, the sweep workflow was disabled. GitHub reported no queued or active sweep. PostgreSQL reported no active client query; four historical `running` records date from July and August. A trivial query executed in 0.083 ms. The last-hour dashboard showed 12.13% CPU and 2 disk IOPS. The latest inspected checkpoint sync was 0.003 s, with no error log returned for the checked period. These observations supported cutover but do not certify sustained capacity.
+
+The migration dry-run listed only `20261003201743_sweep_publication_state`. `supabase db push --linked` applied it and `supabase migration list --linked` confirmed its remote entry. The CLI reported a local migration-catalogue cache warning after applying it; the ledger was checked separately and no push was repeated. `public.scan_health_view` exposed the new null fields to `authenticated` before backfill. The approved SQL returned exactly one row, and the authenticated view showed the expected publication and stage evidence afterwards.
+
+PR #15 merged as `28c2ab7580e39c12beaa3ea22d5851905492913a` at 08:45:56 UTC. GitHub reported a successful Vercel Production deployment for that revision at 08:46:44 UTC. The `BBX Daily Sweep` workflow content on `main` matched the merged revision and was restored to active. `check_publication.py` returned `Latest catalogue publication is within 60 hours`. The workspace had no session-pooler `DATABASE_URL`, so the operator check used the Supabase CLI's temporary direct connection, selected its existing `postgres` role and set the session read-only. Two earlier attempts using the temporary login role failed with a definitive privilege error before the publication query; no permission was changed. In a signed-in production browser, the banner showed `Last published: 04 Oct 2026` (UK date), 99% pricing coverage and complete discovery, with no stale warning or later failure. The catalogue returned 69,908 results.
+
+The next normal sweep becomes eligible after about 14:49 UTC on 5 October and is expected in that night's operating window, subject to scheduler timing. Do not dispatch a manual sweep for this release. Save the first new sweep's logs and evidence artifact; check source commit, all required stages, coverage, actual changed rows and retention backlog. Inspect any failure before considering recovery. Check catalogue, scenarios and wine readers while signed in.
+
+After 05:00 UTC, inspect ordinary workload and backup-window logs/metrics retrospectively. Record query responsiveness, checkpoint sync behaviour and dashboard disk I/O. Do not run diagnostic work in the protected window or treat job success/database size as recovery proof. Collect five real sweeps at the operating cadence for sustained health. Tranche 2 local preparation can proceed; its production checkpoint remains separate.
 
 The original uncommitted priority plan, project review and their index entries were preserved. They are not part of this implementation commit.
