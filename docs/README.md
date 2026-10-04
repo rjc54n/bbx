@@ -8,6 +8,9 @@ means checking against current code, not just the doc.
 
 ## Start here
 
+- [OWNER-DATA-BACKUP-RESTORE-2026-10-04.md](OWNER-DATA-BACKUP-RESTORE-2026-10-04.md):
+  location, coverage and verified local restore of the public owner data and
+  private cellar-imports Storage objects.
 - [TRANCHE-1-HANDOVER-2026-10-03.md](TRANCHE-1-HANDOVER-2026-10-03.md):
   publication state, recovery commands, validation evidence and the production
   checkpoint for the first priority tranche.
