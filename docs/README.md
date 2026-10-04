@@ -17,6 +17,9 @@ means checking against current code, not just the doc.
 - [TRANCHE-2-MEASUREMENTS-2026-10-04.md](TRANCHE-2-MEASUREMENTS-2026-10-04.md):
   preserved read statistics, bounded query plans and proposed scope before
   Tranche 2 implementation.
+- [TRANCHE-2-LOCAL-HANDOVER-2026-10-04.md](TRANCHE-2-LOCAL-HANDOVER-2026-10-04.md):
+  local implementation, result comparisons, index costs, checks and the
+  production release gate for Tranche 2.
 - [PROJECT-AND-DATABASE-REVIEW-2026-10-03.md](PROJECT-AND-DATABASE-REVIEW-2026-10-03.md):
   codebase and live database review covering refresh reliability, storage and
   bloat, indexes, query costs, owner-data controls and prioritised improvements.
