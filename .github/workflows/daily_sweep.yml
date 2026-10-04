@@ -50,6 +50,7 @@ jobs:
       WAVE_PRICING_DELTA_ENABLED: ${{ vars.WAVE_PRICING_DELTA_ENABLED }}
       # Scheduled triggers apply the window and cadence guard; manual runs don't.
       SWEEP_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '' }}
+      SWEEP_SUMMARY_PATH: artifacts/sweep-summary.json
 
     steps:
       - name: Checkout repo
@@ -63,11 +64,14 @@ jobs:
         run: python3 -m core.sweep_window
 
       - name: Set up Python
-        if: github.event_name != 'schedule' || steps.window.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
+
+      - name: Install publication check dependency
+        if: github.event_name == 'schedule' && steps.window.outputs.run != 'true'
+        run: pip install 'psycopg2-binary>=2.9,<3'
 
       - name: Install dependencies
         if: github.event_name != 'schedule' || steps.window.outputs.run == 'true'
@@ -81,9 +85,22 @@ jobs:
         if: github.event_name != 'schedule' || steps.window.outputs.run == 'true'
         run: python apps/daily_sweep/run_sweep.py
 
+      - name: Check publication age
+        if: success()
+        run: python apps/daily_sweep/check_publication.py
+
+      - name: Save sweep evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-evidence-${{ github.run_id }}
+          path: artifacts/sweep-summary.json
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Notify Slack on failure
         if: failure()
         run: |
           curl -sS -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\":warning: BBX daily sweep FAILED. Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            --data "{\"text\":\"BBX sweep or publication health check FAILED. Inspect the failed stage before retrying. Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
             "$SLACK_WEBHOOK"

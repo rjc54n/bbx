@@ -64,6 +64,11 @@ jobs:
       - name: Test concurrent BBR snapshot acceptance
         run: python -m pytest tests/test_bbr_acceptance_concurrency.py -q
 
+      - name: Test sweep publication and recovery on PostgreSQL
+        env:
+          BBX_PUBLICATION_TEST_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: python -m pytest tests/test_publication_postgres.py -q
+
       - name: Remove the local database
         if: always()
         run: supabase stop --no-backup

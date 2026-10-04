@@ -193,7 +193,12 @@ CREATE TABLE IF NOT EXISTS scan_runs (
     wave_rotation_count     INTEGER,
     wave_delta_changed_count INTEGER,
     wave_shadow_only_count  INTEGER,
-    wave_priced_count       INTEGER
+    wave_priced_count       INTEGER,
+    source_committed_at     TEXT,
+    source_status           TEXT,
+    published_at            TEXT,
+    publication_stages      TEXT NOT NULL DEFAULT '{}',
+    rotation_bucket         INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -290,6 +295,14 @@ def bootstrap_schema(conn) -> None:
 
 def _bootstrap_sqlite(conn) -> None:
     conn.executescript(_SQLITE_SCHEMA)
+    run_columns = {row[1] for row in conn.execute("PRAGMA table_info(scan_runs)")}
+    for name, definition in (
+        ("source_committed_at", "TEXT"), ("source_status", "TEXT"),
+        ("published_at", "TEXT"), ("publication_stages", "TEXT NOT NULL DEFAULT '{}'"),
+        ("rotation_bucket", "INTEGER"),
+    ):
+        if name not in run_columns:
+            conn.execute(f"ALTER TABLE scan_runs ADD COLUMN {name} {definition}")
     # CREATE TABLE IF NOT EXISTS does not add columns to an existing SQLite
     # store. Keep the local persistent-store path forward-compatible with the
     # additive Postgres migrations rather than only making fresh test

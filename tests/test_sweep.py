@@ -21,9 +21,7 @@ from core.sweep import (
     _parse_run_finished_at,
     _sku_rotation_bucket,
     parse_index_last_update,
-    rotation_bucket_for_date,
     run_daily_sweep,
-    report_catalogue_cache_failure,
     select_biddable_rest_pricing,
 )
 
@@ -86,25 +84,6 @@ def _fetch_result(hits, complete=True):
         truncated=not complete,
     )
 
-
-def test_report_catalogue_cache_failure_marks_partial_and_sends_one_alert(conn, monkeypatch):
-    run_id = sweep.start_run(conn, scope="full_book", run_date="2026-07-18")
-    sent = []
-    monkeypatch.setattr(sweep, "send_slack_message", lambda text: sent.append(text) or True)
-
-    report_catalogue_cache_failure(
-        conn,
-        run_id,
-        attempts=3,
-        reason="catalogue cache refresh failed (ProgrammingError)",
-    )
-
-    row = dict(conn.execute("SELECT status, error_message FROM scan_runs WHERE id=?", (run_id,)).fetchone())
-    assert row["status"] == "partial"
-    assert row["error_message"] == "catalogue cache refresh failed (ProgrammingError)"
-    assert sent == [
-        f"BBX sweep {run_id}: source data committed, but catalogue caches did not refresh after 3 attempts. catalogue cache refresh failed (ProgrammingError)"
-    ]
 
 
 # ---------------------------------------------------------------
@@ -300,37 +279,12 @@ class TestParseIndexLastUpdate:
         assert parse_index_last_update("23-07-2026") is None  # missing time
 
 
-class TestRotationBucketForDate:
-    def test_deterministic_for_same_date(self):
-        assert rotation_bucket_for_date("2026-07-18") == rotation_bucket_for_date("2026-07-18")
-
-    def test_regression_known_value(self):
-        # Locks in the concrete mapping -- a future change to the bucketing
-        # algorithm should be a deliberate, visible decision, not silent.
-        assert rotation_bucket_for_date("2026-07-18") == 15
-
-    def test_cycles_through_every_bucket_over_rotation_buckets_days(self):
-        from datetime import date, timedelta
-        start = date(2026, 7, 18)
-        buckets = {
-            rotation_bucket_for_date((start + timedelta(days=i)).isoformat())
-            for i in range(ROTATION_BUCKETS)
-        }
-        assert buckets == set(range(ROTATION_BUCKETS))
-
-    def test_wraps_around_after_rotation_buckets_days(self):
-        from datetime import date, timedelta
-        d0 = date(2026, 7, 18)
-        d30 = d0 + timedelta(days=ROTATION_BUCKETS)
-        assert rotation_bucket_for_date(d0.isoformat()) == rotation_bucket_for_date(d30.isoformat())
-
-
 class TestSkuRotationBucket:
     def test_deterministic_across_repeated_calls(self):
         assert _sku_rotation_bucket("20138117265") == _sku_rotation_bucket("20138117265")
 
     def test_regression_known_value(self):
-        assert _sku_rotation_bucket("20138117265") == 26
+        assert _sku_rotation_bucket("20138117265") == 11
 
     def test_stays_within_bucket_range(self):
         for sku in ["A", "B", "20138117265", "SKU-with-dashes", ""]:
@@ -339,12 +293,12 @@ class TestSkuRotationBucket:
     def test_distributes_reasonably_evenly(self):
         # Not cryptographically rigorous -- just a sanity check that this
         # isn't secretly bucketing everything into #0. 3000 synthetic SKUs
-        # over 30 buckets: expect ~100 each, allow generous slack either way.
+        # over 15 buckets: expect ~200 each, allow generous slack either way.
         from collections import Counter
         counts = Counter(_sku_rotation_bucket(f"SKU{i}") for i in range(3000))
         assert set(counts.keys()) == set(range(ROTATION_BUCKETS))
-        assert min(counts.values()) > 40
-        assert max(counts.values()) < 200
+        assert min(counts.values()) > 100
+        assert max(counts.values()) < 300
 
 
 def _biddable_hit(parent_sku, index_last_update=None):
@@ -442,7 +396,7 @@ class TestSelectBiddableRestPricing:
         # All three are still eligible for the rotation slice on their own terms.
         expected_rotation = {
             h["parent_sku"] for h in hits
-            if _sku_rotation_bucket(h["parent_sku"]) == rotation_bucket_for_date("2026-07-19")
+            if _sku_rotation_bucket(h["parent_sku"]) == 0
         }
         assert plan.rotation_selected == expected_rotation
 
@@ -457,14 +411,14 @@ class TestSelectBiddableRestPricing:
         run_date = "2026-07-19"
         plan = select_biddable_rest_pricing(hits, last_run_finished_at=None, run_date=run_date)
 
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = 0
         expected = {h["parent_sku"] for h in hits if _sku_rotation_bucket(h["parent_sku"]) == bucket}
         assert plan.rotation_selected == expected
         assert set(plan.to_price) == expected
 
     def test_null_and_more_than_30_day_old_checks_are_selected(self):
         run_date = "2026-07-31"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = 0
         fresh = _find_sku_not_in_bucket(bucket)
         missing = _find_sku_not_in_bucket(bucket, exclude={fresh})
         overdue = _find_sku_not_in_bucket(bucket, exclude={fresh, missing})
@@ -943,7 +897,7 @@ class TestRunDailySweep:
     ):
         run_date = "2026-07-18"
         next_date = "2026-07-19"
-        next_bucket = rotation_bucket_for_date(next_date)
+        next_bucket = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         sku_a = _find_sku_not_in_bucket(next_bucket)
         sku_b = _find_sku_not_in_bucket(next_bucket, exclude={sku_a})
         hits = [
@@ -1132,7 +1086,7 @@ class TestRunDailySweepWavePricing:
         # rotation bucket does NOT match today's -- wave pricing alone would
         # never touch it.
         run_date2 = "2026-07-19"
-        bucket2 = rotation_bucket_for_date(run_date2)
+        bucket2 = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         assert _sku_rotation_bucket(sku) != bucket2, "test SKU unexpectedly in today's rotation bucket"
 
         # rest_entries WOULD price it if requested -- proves any change is
@@ -1163,14 +1117,14 @@ class TestRunDailySweepWavePricing:
         assert bool(load_current_skus(conn)[f"{sku}|06-00750"]["is_listed"]) is True
 
         run_date2 = "2026-07-19"
-        bucket2 = rotation_bucket_for_date(run_date2)
+        bucket2 = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         assert _sku_rotation_bucket(sku) != bucket2, "test SKU unexpectedly in bucket on day 2"
         _patch_fetchers_strict(monkeypatch, [_hit(sku, bbx_listings=[])], _rest_entries(sku))
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date2)
         assert bool(load_current_skus(conn)[f"{sku}|06-00750"]["is_listed"]) is False
 
         run_date3 = "2026-07-20"
-        bucket3 = rotation_bucket_for_date(run_date3)
+        bucket3 = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         assert _sku_rotation_bucket(sku) != bucket3, "test SKU unexpectedly in bucket on day 3"
         _patch_fetchers_strict(monkeypatch, [_hit(sku)], _rest_entries(sku))  # relisted
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date3)
@@ -1184,7 +1138,7 @@ class TestRunDailySweepWavePricing:
         # parent with NULL freshness must be checked, not only the normal
         # rotation slice.
         run_date = "2026-07-18"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         would_be_excluded = [_find_sku_not_in_bucket(bucket, exclude={f"UNLISTED{i}" for i in range(5)})]
         hits = [_hit(sku, bbx_listings=[]) for sku in would_be_excluded]
         rest = {sku: _rest_entries(sku)[sku] for sku in would_be_excluded}
@@ -1205,7 +1159,7 @@ class TestRunDailySweepWavePricing:
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-18")
 
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         excluded_sku = _find_sku_not_in_bucket(bucket)  # would be skipped if unlisted
 
         _patch_fetchers_strict(monkeypatch, [_hit(excluded_sku)], _rest_entries(excluded_sku))
@@ -1216,7 +1170,7 @@ class TestRunDailySweepWavePricing:
 
     def test_unlisted_wine_outside_rotation_bucket_is_not_priced(self, conn, monkeypatch):
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         excluded_sku = _find_sku_not_in_bucket(bucket)
         hits = [_hit(excluded_sku, bbx_listings=[])]
         rest = _rest_entries(excluded_sku)
@@ -1245,7 +1199,7 @@ class TestRunDailySweepWavePricing:
 
     def test_unlisted_wine_inside_rotation_bucket_is_priced(self, conn, monkeypatch):
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = 1  # The fixture below commits bucket 0 before the tested run.
         included_sku = _find_sku_in_bucket(bucket)
         hits = [_hit(included_sku, bbx_listings=[])]
         rest = _rest_entries(included_sku)
@@ -1282,7 +1236,7 @@ class TestRunDailySweepWavePricing:
         # unlisted tier would silently never activate for as long as the
         # discovery gap persists -- possibly forever.
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = 1  # The fixture below commits bucket 0 before the tested run.
         included_sku = _find_sku_in_bucket(bucket)
         excluded_sku = _find_sku_not_in_bucket(bucket, exclude={included_sku})
         hits = [
@@ -1327,7 +1281,7 @@ class TestRunDailySweepWavePricing:
         self, conn, monkeypatch
     ):
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         existing_sku = _find_sku_not_in_bucket(bucket)
         new_sku = _find_sku_not_in_bucket(bucket, exclude={existing_sku})
 
@@ -1373,7 +1327,7 @@ class TestRunDailySweepWavePricing:
         self, conn, monkeypatch
     ):
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         sku = _find_sku_not_in_bucket(bucket)
         hits = [_hit(sku, bbx_listings=[])]
         rest = _rest_entries(sku)
@@ -1414,7 +1368,7 @@ class TestRunDailySweepWavePricing:
     def test_unlisted_skip_never_counts_as_a_miss(self, conn, monkeypatch):
         # Get the SKU into the store on a day its rotation bucket selects it...
         run_date1 = "2026-07-18"
-        bucket1 = rotation_bucket_for_date(run_date1)
+        bucket1 = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         sku = _find_sku_in_bucket(bucket1)
         _patch_fetchers(monkeypatch, [_hit(sku, bbx_listings=[])], _rest_entries(sku))
         run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date1)
@@ -1426,7 +1380,7 @@ class TestRunDailySweepWavePricing:
         # gone_since), there's no "eventually give up" here because we never
         # actually looked.
         for run_date in ["2026-07-19", "2026-07-20", "2026-07-21"]:
-            bucket = rotation_bucket_for_date(run_date)
+            bucket = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
             assert _sku_rotation_bucket(sku) != bucket, "test SKU unexpectedly selected"
             _patch_fetchers(monkeypatch, [_hit(sku, bbx_listings=[])], {})
             run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date=run_date)
@@ -1437,7 +1391,7 @@ class TestRunDailySweepWavePricing:
 
     def test_rest_skus_expected_counts_only_attempted_not_discovered(self, conn, monkeypatch):
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = 1  # The fixture below commits bucket 0 before the tested run.
         listed_sku = _find_sku_not_in_bucket(bucket)
         included_unlisted = _find_sku_in_bucket(bucket)
         excluded_unlisted = _find_sku_not_in_bucket(bucket, exclude={listed_sku})
@@ -1468,7 +1422,7 @@ class TestRunDailySweepWavePricing:
 
     def test_wave_pricing_stats_persisted(self, conn, monkeypatch):
         run_date = "2026-07-19"
-        bucket = rotation_bucket_for_date(run_date)
+        bucket = 1  # The fixture below commits bucket 0 before the tested run.
         included = _find_sku_in_bucket(bucket)
         excluded = _find_sku_not_in_bucket(bucket)
 
@@ -1517,7 +1471,7 @@ class TestRunDailySweepWavePricing:
         # for delta selection to compare against.
         run_date1 = "2026-07-18"
         run_date2 = "2026-07-19"
-        bucket2 = rotation_bucket_for_date(run_date2)
+        bucket2 = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         sku = _find_sku_not_in_bucket(bucket2)
         baseline_hits = [
             _hit(sku, bbx_listings=[], index_last_update="1-1-2020 1am")
@@ -1549,7 +1503,7 @@ class TestRunDailySweepWavePricing:
         # -- the delta-flagged-but-rotation-excluded SKU must NOT be priced.
         run_date1 = "2026-07-18"
         run_date2 = "2026-07-19"
-        bucket2 = rotation_bucket_for_date(run_date2)
+        bucket2 = sweep.next_rotation_bucket(conn, sweep.BIDDABLE_FULL_BOOK_SCOPE)
         sku = _find_sku_not_in_bucket(bucket2)
         baseline_hits = [
             _hit(sku, bbx_listings=[], index_last_update="1-1-2020 1am")
@@ -1705,7 +1659,6 @@ def _rest_check(conn, parent_sku):
 
 
 def test_check_time_is_published_only_after_caches_refresh(conn, monkeypatch):
-    from core.store import CatalogueCacheRefreshResult
 
     sent = []
     monkeypatch.setattr(sweep, "send_slack_message", lambda text: sent.append(text) or True)
@@ -1719,11 +1672,25 @@ def test_check_time_is_published_only_after_caches_refresh(conn, monkeypatch):
     # refresh fails: the UI must keep the previous published time, which
     # matches the cached prices still being shown.
     monkeypatch.setattr(
-        sweep, "refresh_catalogue_caches",
-        lambda conn: CatalogueCacheRefreshResult(success=False, attempts=3, reason="boom"),
+        "core.publication.refresh_cache_stage",
+        lambda conn, name: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     _patch_fetchers(monkeypatch, [_hit("SKU1")], _rest_entries("SKU1", price=199))
-    run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
+    with pytest.raises(RuntimeError, match="boom"):
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-07-19")
     second = _rest_check(conn, "SKU1")
     assert second["checked_at"] != first["checked_at"]
     assert second["published_at"] == first["published_at"]
+
+
+def test_fatal_source_failure_still_saves_evidence_and_resets_statistics(conn, monkeypatch):
+    from core import sweep_metrics
+    resets = []
+    monkeypatch.setattr(sweep, "fetch_biddable_universe", lambda *args: (_ for _ in ()).throw(RuntimeError("discovery failed")))
+    monkeypatch.setattr(sweep_metrics, "reset_query_statistics", lambda conn: resets.append(True))
+    with pytest.raises(RuntimeError, match="discovery failed"):
+        run_daily_sweep(conn, algolia_app_id="app", algolia_api_key="key", run_date="2026-10-03")
+    row = conn.execute("SELECT status, source_committed_at, published_at FROM scan_runs").fetchone()
+    assert row["status"] == "failed"
+    assert row["source_committed_at"] is None and row["published_at"] is None
+    assert resets == [True]

@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-from core.db import bootstrap_schema, is_postgres, retry_transient
+from core.db import bootstrap_schema, placeholder
 from core.fetch_listings import FetchResult, fetch_biddable_universe
 from core.models import (
     ObservationEvent,
@@ -36,18 +37,17 @@ from core.store import (
     load_current_products,
     load_current_skus,
     mark_run_failed,
-    mark_run_partial,
     load_rest_checks,
     prune_observation_events,
-    publish_rest_checks,
-    refresh_catalogue_caches,
-    refresh_facet_caches,
-    reset_query_statistics,
     start_run,
     update_run_discovery,
     update_run_rest,
     update_run_wave_pricing,
 )
+
+from core.publication import (next_rotation_bucket, publish_run, save_stages, sweep_lock)
+from core.sweep_metrics import finish_metrics, snapshot
+from core.store import _is_ambiguous_transport_failure
 
 log = logging.getLogger(__name__)
 
@@ -57,18 +57,7 @@ REST_FRESHNESS_MAX_AGE_DAYS = 30
 OBSERVATION_RETENTION_DAYS = 30
 
 
-def report_catalogue_cache_failure(conn, run_id: str, *, attempts: int, reason: str) -> None:
-    """Mark a committed scan partial and send one concise operator alert."""
-    mark_run_partial(conn, run_id, reason)
-    message = (
-        f"BBX sweep {run_id}: source data committed, but catalogue caches did not "
-        f"refresh after {attempts} attempts. {reason}"
-    )
-    if not send_slack_message(message):
-        log.warning("Catalogue cache failure alert for sweep %s was not delivered", run_id)
-
-
-def apply_observation_retention(conn, run_id: str, now: str) -> None:
+def apply_observation_retention(conn, run_id: str, now: str) -> dict:
     """Delete observation events older than the retention window.
 
     Non-fatal: the sweep's source data and caches are already committed and
@@ -79,21 +68,22 @@ def apply_observation_retention(conn, run_id: str, now: str) -> None:
         datetime.fromisoformat(now) - timedelta(days=OBSERVATION_RETENTION_DAYS)
     ).isoformat()
     try:
-        deleted = prune_observation_events(conn, cutoff)
+        result = prune_observation_events(conn, cutoff)
     except Exception as exc:
         log.exception("Observation event retention failed after sweep %s", run_id)
         message = (
             f"BBX sweep {run_id}: source data committed, but observation event "
-            f"retention failed ({type(exc).__name__}). Events older than "
-            f"{OBSERVATION_RETENTION_DAYS} days were not deleted."
+            f"retention failed ({type(exc).__name__}). Retention is incomplete; "
+            "inspect the committed batch counts and backlog before retrying."
         )
         if not send_slack_message(message):
             log.warning("Retention failure alert for sweep %s was not delivered", run_id)
-        return
-    log.info(
-        "Retention: deleted %d observation events observed before %s",
-        deleted, cutoff,
-    )
+        return {**getattr(exc, "retention_progress", {}), "error": type(exc).__name__,
+                "connection_uncertain": _is_ambiguous_transport_failure(exc)}
+    log.info("Retention: %s", result)
+    if result["budget_exhausted"]:
+        log.warning("Retention backlog remains after the run budget: %s", result)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -185,20 +175,9 @@ def _index_last_update_flagged(
     return flagged
 
 
-# How many days a full rotation of the book takes at the rotation-slice
-# REST-pricing rate (see select_biddable_rest_pricing). 30 was sized against
-# the roadmap's ~40-REST-calls/day steady-state budget for the ~52k-product
-# biddable universe (docs/ROADMAP-2026-07.md Phase 4).
-ROTATION_BUCKETS = 30
-
-
-def rotation_bucket_for_date(run_date: str) -> int:
-    """Deterministic day -> bucket (0..ROTATION_BUCKETS-1). Uses the
-    proleptic Gregorian ordinal so it cycles through every bucket roughly
-    once every ROTATION_BUCKETS days, independent of which day of the week
-    or month a sweep happens to run on (unlike e.g. day-of-month, which
-    would skip bucket 31 in February)."""
-    return date.fromisoformat(run_date).toordinal() % ROTATION_BUCKETS
+# Fifteen successful source commits cover the book in 30 days at the agreed
+# two-day cadence. Missed nights and failed source attempts do not skip a bucket.
+ROTATION_BUCKETS = 15
 
 
 def _sku_rotation_bucket(parent_sku: str, total_buckets: int = ROTATION_BUCKETS) -> int:
@@ -264,6 +243,7 @@ def select_biddable_rest_pricing(
     run_date: str,
     delta_enabled: bool = False,
     rotation_buckets: int = ROTATION_BUCKETS,
+    rotation_bucket: int = 0,
     last_rest_checked_at_by_parent: Optional[Dict[str, Any]] = None,
 ) -> RestPricingPlan:
     """
@@ -275,7 +255,9 @@ def select_biddable_rest_pricing(
     against) means no delta selection is possible -- delta_changed stays
     empty rather than treating "no baseline" as "everything changed".
     """
-    bucket = rotation_bucket_for_date(run_date)
+    if not 0 <= rotation_bucket < rotation_buckets:
+        raise ValueError("Rotation bucket outside the configured cycle")
+    bucket = rotation_bucket
     rotation_selected: Set[str] = set()
     overdue_selected: Set[str] = set()
     delta_changed: Set[str] = set()
@@ -514,7 +496,13 @@ def _known_format_codes_by_sku(
     return result
 
 
-def run_daily_sweep(
+def run_daily_sweep(conn, **kwargs):
+    bootstrap_schema(conn)
+    with sweep_lock(conn):
+        return _run_daily_sweep_locked(conn, **kwargs)
+
+
+def _run_daily_sweep_locked(
     conn,
     *,
     algolia_app_id: str,
@@ -539,8 +527,6 @@ def run_daily_sweep(
     for today. Raises on fatal errors (the caller should catch and set
     status='failed' on the run if one was started).
     """
-    bootstrap_schema(conn)
-
     if run_date is None:
         run_date = date.today().isoformat()
 
@@ -550,10 +536,22 @@ def run_daily_sweep(
         return None
 
     log.info("Started sweep run %s for %s", run_id, run_date)
-
+    before = snapshot(conn)
+    summary = {"run_id": run_id, "stages": {}}
+    stages = summary["stages"]
+    connection_uncertain = False
+    started = time.monotonic()
     try:
+        rotation_bucket = next_rotation_bucket(conn, BIDDABLE_FULL_BOOK_SCOPE)
+        cur = conn.cursor()
+        p = placeholder()
+        cur.execute(f"UPDATE scan_runs SET rotation_bucket={p} WHERE id={p}", (rotation_bucket, run_id))
+        conn.commit()
+        cur.close()
         # --- Phase 1: Algolia discovery (biddable universe) ---
         fetch_result = fetch_biddable_universe(algolia_app_id, algolia_api_key)
+        stages["discovery"] = {"status": "completed", "seconds": round(time.monotonic() - started, 3)}
+        save_stages(conn, run_id, stages)
         hits = fetch_result.hits
         algolia_complete = fetch_result.discovery_complete
 
@@ -582,25 +580,18 @@ def run_daily_sweep(
         # missed rotation days can be selected from evidence rather than run
         # history alone.
         #
-        # This is the sweep's first substantial read after the long
-        # Algolia-only discovery phase; on a cold-started (post-pause)
-        # Supabase project it's the first point a slow-to-warm compute has
-        # shown up as a statement timeout, so retry transient failures here
-        # too rather than just at connect time.
-        if is_postgres():
-            current_products = retry_transient(
-                "load_current_products",
-                lambda: load_current_products(conn),
-                before_retry=conn.rollback,
-            )
-        else:
-            current_products = load_current_products(conn)
+        # Do not replay a lost request before inspecting the server outcome.
+        load_started = time.monotonic()
+        current_products = load_current_products(conn)
         # Freshness lives in product_rest_checks; products.last_rest_checked_at
         # is frozen (docs/REST-CHECK-DECOUPLING-2026-10-02.md).
         rest_checks = load_rest_checks(conn)
         last_rest_checked_at_by_parent = {
             psku: rest_checks.get(psku) for psku in current_products
         }
+
+        stages["source_load"] = {"status": "completed", "seconds": round(time.monotonic() - load_started, 3)}
+        save_stages(conn, run_id, stages)
 
         # --- Phase 2: REST pricing (tiered: listed always, unlisted wave-priced) ---
         all_parent_skus: Set[str] = set()
@@ -630,6 +621,7 @@ def run_daily_sweep(
             run_date=run_date,
             delta_enabled=delta_enabled,
             last_rest_checked_at_by_parent=last_rest_checked_at_by_parent,
+            rotation_bucket=rotation_bucket,
         )
         # Shadow-mode validation count for the listed tier. Per-SKU flags
         # were persisted as observation_events until 1 October 2026; the
@@ -691,6 +683,7 @@ def run_daily_sweep(
         else:
             parent_skus_to_price = sorted(listed_parent_skus | set(wave_plan.to_price))
 
+        rest_started = time.monotonic()
         rest_data, failed_skus = fetch_rest_pricing_full(
             parent_skus_to_price, progress=progress
         )
@@ -735,6 +728,10 @@ def run_daily_sweep(
             rest_skus_checked, rest_skus_expected, rest_skus_priced,
             rest_skus_failed, rest_coverage * 100, len(rest_unchecked_skus),
         )
+
+        stages["rest_pricing"] = {"status": "completed", "seconds": round(time.monotonic() - rest_started, 3)}
+        save_stages(conn, run_id, stages)
+        diff_started = time.monotonic()
 
         # --- Phase 3: Extract entities ---
         fresh_products = _extract_products(hits)
@@ -824,8 +821,10 @@ def run_daily_sweep(
                 len(baseline_unchecked_after),
             )
 
+        stages["diff"] = {"status": "completed", "seconds": round(time.monotonic() - diff_started, 3)}
+        save_stages(conn, run_id, stages)
         log.info("Committing sweep as '%s'...", final_status)
-        commit_sweep(
+        source_result = commit_sweep(
             conn,
             run_id,
             products=seen_products,
@@ -845,55 +844,37 @@ def run_daily_sweep(
             rest_checked_parent_skus=rest_checked_parent_skus,
         )
 
-        # The pair is one read model: wine_market_summary_mv depends on
-        # catalogue_mv, so only both refreshed views count as success. Source
-        # data stays committed if the bounded retry budget is exhausted.
-        cache_refresh = refresh_catalogue_caches(conn)
-        if not cache_refresh.success:
-            reason = cache_refresh.reason or "catalogue cache refresh failed"
-            report_catalogue_cache_failure(
-                conn,
-                run_id,
-                attempts=cache_refresh.attempts,
-                reason=reason,
-            )
-            final_status = "partial"
-        else:
-            try:
-                published = publish_rest_checks(conn)
-                log.info("Published %d REST check times", published)
-            except Exception:
-                log.exception(
-                    "Publishing REST check times failed after sweep %s; "
-                    "Market checked shows the previous published time", run_id,
-                )
-
-        try:
-            refresh_facet_caches(conn)
-        except Exception:
-            log.exception(
-                "Facet cache refresh failed after sweep %s; caches may be stale until "
-                "the next sweep", run_id,
-            )
-
-        apply_observation_retention(conn, run_id, now)
-
-        try:
-            reset_query_statistics(conn)
-        except Exception:
-            log.exception("Query statistics reset failed after sweep %s", run_id)
-
-        log.info(
-            "Sweep %s finished as '%s' — %d events recorded",
-            run_id, final_status, len(all_events),
-        )
+        stages["source"] = source_result
+        save_stages(conn, run_id, stages)
+        publish_run(conn, run_id)
+        summary["retention"] = apply_observation_retention(conn, run_id, now)
+        connection_uncertain = summary["retention"].get("connection_uncertain", False)
+        summary["outcome"] = final_status
+        log.info("Sweep %s published as '%s'; %d events recorded", run_id, final_status, len(all_events))
         return run_id
 
     except Exception as e:
         log.exception("Sweep run %s failed", run_id)
-        # A DB-level exception (e.g. a statement timeout) leaves the connection
-        # in an aborted-transaction state; every statement fails with
-        # InFailedSqlTransaction until it's rolled back.
-        conn.rollback()
-        mark_run_failed(conn, run_id, str(e))
+        connection_uncertain = _is_ambiguous_transport_failure(e)
+        summary["outcome"] = "unknown" if connection_uncertain else "failed"
+        if not connection_uncertain:
+            conn.rollback()
+            mark_run_failed(conn, run_id, f"{type(e).__name__}: {str(e)[:400]}")
         raise
+    finally:
+        summary["seconds"] = round(time.monotonic() - started, 3)
+        if not connection_uncertain:
+            from core.publication import load_publication_run
+            try:
+                recorded = load_publication_run(conn, run_id)
+                summary["stages"] = recorded["publication_stages"]
+                summary["source_committed_at"] = recorded["source_committed_at"]
+                summary["published_at"] = recorded["published_at"]
+                summary["coverage"] = {k: recorded[k] for k in (
+                    "algolia_complete", "algolia_hits_expected", "algolia_hits_collected",
+                    "rest_skus_expected", "rest_skus_priced", "rest_skus_failed")}
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                log.exception("Could not load final publication evidence")
+        finish_metrics(conn, before, summary, connection_uncertain=connection_uncertain)

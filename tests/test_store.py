@@ -17,8 +17,6 @@ from core.store import (
     mark_run_failed,
     mark_run_partial,
     process_disappearances,
-    refresh_facet_caches,
-    refresh_catalogue_caches,
     reset_query_statistics,
     start_run,
     update_run_discovery,
@@ -75,7 +73,7 @@ class TestStartRun:
 
     def test_blocks_if_completed_exists(self, conn):
         rid = start_run(conn, scope="full_book", run_date="2026-07-18")
-        conn.execute("UPDATE scan_runs SET status='completed' WHERE id=?", (rid,))
+        conn.execute("UPDATE scan_runs SET status='completed', source_committed_at=?, published_at=? WHERE id=?", (NOW, NOW, rid))
         conn.commit()
         assert start_run(conn, scope="full_book", run_date="2026-07-18") is None
 
@@ -312,8 +310,12 @@ class TestCommitSweep:
         cur = conn.execute("SELECT count(*) FROM observation_events")
         assert cur.fetchone()[0] == 3
 
-        cur = conn.execute("SELECT status FROM scan_runs WHERE id=?", (run_id,))
-        assert cur.fetchone()[0] == "completed"
+        cur = conn.execute("SELECT status, source_status, source_committed_at, finished_at FROM scan_runs WHERE id=?", (run_id,))
+        row = cur.fetchone()
+        assert row["status"] == "running"
+        assert row["source_status"] == "completed"
+        assert row["source_committed_at"] is not None
+        assert row["finished_at"] is None
 
     def test_idempotent_retry(self, conn):
         run_id = start_run(conn, scope="full_book", run_date="2026-07-18")
@@ -545,78 +547,6 @@ class TestPostgresConnectionCompat:
         conn, cur = _pg_like_conn()
         assert load_current_offers(conn) == {}
         cur.execute.assert_called_once()
-
-
-def test_refresh_facet_caches_is_noop_without_postgres(monkeypatch):
-    monkeypatch.setattr("core.store.is_postgres", lambda: False)
-    conn = MagicMock()
-    refresh_facet_caches(conn)
-    conn.cursor.assert_not_called()
-
-
-def test_refresh_facet_caches_refreshes_each_view_concurrently(monkeypatch):
-    monkeypatch.setattr("core.store.is_postgres", lambda: True)
-    conn = MagicMock()
-    conn.autocommit = False
-    cur = conn.cursor.return_value
-
-    refresh_facet_caches(conn)
-
-    conn.commit.assert_called_once()
-    executed = [call.args[0] for call in cur.execute.call_args_list]
-    assert executed == [
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.facet_values_mv",
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.facet_ranges_mv",
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.format_options_mv",
-    ]
-    # autocommit is toggled on for the concurrent refresh, then restored.
-    assert conn.autocommit is False
-
-
-def test_refresh_catalogue_caches_retries_then_refreshes_all_views(monkeypatch):
-    monkeypatch.setattr("core.store.is_postgres", lambda: True)
-    conn = MagicMock()
-    conn.autocommit = False
-    first = MagicMock()
-    first.execute.side_effect = [RuntimeError("temporary database error")]
-    second = MagicMock()
-    # The Postgres connection uses RealDictCursor, so rows come back as dicts.
-    second.fetchone.return_value = {"row_count": 10}
-    conn.cursor.side_effect = [first, second]
-    pauses = []
-
-    result = refresh_catalogue_caches(conn, sleep=pauses.append)
-
-    assert result.success is True
-    assert result.attempts == 2
-    assert pauses == [1.0]
-    assert [call.args[0] for call in second.execute.call_args_list] == [
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.catalogue_mv",
-        "SELECT count(*) AS row_count FROM public.catalogue_mv",
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.wine_market_summary_mv",
-        "SELECT count(*) AS row_count FROM public.wine_market_summary_mv",
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY public.wine_scenario_mv",
-        "SELECT count(*) AS row_count FROM public.wine_scenario_mv",
-    ]
-    assert conn.autocommit is False
-
-
-def test_refresh_catalogue_caches_does_not_retry_ambiguous_transport_failure(monkeypatch):
-    class OperationalError(Exception):
-        pass
-
-    monkeypatch.setattr("core.store.is_postgres", lambda: True)
-    conn = MagicMock()
-    conn.autocommit = False
-    cur = conn.cursor.return_value
-    cur.execute.side_effect = OperationalError("connection lost")
-    pauses = []
-
-    result = refresh_catalogue_caches(conn, sleep=pauses.append)
-
-    assert result.success is False
-    assert result.attempts == 1
-    assert pauses == []
 
 
 def test_reset_query_statistics_is_noop_without_postgres(monkeypatch):
