@@ -11,12 +11,12 @@ import { startingPointFor } from "./startingPoints";
 import { parse } from "./url";
 
 describe("fetchCatalogue (live)", () => {
-  it("explore: returns a page of rows and a total count with no filters applied", async () => {
+  it("explore: returns a page of rows and detects a following page", async () => {
     const { initialState } = startingPointFor("explore");
     const result = await fetchCatalogue(initialState);
     expect(result.rows.length).toBeGreaterThan(0);
     expect(result.rows.length).toBeLessThanOrEqual(PAGE_SIZE);
-    expect(result.count).toBeGreaterThan(0);
+    expect(result.hasNext).toBe(true);
   });
 
   it("value-research default sort (price_vs_market_pct asc) returns ascending values", async () => {
@@ -71,13 +71,7 @@ describe("fetchCatalogue (live)", () => {
     expect(result.rows.some((row) => row.is_listed === false)).toBe(true);
   });
 
-  it("is_listed: true ('only listed wines') restricts to listed rows, a strict subset of unfiltered", async () => {
-    const unfiltered = await fetchCatalogue({
-      mode: "explore",
-      filters: [],
-      sort: { field: "first_seen_at", dir: "desc" },
-      page: 0,
-    });
+  it("is_listed: true ('only listed wines') returns only listed rows", async () => {
     const filtered = await fetchCatalogue({
       mode: "explore",
       filters: [{ field: "is_listed", kind: "boolean", value: true }],
@@ -86,7 +80,6 @@ describe("fetchCatalogue (live)", () => {
     });
     expect(filtered.rows.length).toBeGreaterThan(0);
     for (const row of filtered.rows) expect(row.is_listed).toBe(true);
-    expect(filtered.count).toBeLessThan(unfiltered.count);
   });
 
   it("the free-text search filter matches on name or producer", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_SELECT, PAGE_SIZE, buildSearchFilter, buildSearchOrFilter, mergeReferencePrices, paginationRange } from "./fetchCatalogue";
+import { CATALOGUE_SELECT, PAGE_SIZE, buildSearchFilter, buildSearchOrFilter, mergeReferencePrices, pageWithNext, paginationRange } from "./fetchCatalogue";
 
 describe("buildSearchOrFilter", () => {
   it("builds an ilike-across-name-and-producer clause", () => {
@@ -45,6 +45,14 @@ describe("paginationRange", () => {
 
   it("respects a custom page size", () => {
     expect(paginationRange(2, 10)).toEqual({ from: 20, to: 29 });
+  });
+});
+
+describe("pageWithNext", () => {
+  it("keeps exactly one page and reports a next page only when the extra row exists", () => {
+    const exactPage = Array.from({ length: PAGE_SIZE }, (_, index) => index);
+    expect(pageWithNext(exactPage)).toEqual({ rows: exactPage, hasNext: false });
+    expect(pageWithNext([...exactPage, PAGE_SIZE])).toEqual({ rows: exactPage, hasNext: true });
   });
 });
 
