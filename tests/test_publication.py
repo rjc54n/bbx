@@ -9,8 +9,8 @@ import pytest
 from core.db import bootstrap_schema
 from core import publication, sweep, sweep_metrics
 from core.models import Product
-from core.store import commit_sweep, prune_observation_events, start_run
-from core.sweep_window import recent_run_reason
+from core.store import commit_sweep, load_recent_runs, prune_observation_events, start_run
+from core.sweep_window import in_sweep_window, recent_run_reason
 from apps.daily_sweep.check_publication import publication_age_error
 
 
@@ -177,6 +177,49 @@ def test_skipped_window_does_not_make_stale_publication_healthy():
     assert publication_age_error(now - timedelta(hours=61), now)
     assert publication_age_error(None, now)
     assert publication_age_error(now - timedelta(hours=60), now) is None
+
+
+def test_log_backfill_satisfies_publication_age_and_preserves_start_based_spacing(conn):
+    run_id = "7b864bb1-e593-428d-ab8b-8585c695f95b"
+    started = datetime(2026, 10, 3, 22, 49, 41, 195000, tzinfo=timezone.utc)
+    published = datetime(2026, 10, 3, 23, 7, 50, 51000, tzinfo=timezone.utc)
+    conn.execute(
+        "INSERT INTO scan_runs (id, scope, run_date, status, started_at) "
+        "VALUES (?, 'biddable_full_book', '2026-10-03', 'completed', ?)",
+        (run_id, started.isoformat()),
+    )
+    conn.commit()
+    tonight = started + timedelta(hours=24)
+    runs = load_recent_runs(conn, scope="biddable_full_book")
+    assert publication_age_error(runs[0][2], tonight)
+    assert recent_run_reason(runs, tonight) is None
+
+    # Verified legacy publication gains evidence, without moving its start time.
+    conn.execute(
+        "UPDATE scan_runs SET source_committed_at=?, source_status='completed', "
+        "published_at=?, publication_stages=? WHERE id=?",
+        ("2026-10-03T23:07:16.348+00:00", published.isoformat(),
+         json.dumps({"backfill": {"method": "backfilled_from_log", "github_run_id": 37159711065}}), run_id),
+    )
+    conn.commit()
+    runs = load_recent_runs(conn, scope="biddable_full_book")
+    assert runs[0][1] == started
+    assert publication_age_error(runs[0][2], tonight) is None
+    assert "two-day cadence" in recent_run_reason(runs, tonight)
+
+    due = started + timedelta(hours=40)
+    assert recent_run_reason(runs, due - timedelta(microseconds=1))
+    assert recent_run_reason(runs, due) is None
+    assert publication_age_error(runs[0][2], due) is None
+    assert not in_sweep_window(due)
+    next_window = datetime(2026, 10, 5, 21, tzinfo=timezone.utc)
+    assert in_sweep_window(next_window)
+    assert recent_run_reason(runs, next_window) is None
+    assert publication_age_error(runs[0][2], next_window) is None
+
+    age_limit = published + timedelta(hours=60)
+    assert publication_age_error(runs[0][2], age_limit) is None
+    assert publication_age_error(runs[0][2], age_limit + timedelta(microseconds=1))
 
 
 def test_counter_reset_does_not_report_misleading_negative_delta():
