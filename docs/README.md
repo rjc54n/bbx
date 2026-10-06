@@ -20,6 +20,9 @@ means checking against current code, not just the doc.
 - [TRANCHE-2-LOCAL-HANDOVER-2026-10-04.md](TRANCHE-2-LOCAL-HANDOVER-2026-10-04.md):
   local implementation, result comparisons, index costs, checks and the
   production release gate for Tranche 2.
+- [TRANCHE-2-RELEASE-RECORD-2026-10-06.md](TRANCHE-2-RELEASE-RECORD-2026-10-06.md):
+  production release evidence for Tranche 2: gate sweep, migration sequence,
+  R5 equivalence and timing comparison, and open checks.
 - [PROJECT-AND-DATABASE-REVIEW-2026-10-03.md](PROJECT-AND-DATABASE-REVIEW-2026-10-03.md):
   codebase and live database review covering refresh reliability, storage and
   bloat, indexes, query costs, owner-data controls and prioritised improvements.
