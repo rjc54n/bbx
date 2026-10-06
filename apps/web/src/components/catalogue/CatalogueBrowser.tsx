@@ -8,7 +8,7 @@ import type {
   PriceChangeSortField,
 } from "@/lib/query/registry";
 import { getFilter, removeFilter, setFilter } from "@/lib/query/filterOps";
-import { fetchCatalogue, fetchPriceChanges, PAGE_SIZE, type FetchResult } from "@/lib/query/fetchCatalogue";
+import { fetchCatalogue, fetchPriceChanges, type CatalogueFetchResult, type FetchResult } from "@/lib/query/fetchCatalogue";
 import {
   fetchFacetRanges,
   fetchFacetValues,
@@ -87,8 +87,8 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
     };
   }, [queryState.mode, facetRetry]);
 
-  const [catalogueResult, setCatalogueResult] = useState<FetchResult<CatalogueRow>>({ rows: [], count: 0 });
-  const [priceChangeResult, setPriceChangeResult] = useState<FetchResult<PriceChangeRow>>({ rows: [], count: 0 });
+  const [catalogueResult, setCatalogueResult] = useState<CatalogueFetchResult>({ rows: [], hasNext: false, referenceStatus: "loaded" });
+  const [priceChangeResult, setPriceChangeResult] = useState<FetchResult<PriceChangeRow>>({ rows: [], hasNext: false });
   const [error, setError] = useState<string | null>(null);
   const [resultRetry, setResultRetry] = useState(0);
   // Which QueryState the current result/error reflects. `loading` is derived
@@ -100,9 +100,10 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     const request =
-      queryState.mode === "price-changes" ? fetchPriceChanges(queryState) : fetchCatalogue(queryState);
+      queryState.mode === "price-changes" ? fetchPriceChanges(queryState, controller.signal) : fetchCatalogue(queryState, controller.signal);
 
     request
       .then((result) => {
@@ -110,7 +111,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
         if (queryState.mode === "price-changes") {
           setPriceChangeResult(result as FetchResult<PriceChangeRow>);
         } else {
-          setCatalogueResult(result as FetchResult<CatalogueRow>);
+          setCatalogueResult(result as CatalogueFetchResult);
         }
         setError(null);
         setLoadedQuery(queryState);
@@ -123,6 +124,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [queryState, resultRetry]);
 
@@ -190,8 +192,8 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
   }
 
   const isPriceChanges = queryState.mode === "price-changes";
-  const totalCount = isPriceChanges ? priceChangeResult.count : catalogueResult.count;
-  const resultsWord = queryState.mode === "value-research" ? "value signals" : "results";
+  const hasNext = !loading && (isPriceChanges ? priceChangeResult.hasNext : catalogueResult.hasNext);
+  const resultLabel = isPriceChanges ? "Price changes" : queryState.mode === "value-research" ? "Value signals" : "Catalogue results";
   const searchValue = !isPriceChanges ? getFilter(queryState.filters, "search")?.value ?? "" : "";
   const onlyListed = !isPriceChanges && getFilter(queryState.filters, "is_listed")?.value === true;
 
@@ -237,9 +239,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2 text-sm text-ink-muted">
-        <span className="tabular-nums">
-          {loading ? "Loading…" : `${totalCount.toLocaleString()} ${resultsWord}`}
-        </span>
+        <span>{loading ? "Loading…" : resultLabel}</span>
         <div className="flex flex-wrap items-center gap-3">
           {!isPriceChanges && (
             <label className="flex items-center gap-1.5 whitespace-nowrap">
@@ -274,6 +274,13 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
         </div>
       </div>
 
+      {!isPriceChanges && !loading && !error && catalogueResult.referenceStatus === "failed" && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-accent/40 bg-accent-soft px-4 py-2 text-sm text-accent">
+          <span>Historic reference prices could not be loaded. Catalogue prices are still shown.</span>
+          <button type="button" onClick={retryResults} className="rounded border border-accent/40 px-2 py-1 underline underline-offset-2">Try again</button>
+        </div>
+      )}
+
       {isPriceChanges ? (
         <DataTable
           columns={visiblePriceChangeColumns}
@@ -304,9 +311,7 @@ export function CatalogueBrowser({ favouriteParentSkus }: { favouriteParentSkus:
 
       <Pagination
         page={queryState.page + 1}
-        totalPages={Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
-        totalCount={totalCount}
-        label="results"
+        hasNext={hasNext}
         onPageChange={(target) => handlePageChange(target - 1)}
       />
     </div>

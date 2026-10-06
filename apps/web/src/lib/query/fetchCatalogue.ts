@@ -11,7 +11,15 @@ export const PAGE_SIZE = 25;
 
 export interface FetchResult<Row> {
   rows: Row[];
-  count: number;
+  hasNext: boolean;
+}
+
+export interface CatalogueFetchResult extends FetchResult<CatalogueRow> {
+  referenceStatus: "loaded" | "failed";
+}
+
+export function pageWithNext<Row>(rows: Row[]): FetchResult<Row> {
+  return { rows: rows.slice(0, PAGE_SIZE), hasNext: rows.length > PAGE_SIZE };
 }
 
 type ReferencePriceRow = {
@@ -73,8 +81,8 @@ export function paginationRange(page: number, pageSize: number = PAGE_SIZE): { f
 // specifies: in()/eq() for enum/typeahead, gte()/lte() for range and date
 // bounds (including the signed price_vs_*_pct columns), or(ilike) for the
 // free-text search box.
-export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchResult<CatalogueRow>> {
-  let query = supabase.from("catalogue_view").select(CATALOGUE_SELECT, { count: "exact" });
+export async function fetchCatalogue(state: CatalogueQueryState, signal?: AbortSignal): Promise<CatalogueFetchResult> {
+  let query = supabase.from("catalogue_view").select(CATALOGUE_SELECT);
   query = applyFilters(query, state.filters as readonly AppliedFilter[]);
 
   // state.sort.field alone isn't unique (e.g. many SKUs share one
@@ -89,22 +97,28 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
     .order("format_code", { ascending: true });
 
   const { from, to } = paginationRange(state.page);
-  query = query.range(from, to);
+  query = query.range(from, to + 1);
+  if (signal) query = query.abortSignal(signal);
 
-  const { data, count, error } = await query;
+  const { data, error } = await query;
   if (error) throw error;
-  const rows = (data ?? []) as DatabaseCatalogueRow[];
+  if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError");
+  const { rows, hasNext } = pageWithNext((data ?? []) as DatabaseCatalogueRow[]);
   const parentSkus = [...new Set(rows.flatMap((row) => row.parent_sku ? [row.parent_sku] : []))];
-  if (parentSkus.length === 0) return { rows: mergeReferencePrices(rows, []), count: count ?? 0 };
-  const { data: referenceData, error: referenceError } = await supabase
+  if (parentSkus.length === 0) return { rows: mergeReferencePrices(rows, []), hasNext, referenceStatus: "loaded" };
+  let referenceQuery = supabase
     .from("resolved_reference_price_view")
     .select("parent_sku,price_per_75cl_p,resolution_kind,source_kind,reference_date,date_meaning,needs_review,has_competing_evidence")
     .in("parent_sku", parentSkus);
+  if (signal) referenceQuery = referenceQuery.abortSignal(signal);
+  const { data: referenceData, error: referenceError } = await referenceQuery;
+  if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError");
   // Private reference enrichment never suppresses the public catalogue result.
-  if (referenceError) return { rows: mergeReferencePrices(rows, []), count: count ?? 0 };
+  if (referenceError) return { rows: mergeReferencePrices(rows, []), hasNext, referenceStatus: "failed" };
   return {
     rows: mergeReferencePrices(rows, (referenceData ?? []) as ReferencePriceRow[]),
-    count: count ?? 0,
+    hasNext,
+    referenceStatus: "loaded",
   };
 }
 
@@ -112,18 +126,19 @@ export async function fetchCatalogue(state: CatalogueQueryState): Promise<FetchR
 // its own in v1 -- see docs/PHASE2-catalogue-browser.md Phase A. The view is
 // DISTINCT ON (parent_sku, format_code), so that pair is unique here too and
 // works as the same deterministic pagination tiebreaker as fetchCatalogue.
-export async function fetchPriceChanges(state: PriceChangeQueryState): Promise<FetchResult<PriceChangeRow>> {
+export async function fetchPriceChanges(state: PriceChangeQueryState, signal?: AbortSignal): Promise<FetchResult<PriceChangeRow>> {
   let query = supabase
     .from("recent_price_change_view")
-    .select("*", { count: "exact" })
+    .select("*")
     .order(state.sort.field, { ascending: state.sort.dir === "asc", nullsFirst: false })
     .order("parent_sku", { ascending: true })
     .order("format_code", { ascending: true });
 
   const { from, to } = paginationRange(state.page);
-  query = query.range(from, to);
+  query = query.range(from, to + 1);
+  if (signal) query = query.abortSignal(signal);
 
-  const { data, count, error } = await query;
+  const { data, error } = await query;
   if (error) throw error;
-  return { rows: data ?? [], count: count ?? 0 };
+  return pageWithNext(data ?? []);
 }

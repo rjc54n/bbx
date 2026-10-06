@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampPage, pageHref } from "./Pagination";
+import { clampPage, pageHref, pageTarget } from "./Pagination";
 
 describe("pageHref", () => {
   it("sets the page param and preserves the rest", () => {
@@ -34,5 +34,16 @@ describe("clampPage", () => {
 
   it("truncates fractional requests", () => {
     expect(clampPage(3.9, 10)).toBe(3);
+  });
+});
+
+describe("pageTarget", () => {
+  it("allows the next page when only hasNext is known", () => {
+    expect(pageTarget(2)).toBe(2);
+    expect(pageTarget(3)).toBe(3);
+  });
+
+  it("still clamps lists with an exact total", () => {
+    expect(pageTarget(3, 2)).toBe(2);
   });
 });

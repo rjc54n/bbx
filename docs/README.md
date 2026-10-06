@@ -11,6 +11,18 @@ means checking against current code, not just the doc.
 - [TRANCHE-1-HANDOVER-2026-10-03.md](TRANCHE-1-HANDOVER-2026-10-03.md):
   publication state, recovery commands, validation evidence and the production
   checkpoint for the first priority tranche.
+- [PRIORITY-WORK-PLAN-2026-10-03.md](PRIORITY-WORK-PLAN-2026-10-03.md):
+  proposed three-tranche delivery plan for refresh reliability, query costs
+  and measured storage improvements, with model and session recommendations.
+- [TRANCHE-2-MEASUREMENTS-2026-10-04.md](TRANCHE-2-MEASUREMENTS-2026-10-04.md):
+  preserved read statistics, bounded query plans and proposed scope before
+  Tranche 2 implementation.
+- [TRANCHE-2-LOCAL-HANDOVER-2026-10-04.md](TRANCHE-2-LOCAL-HANDOVER-2026-10-04.md):
+  local implementation, result comparisons, index costs, checks and the
+  production release gate for Tranche 2.
+- [PROJECT-AND-DATABASE-REVIEW-2026-10-03.md](PROJECT-AND-DATABASE-REVIEW-2026-10-03.md):
+  codebase and live database review covering refresh reliability, storage and
+  bloat, indexes, query costs, owner-data controls and prioritised improvements.
 - [DOCUMENTATION-AUDIT-2026-09-05.md](DOCUMENTATION-AUDIT-2026-09-05.md):
   repository-wide audit of all tracked Markdown: current authority, stale
   status claims, historical records and the product decisions that remain.

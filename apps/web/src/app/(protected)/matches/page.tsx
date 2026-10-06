@@ -271,9 +271,9 @@ export default async function MatchesPage({
   const owner = await requireOwner();
   const { supabase } = owner;
 
-  // --- Wave 1: the union list, the exact-count summary, and the run banners ---
+  // --- Wave 1: the union list, the queue summary, and the run banners ---
 
-  let rowsQuery = supabase.from("wine_match_review_view").select("*", { count: "exact" });
+  let rowsQuery = supabase.from("wine_match_review_view").select("*");
   if (sort === "coverage") {
     // Highest token coverage of the rank-1 candidate first. `full` and
     // `full_with_typos` interleave at the top (both are >= 1.0); the tier badge
@@ -313,7 +313,7 @@ export default async function MatchesPage({
   const wantCellar = sourceFilter !== "release_offer";
 
   const [rowsResult, summaryResult, releaseRunResult, cellarRunResult] = await Promise.all([
-    rowsQuery.range(from, from + PAGE_SIZE - 1),
+    rowsQuery.range(from, from + PAGE_SIZE),
     supabase.rpc("wine_match_queue_summary", sourceFilter === "all" ? {} : { p_source: sourceFilter }),
     wantRelease
       ? supabase.from("release_offer_match_runs").select("*").order("started_at", { ascending: false }).limit(1).maybeSingle()
@@ -325,7 +325,9 @@ export default async function MatchesPage({
   if (rowsResult.error) throw new Error(`Match groups could not be loaded: ${rowsResult.error.message}`);
   if (summaryResult.error) throw new Error(`Queue summary could not be loaded: ${summaryResult.error.message}`);
 
-  const groups = (rowsResult.data ?? []) as ReviewRow[];
+  const pageRows = (rowsResult.data ?? []) as ReviewRow[];
+  const hasNext = pageRows.length > PAGE_SIZE;
+  const groups = pageRows.slice(0, PAGE_SIZE);
   const summary = summaryResult.data?.[0] ?? {
     needs_review: 0, with_suggestions: 0, no_suggestions: 0, errors: 0,
     linked: 0, no_suitable_match: 0, all_groups: 0,
@@ -517,9 +519,6 @@ export default async function MatchesPage({
     };
   });
 
-  const totalForState = rowsResult.count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalForState / PAGE_SIZE));
-
   const returnParams = new URLSearchParams();
   returnParams.set("source", sourceFilter);
   returnParams.set("state", state);
@@ -667,9 +666,7 @@ export default async function MatchesPage({
         <MatchGroupList groups={groupViews} state={state} returnPath={returnPath} />
         <Pagination
           page={page}
-          totalPages={totalPages}
-          totalCount={totalForState}
-          label="groups"
+          hasNext={hasNext}
           basePath={MATCH_PATH}
           query={{
             source: sourceFilter,

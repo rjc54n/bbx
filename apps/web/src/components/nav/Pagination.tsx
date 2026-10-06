@@ -59,6 +59,11 @@ export function clampPage(target: number, totalPages: number): number {
   return Math.min(Math.max(1, totalPages), Math.max(1, Math.trunc(target)));
 }
 
+export function pageTarget(target: number, totalPages?: number): number {
+  if (totalPages !== undefined) return clampPage(target, totalPages);
+  return Number.isFinite(target) ? Math.max(1, Math.trunc(target)) : 1;
+}
+
 const STEP_CLASS = "rounded border border-border px-2 py-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
 
 export function Pagination(props: PaginationProps) {
@@ -72,10 +77,10 @@ export function Pagination(props: PaginationProps) {
   const { basePath, query, pageParam, onPageChange } = props;
 
   function go(target: number) {
-    const clamped = clampPage(target, totalPages);
-    if (clamped === page) return;
-    if (onPageChange) onPageChange(clamped);
-    else if (basePath) router.push(pageHref(basePath, query, clamped, pageParam));
+    const nextPage = pageTarget(target, isUnknownTotal ? undefined : totalPages);
+    if (nextPage === page) return;
+    if (onPageChange) onPageChange(nextPage);
+    else if (basePath) router.push(pageHref(basePath, query, nextPage, pageParam));
   }
 
   function step(target: number, children: string, disabled: boolean) {
