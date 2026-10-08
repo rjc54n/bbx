@@ -1,6 +1,6 @@
 # Tranche 2 release record
 
-Status: released 6 October 2026. Migrations `20261004142409`, `20261004142420` and `20261004142431` are live, and the app merged to `main` as `5bb9ea8` with a successful Vercel Production deployment at 12:08 UTC. No PR was opened, at the owner's direction. The first production measurement of the price-sort index's refresh cost is still to come from the next sweep.
+Status: released 6 October 2026. Migrations `20261004142409`, `20261004142420` and `20261004142431` are live, and the app merged to `main` as `5bb9ea8` with a successful Vercel Production deployment at 12:08 UTC. No PR was opened, at the owner's direction. The first sweep with the price-sort index ran on 7 October; `catalogue_mv` refreshed in 18.9 s against 11.9 s, but the slowdown was not specific to that stage (see [First sweep with the index](#first-sweep-with-the-index-7-october-2026)) and the cause is unresolved.
 
 ## Release gate
 
@@ -37,9 +37,35 @@ The app was then merged to `main` locally, `npm run lint`, 382 Vitest tests and 
 
 ---
 
+## First sweep with the index (7 October 2026)
+
+Status: recorded 8 October 2026, read-only review from GitHub logs, the Postgres log stream and three SQL reads (08 October 09:34 UTC, outside the 02:00-05:00 window).
+
+[Scheduled run 37687987907](https://github.com/rjc54n/bbx/actions/runs/37687987907) started at 21:14 UTC on 7 October, took 19m24s and succeeded. REST checks covered 16,354 of 16,354 with no failures, publication was within 60 hours, and retention deleted 6,083 events in seven batches with none remaining. The 01:51 and 05:51 UTC runs were 14-20 s skips under the 40-hour guard. This is the third of the five sweeps required for sustained health.
+
+Stage timings against the 5 October baseline (run 37383304033):
+
+| Stage | 5 Oct | 7 Oct | Change |
+| --- | --- | --- | --- |
+| `catalogue_mv` | 11.9 s | 18.9 s | +58% |
+| `wine_market_summary_mv` | 5.5 s | 18.2 s | +229% |
+| `wine_scenario_mv` | 4.3 s | 7.0 s | +61% |
+| `facet_values_mv` | 8.1 s | 8.8 s | +8% |
+| Facet ranges, format options, rest checks | 0.7-1.2 s | 0.7-0.8 s | flat |
+| Source commit | 113.6 s | 136.6 s | +20% |
+| Retention | 6.6 s | 7.0 s | +7% |
+
+Row counts grew by about 0.04% (69,955 to 69,982 in `catalogue_mv`), so data growth does not explain the difference. `wine_market_summary_mv` was not touched by Tranche 2 and slowed most, which points to instance-wide variance rather than the new index, consistent with the 3-7x production timing variation already noted. It does not clear the index either: `catalogue_mv` did get slower, against about 80 ms predicted locally. **The cause is unresolved.**
+
+Instance state at 09:34 UTC: database 356 MB (359 MB on 3 October), 15 connections, nothing active, no restart since 2 October. Backup-window checkpoints at 02:43 and 02:48 UTC took 0.04 s and 0.12 s with 0.002 s sync; daytime checkpoints wrote 12-27 buffers in 1-3 s. The two sweep-time checkpoints (21:37 and 22:27 UTC) each took about 270 s writing 24-35% of buffers, which is the sweep's write load. No ERROR, FATAL or PANIC in 24 hours. Dashboard CPU and disk-I/O were not inspected. All local migrations are applied remotely.
+
+Decision rule for the next sweep (expected the night of 9 October): if `catalogue_mv` stays near 19 s while `wine_market_summary_mv` returns to about 5 s, suspect the index and compare refresh cost with and without it on a Supabase data branch (availability not yet checked). If both fall back, treat the 7 October figures as variance.
+
+---
+
 ## Open items
 
 - **Signed-in check.** The catalogue (next/previous and price sort), price-change list and `/matches` have not been exercised in a signed-in production session. The R12 "Try again" path appears only when the reference lookup fails and is not expected to be reachable by hand.
-- **Index refresh cost.** The next normal sweep, expected in the night window of 7 October (21:00-00:00 UTC; the 40-hour spacing from the 5 October start expires at about 14:34 UTC that day), gives the first production `catalogue_mv` refresh time with the index. Compare it with 11.9 s; the local single pair added about 80 ms. There is no sweep on the night of 6 October.
-- **Sustained health.** Three more real sweeps are needed after that. Disk-I/O dashboard values and a later backup window have not been recorded for this release.
+- **Index refresh cost.** Unresolved: 18.9 s on 7 October against 11.9 s, with an unrelated stage also slower. The next sweep (night of 9 October, 21:00-00:00 UTC, once the 40-hour spacing from the 7 October 21:14 start expires) decides it; see the rule above.
+- **Sustained health.** Two more real sweeps are needed after 7 October. Disk-I/O dashboard values and a later backup window have not been recorded for this release.
 - **Cleanup.** Issue #14, legacy-reference cleanup, is no longer blocked by this tranche.
