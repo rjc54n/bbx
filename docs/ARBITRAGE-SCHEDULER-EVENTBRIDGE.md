@@ -15,7 +15,7 @@ The GitHub cron stays as a backup for now. The workflow's concurrency group stop
 
 ## Resources
 
-[infra/arbitrage-scheduler.cfn.yml](../infra/arbitrage-scheduler.cfn.yml) is a CloudFormation template creating an EventBridge connection (holds the GitHub token), an API destination (`POST .../actions/workflows/arbitrage.yml/dispatches`, 1 request per second), an invoke role limited to that destination, and the hourly rule with two retries. It needs no other AWS resources and does not touch the S3 state bucket. Deploy it in any region; the existing S3 bucket's region is irrelevant to it.
+[infra/arbitrage-scheduler.cfn.yml](../infra/arbitrage-scheduler.cfn.yml) is a CloudFormation template creating an EventBridge connection (holds the GitHub token), an API destination (`POST .../actions/workflows/arbitrage.yml/dispatches`, 1 request per second), an invoke role limited to that destination, and the hourly rule with two retries. It needs no other AWS resources and does not touch the S3 state bucket. Deploy it in `eu-west-2` (London), where the S3 state bucket lives, so everything sits in one region; the template does not depend on the bucket's region, so another region would also work.
 
 ## Deploying
 
@@ -23,11 +23,11 @@ The GitHub cron stays as a backup for now. The workflow's concurrency group stop
 2. **Validate, then deploy.**
 
 ```bash
-aws cloudformation validate-template --template-body file://infra/arbitrage-scheduler.cfn.yml
+aws cloudformation validate-template --region eu-west-2 --template-body file://infra/arbitrage-scheduler.cfn.yml
 ```
 
 ```bash
-aws cloudformation deploy --stack-name bbx-arbitrage-scheduler --template-file infra/arbitrage-scheduler.cfn.yml --capabilities CAPABILITY_IAM --parameter-overrides GitHubToken=<token>
+aws cloudformation deploy --region eu-west-2 --stack-name bbx-arbitrage-scheduler --template-file infra/arbitrage-scheduler.cfn.yml --capabilities CAPABILITY_IAM --parameter-overrides GitHubToken=<token>
 ```
 
 3. **Verify.** Wait for the next :17 between 08:00 and 22:00 UK time and check that a `BBX Arbitrage Scanner` run appears with event `workflow_dispatch` within a minute or two:
@@ -43,7 +43,7 @@ gh run list --workflow "BBX Arbitrage Scanner" --limit 5
 
 - **Token expiry.** The token expires; renew it by redeploying with a new `GitHubToken`. A lapsed token makes dispatches fail with 401 and the scanner silently stops (the workflow's own failure alert fires only when it runs). Put the expiry date in a calendar.
 - **Pause.** Redeploy with `ScheduleState=DISABLED`, or disable the rule in the console.
-- **Remove.** `aws cloudformation delete-stack --stack-name bbx-arbitrage-scheduler`.
+- **Remove.** `aws cloudformation delete-stack --region eu-west-2 --stack-name bbx-arbitrage-scheduler`.
 - **Cost.** EventBridge rules and API-destination invocations at about 16 a day are negligible. The connection stores the token in a managed Secrets Manager secret; check the current pricing on the account, but it is at most a few cents a month. The repository is public, so Actions minutes are free.
 
 ## Open points
