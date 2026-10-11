@@ -1,6 +1,6 @@
 # Tranche 2 release record
 
-Status: released 6 October 2026. Migrations `20261004142409`, `20261004142420` and `20261004142431` are live, and the app merged to `main` as `5bb9ea8` with a successful Vercel Production deployment at 12:08 UTC. No PR was opened, at the owner's direction. The first sweep with the price-sort index ran on 7 October; `catalogue_mv` refreshed in 18.9 s against 11.9 s, but the slowdown was not specific to that stage (see [First sweep with the index](#first-sweep-with-the-index-7-october-2026)) and the cause is unresolved.
+Status: released 6 October 2026. Migrations `20261004142409`, `20261004142420` and `20261004142431` are live, and the app merged to `main` as `5bb9ea8` with a successful Vercel Production deployment at 12:08 UTC. No PR was opened, at the owner's direction. The first sweep with the price-sort index ran on 7 October; `catalogue_mv` refreshed in 18.9 s against 11.9 s, but the slowdown was not specific to that stage (see [First sweep with the index](#first-sweep-with-the-index-7-october-2026)) and the owner accepted the cost on 11 October (see [Outcome](#outcome-11-october-2026)).
 
 ## Release gate
 
@@ -63,9 +63,21 @@ Decision rule for the next sweep (expected the night of 9 October): if `catalogu
 
 ---
 
+## Outcome (11 October 2026)
+
+Status: `catalogue_mv` refresh cost accepted by the owner on 11 October 2026.
+
+[Scheduled run 38095176737](https://github.com/rjc54n/bbx/actions/runs/38095176737) started at 23:29 UTC on 10 October (00:29 BST), took 18m35s and succeeded: 16,336 of 16,336 REST checks, no failures, retention 8,621 events with none remaining, publication within 60 hours. It is the fourth of the five sweeps required for sustained health. `catalogue_mv` took 20.6 s while `wine_market_summary_mv` returned to 7.7 s (scenario 4.8 s, `facet_values_mv` 14.9 s), so by the rule above the price-sort index is the likely cause of the extra 7-9 s. That is small against a 19-minute job every two days and the index cut the unfiltered price-sort read from 1.6 s to 3.7 ms, so the cost is accepted and no data-branch A/B is planned.
+
+Instance at 08:37 UTC on 11 October: database 359 MB, 17 connections, nothing active, no restart since 2 October. Backup-window checkpoints at 02:42 and 02:47 UTC took 0.31 s and 0.16 s; the sweep checkpoint wrote 60% of buffers over 269 s and finished well before the backup. No ERROR, FATAL or PANIC since 09:00 UTC on 10 October. Dashboard disk-I/O was not inspected.
+
+**No sweep ran on 9 October.** GitHub fires only about three of the nine scheduled triggers each day. The evening trigger landed at 20:48 UTC (21:49 BST) on 9 October, before the 22:00 BST window opened, and the next at 00:43 UTC, after it closed, so the 70.5-hour publication age alert fired at 20:01 UTC on 10 October. Evening triggers across five days landed at 21:14, 21:15, 20:48, 20:01 and 23:29 UTC, and two of five missed the window. The owner chose to open the window an hour earlier: `WINDOW_START_HOUR` is now 21 (21:00-01:00 UK time, 20:00-00:00 UTC in summer). Three triggers at 20:01-20:48 UTC would have been caught. After the clocks change on 25 October the window is 21:00-00:30 UTC (backup headroom trims the end), so triggers before 21:00 UTC will miss again; revisit if that shows up.
+
+---
+
 ## Open items
 
 - **Signed-in check.** The catalogue (next/previous and price sort), price-change list and `/matches` have not been exercised in a signed-in production session. The R12 "Try again" path appears only when the reference lookup fails and is not expected to be reachable by hand.
-- **Index refresh cost.** Unresolved: 18.9 s on 7 October against 11.9 s, with an unrelated stage also slower. The next sweep (night of 9 October, 21:00-00:00 UTC, once the 40-hour spacing from the 7 October 21:14 start expires) decides it; see the rule above.
-- **Sustained health.** Two more real sweeps are needed after 7 October. Disk-I/O dashboard values and a later backup window have not been recorded for this release.
+- **Index refresh cost.** Closed: accepted on 11 October (see Outcome).
+- **Sustained health.** One more real sweep is needed after 10 October (fourth of five). Disk-I/O dashboard values and a later backup window have not been recorded for this release.
 - **Cleanup.** Issue #14, legacy-reference cleanup, is no longer blocked by this tranche.

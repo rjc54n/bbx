@@ -10,16 +10,17 @@ def utc(*args):
 
 
 @pytest.mark.parametrize("now, expected", [
-    # British Summer Time (UTC+1): window is 21:00-00:00 UTC.
-    (utc(2026, 10, 2, 20, 59), False),
-    (utc(2026, 10, 2, 21, 0), True),
+    # British Summer Time (UTC+1): window is 20:00-00:00 UTC.
+    (utc(2026, 10, 2, 19, 59), False),
+    (utc(2026, 10, 2, 20, 0), True),
+    (utc(2026, 10, 2, 20, 48), True),
     (utc(2026, 10, 2, 23, 59), True),
     (utc(2026, 10, 3, 0, 0), False),
     (utc(2026, 10, 3, 3, 0), False),   # nightly backup
     (utc(2026, 10, 3, 14, 0), False),  # shopping hours
-    # GMT after 25 October: window is 22:00-01:00 UTC.
-    (utc(2026, 11, 2, 21, 30), False),
-    (utc(2026, 11, 2, 22, 0), True),
+    # GMT after 25 October: window is 21:00-01:00 UTC, trimmed to 00:30 by backup headroom.
+    (utc(2026, 11, 2, 20, 59), False),
+    (utc(2026, 11, 2, 21, 0), True),
     (utc(2026, 11, 3, 0, 30), True),
     (utc(2026, 11, 3, 0, 31), False),
     (utc(2026, 11, 3, 1, 0), False),

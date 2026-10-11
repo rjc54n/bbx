@@ -191,7 +191,7 @@ single fixed time can't meet both constraints.
 - Cron fires hourly from 16:07 to 00:07 UTC, every day, off the hour to avoid
   GitHub's busiest queue.
 - **Window check, first, on the runner's own `python3` before any setup:**
-  run only between 22:00 and 01:00 Europe/London, so the window follows the
+  run only between 21:00 and 01:00 Europe/London (opened from 22:00 on 11 October 2026: GitHub's evening triggers landed at 20:01-21:15 UTC and two of five missed the old window), so the window follows the
   clocks when they change. Otherwise the job ends within seconds.
 - **Cadence check, in `run_sweep.py` after install:** skip if a
   `biddable_full_book` sweep completed or went partial in the last 40 hours,

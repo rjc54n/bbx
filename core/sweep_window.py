@@ -5,7 +5,7 @@ and about an hour late in the evening, so the schedule fires hourly through
 the afternoon and evening and each trigger decides for itself whether to run
 (docs/SWEEP-WRITE-REDUCTION-2026-10-02.md, "Schedule"):
 
-- Only between 22:00 and 01:00 UK time, to keep the API-heavy discovery out
+- Only between 21:00 and 01:00 UK time, to keep the API-heavy discovery out
   of BBX's shopping hours and the database work clear of the ~03:00 UTC
   backup. Europe/London, so the window follows the clocks.
 - Only when the full 90-minute job fits before 02:00 UTC.
@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 LONDON = ZoneInfo("Europe/London")
-WINDOW_START_HOUR = 22  # 22:00 UK time
+WINDOW_START_HOUR = 21  # 21:00 UK time
 WINDOW_END_HOUR = 1     # until 01:00 UK time
 COMPLETED_GAP = timedelta(hours=40)
 ANY_RUN_GAP = timedelta(hours=12)

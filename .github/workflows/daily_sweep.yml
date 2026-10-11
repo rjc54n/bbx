@@ -13,7 +13,7 @@ name: BBX Daily Sweep
 on:
   schedule:
     # Hourly from 16:07 to 00:07 UTC, every day. Each trigger checks for
-    # itself and exits within seconds unless it is 22:00-01:00 UK time and no
+    # itself and exits within seconds unless it is 21:00-01:00 UK time and no
     # sweep has run in the last two days (core/sweep_window.py). GitHub has
     # started scheduled runs up to 6.5 h late, so firing hourly through the
     # evening lets one land in the window, wherever the delay falls. Off the
