@@ -1,7 +1,8 @@
 # .github/workflows/arbitrage.yml
 # --------------------------------------------------------------
 # Scheduled arbitrage scanner for BBX.
-# Runs run_arbitrage.py once an hour, between 08:00 and 23:00 UTC.
+# Runs run_arbitrage.py once an hour, between 08:00 and 23:00 UTC; scheduled
+# runs that start late skip themselves between 23:00 and 08:00 UK time.
 # --------------------------------------------------------------
 
 name: BBX Arbitrage Scanner
@@ -38,6 +39,9 @@ jobs:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       S3_BUCKET: ${{ secrets.S3_BUCKET }}
       S3_STATE_KEY: ${{ secrets.S3_STATE_KEY }}
+
+      # Scheduled triggers observe quiet hours (23:00-08:00 UK); manual runs do not.
+      ARBITRAGE_SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '' }}
 
     steps:
       - name: Checkout repo

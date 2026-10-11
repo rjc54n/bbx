@@ -19,6 +19,8 @@ if str(ROOT_DIR) not in sys.path:
 
 import os
 import logging
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from core.pipeline import ScanConfig, run_scan
 from core.slack import send_slack_message
@@ -46,6 +48,21 @@ CONFIG = ScanConfig(
     min_pct_next=15.0,
     min_case_price=1.0,
 )
+
+# No alerts between 23:00 and 08:00 UK time. GitHub starts scheduled runs hours
+# late, so a trigger meant for the evening can fire overnight. Applies to
+# scheduled triggers only (ARBITRAGE_SCHEDULED=1); manual runs always go ahead.
+# Overnight listings are picked up by the first run after 08:00 (the Algolia
+# lookback is a day and nothing is marked notified while skipped).
+QUIET_START_HOUR = 23
+QUIET_END_HOUR = 8
+LONDON = ZoneInfo("Europe/London")
+
+
+def in_quiet_hours(now_utc: datetime) -> bool:
+    hour = now_utc.astimezone(LONDON).hour
+    return hour >= QUIET_START_HOUR or hour < QUIET_END_HOUR
+
 
 # Slack formatting limits
 MAX_WINES_PER_ALERT = 20
@@ -150,6 +167,9 @@ def format_slack_message(candidates, suppressed=None):
 
 def main():
     logging.basicConfig(level=logging.INFO)
+    if os.environ.get("ARBITRAGE_SCHEDULED") == "1" and in_quiet_hours(datetime.now(timezone.utc)):
+        logging.info("Quiet hours (23:00-08:00 UK time); skipping this scheduled trigger.")
+        return
     logging.info("Starting BBX arbitrage scan...")
 
     app_id, api_key = get_algolia_credentials()
