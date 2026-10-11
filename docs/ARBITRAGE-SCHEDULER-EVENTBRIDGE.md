@@ -1,6 +1,6 @@
 # Arbitrage scanner: EventBridge trigger
 
-Status: written 11 October 2026, **not yet deployed**. The template has been parse-checked only (YAML), not validated by AWS or exercised, because the AWS CLI is not installed on the development machine.
+Status: written 11 October 2026, **not yet deployed**. The template has been parse-checked only (YAML), not validated by AWS or exercised, because the AWS CLI is not installed on the development machine or the owner's.
 
 ## Why
 
@@ -20,7 +20,9 @@ The GitHub cron stays as a backup for now. The workflow's concurrency group stop
 ## Deploying
 
 1. **Create the token.** In GitHub, create a fine-grained personal access token with an expiry of your choosing, repository access limited to `rjc54n/bbx`, and the single permission *Actions: Read and write*. It is a secret: pass it to the deploy command and nowhere else.
-2. **Validate, then deploy.**
+2. **Deploy through the console (no AWS CLI needed).** In the AWS console, switch to **Europe (London) eu-west-2**, open **CloudFormation > Create stack > With new resources**, choose *Upload a template file*, and upload `infra/arbitrage-scheduler.cfn.yml`. Name the stack `bbx-arbitrage-scheduler`, paste the token into `GitHubToken` (the other parameters have the right defaults), tick *I acknowledge that AWS CloudFormation might create IAM resources* on the last page, and create the stack. Wait for `CREATE_COMPLETE`. If it ends in `ROLLBACK_COMPLETE`, open the stack's *Events* tab, read the first failed resource's reason, and send it to me; delete the failed stack before retrying.
+
+   The AWS CLI route works too if you install it later:
 
 ```bash
 aws cloudformation validate-template --region eu-west-2 --template-body file://infra/arbitrage-scheduler.cfn.yml
@@ -41,9 +43,9 @@ gh run list --workflow "BBX Arbitrage Scanner" --limit 5
 
 ## Operating
 
-- **Token expiry.** The token expires; renew it by redeploying with a new `GitHubToken`. A lapsed token makes dispatches fail with 401 and the scanner silently stops (the workflow's own failure alert fires only when it runs). Put the expiry date in a calendar.
-- **Pause.** Redeploy with `ScheduleState=DISABLED`, or disable the rule in the console.
-- **Remove.** `aws cloudformation delete-stack --region eu-west-2 --stack-name bbx-arbitrage-scheduler`.
+- **Token expiry.** The token expires; renew it by updating the stack (*Update > Use existing template*) with a new `GitHubToken`. A lapsed token makes dispatches fail with 401 and the scanner silently stops (the workflow's own failure alert fires only when it runs). Put the expiry date in a calendar.
+- **Pause.** Update the stack in the console with `ScheduleState=DISABLED` (*Update > Use existing template*), or disable the rule under EventBridge > Rules.
+- **Remove.** Delete the `bbx-arbitrage-scheduler` stack in the CloudFormation console (or `aws cloudformation delete-stack --region eu-west-2 --stack-name bbx-arbitrage-scheduler`).
 - **Cost.** EventBridge rules and API-destination invocations at about 16 a day are negligible. The connection stores the token in a managed Secrets Manager secret; check the current pricing on the account, but it is at most a few cents a month. The repository is public, so Actions minutes are free.
 
 ## Open points
