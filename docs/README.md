@@ -199,3 +199,7 @@ open or still fixed without checking.
   narrow table served through `catalogue_view`, so it stops forcing ~45k
   cached-view row rewrites per sweep, without rebuilding the 17 views on
   the cached views.
+- [ARBITRAGE-SCHEDULER-EVENTBRIDGE.md](ARBITRAGE-SCHEDULER-EVENTBRIDGE.md)
+  — 11 October 2026, not yet deployed: hourly EventBridge trigger for the
+  arbitrage scanner (GitHub's cron fires ~3 of 16 runs a day, hours late),
+  plus the 23:00-08:00 UK quiet-hours guard that is already live.

@@ -1,0 +1,99 @@
+# infra/arbitrage-scheduler.cfn.yml
+# --------------------------------------------------------------
+# EventBridge trigger for the BBX arbitrage scanner.
+#
+# GitHub's own cron is best-effort and fires only ~3 of the 16 hourly triggers
+# a day, hours late. This rule calls GitHub's workflow_dispatch API at :17
+# every hour from 07:00 to 22:00 UTC instead. UK quiet hours (23:00-08:00) are
+# enforced by the workflow itself (inputs.scheduled -> ARBITRAGE_SCHEDULED),
+# so daylight saving needs no handling here; the one trigger that lands in
+# quiet hours each day (22:17 UTC in summer, 07:17 UTC in winter) exits in
+# seconds without scanning.
+#
+# Setup and verification: docs/ARBITRAGE-SCHEDULER-EVENTBRIDGE.md
+# --------------------------------------------------------------
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Hourly workflow_dispatch trigger for the BBX arbitrage scanner
+
+Parameters:
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: Fine-grained PAT, this repository only, Actions read and write
+  GitHubRepository:
+    Type: String
+    Default: rjc54n/bbx
+  WorkflowFile:
+    Type: String
+    Default: arbitrage.yml
+  GitRef:
+    Type: String
+    Default: main
+  ScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+
+Resources:
+  GitHubConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      Name: bbx-github-actions
+      Description: Token used to dispatch the BBX arbitrage workflow
+      AuthorizationType: API_KEY
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: Authorization
+          ApiKeyValue: !Sub "Bearer ${GitHubToken}"
+
+  DispatchDestination:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      Name: bbx-arbitrage-dispatch
+      ConnectionArn: !GetAtt GitHubConnection.Arn
+      HttpMethod: POST
+      InvocationEndpoint: !Sub "https://api.github.com/repos/${GitHubRepository}/actions/workflows/${WorkflowFile}/dispatches"
+      InvocationRateLimitPerSecond: 1
+
+  InvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: events.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-dispatch-destination
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: events:InvokeApiDestination
+                Resource: !GetAtt DispatchDestination.Arn
+
+  HourlyRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: bbx-arbitrage-hourly
+      Description: Dispatch the BBX arbitrage scanner at :17, 07:00-22:00 UTC
+      ScheduleExpression: "cron(17 7-22 * * ? *)"
+      State: !Ref ScheduleState
+      Targets:
+        - Id: dispatch-arbitrage-workflow
+          Arn: !GetAtt DispatchDestination.Arn
+          RoleArn: !GetAtt InvokeRole.Arn
+          Input: !Sub '{"ref":"${GitRef}","inputs":{"scheduled":"true"}}'
+          HttpParameters:
+            HeaderParameters:
+              Accept: application/vnd.github+json
+              X-GitHub-Api-Version: "2022-11-28"
+              User-Agent: bbx-eventbridge
+          RetryPolicy:
+            MaximumRetryAttempts: 2
+            MaximumEventAgeInSeconds: 1800
+
+Outputs:
+  RuleName:
+    Value: !Ref HourlyRule
